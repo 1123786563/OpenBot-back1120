@@ -3,6 +3,7 @@
 Start with [How OpenBot works](how-openbot-works.md): what a Bot has, and where you set each part for one Bot, every Bot or everyone. Then the root [README](../README.md), and these references:
 
 - [Architecture](architecture.md): services, ports, browser governance, computers, components, plugins, knowledge, and security boundaries.
+- [Code-derived design](design/README.md): domain relationships, lifecycles, permissions, business flows, code boundaries, and engineering constraints, with source evidence and verification limits.
 - [Configuration](configuration.md): environment variables and tenant package YAML.
 - [Personal edition](personal-edition.md): OpenBot for one person, with no sign-in.
 - [Development](development.md): local setup, migrations, ports, and quality checks.

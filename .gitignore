@@ -60,3 +60,4 @@ extension/**/*.pem
 
 # The folder scripts/start.sh mounts into the server's container for a model sign-in file.
 .openbot/
+.idea/

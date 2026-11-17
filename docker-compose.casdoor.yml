@@ -1,0 +1,30 @@
+name: openbot-casdoor
+
+services:
+  casdoor:
+    image: casbin/casdoor-all-in-one@sha256:710df7fcb2d05ddc590cf78a6862ec61026a140c1a02ec6a40392dc24dabf7f9
+    entrypoint: ["/server"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./.openbot/casdoor/casdoor.env
+    environment:
+      driverName: sqlite
+      dataSourceName: "file:/data/casdoor.db?cache=shared"
+      dbName: casdoor
+      origin: http://localhost:8000
+      runmode: prod
+      initDataNewOnly: "true"
+    volumes:
+      - casdoor-data:/data
+    networks:
+      - openbot
+
+volumes:
+  casdoor-data:
+
+networks:
+  openbot:
+    external: true
+    name: openbot_default

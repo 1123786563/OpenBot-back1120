@@ -1,0 +1,34 @@
+{
+  "read_only_invocation": "puts({premium: License.premium?, events_store: Organization.first.events_store.to_s, events: Event.where(code: \"precision_usage\").order(:transaction_id).map { |e| {transaction_id: e.transaction_id, timestamp: e.timestamp.iso8601(6), occurrence_us: e.properties[\"occurrence_us\"]} }}.to_json)",
+  "result": {
+    "premium": false,
+    "events_store": "postgres",
+    "events": [
+      {
+        "transaction_id": "at_boundary",
+        "timestamp": "2024-02-28T16:00:00.000000Z",
+        "occurrence_us": 1709136000000000
+      },
+      {
+        "transaction_id": "minus_ms",
+        "timestamp": "2024-02-28T15:59:59.999000Z",
+        "occurrence_us": 1709135999999000
+      },
+      {
+        "transaction_id": "minus_us",
+        "timestamp": "2024-02-28T15:59:59.999999Z",
+        "occurrence_us": 1709135999999999
+      },
+      {
+        "transaction_id": "plus_ms",
+        "timestamp": "2024-02-28T16:00:00.001000Z",
+        "occurrence_us": 1709136000001000
+      },
+      {
+        "transaction_id": "plus_us",
+        "timestamp": "2024-02-28T16:00:00.000001Z",
+        "occurrence_us": 1709136000000001
+      }
+    ]
+  }
+}
