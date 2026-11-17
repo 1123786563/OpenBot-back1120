@@ -1,0 +1,30 @@
+{
+  "expect": "accept",
+  "schema": "Order",
+  "instance": {
+    "id": "8d9e0f10-a1b2-4c3d-9e4f-6a7b8c9d0e1f",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000400000000",
+    "updated_at_us": "1700000500000000",
+    "revision": "5",
+    "purchaser_subject_id": "subj_01hx8z3k2m",
+    "product_id": "pack_1m_credits",
+    "product_type": "credit_pack",
+    "product_snapshot": {
+      "product_id": "pack_1m_credits",
+      "product_type": "credit_pack",
+      "granted_microcredits": "1000000",
+      "period_months": null,
+      "display_name": "1M credits pack",
+      "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+    },
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "amount_fen": "9900",
+    "currency": "CNY",
+    "expires_at_us": "1700002200000000",
+    "fulfillment_event_id": null,
+    "status": "paid"
+  }
+}

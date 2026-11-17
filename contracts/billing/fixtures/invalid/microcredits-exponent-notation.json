@@ -1,0 +1,23 @@
+{
+  "expect": "reject",
+  "schema": "BillingAccount",
+  "instance": {
+    "id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "1",
+    "owner_subject_id": "subj_x",
+    "personal_workspace_id": "ws_x",
+    "currency": "CNY",
+    "available_microcredits": "1e3",
+    "reserved_microcredits": "0",
+    "refund_frozen_microcredits": "0",
+    "status": "active"
+  },
+  "via": "schema",
+  "code": "invalid_integer",
+  "note": "no exponent notation"
+}

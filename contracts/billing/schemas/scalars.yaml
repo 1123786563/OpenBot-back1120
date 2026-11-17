@@ -1,0 +1,240 @@
+# billing contract — scalar contracts (authoritative; referenced from openapi.yaml)
+#
+# Serialization rules (requirement §4):
+# - All monetary amounts, usage integers and microsecond timestamps travel as JSON
+#   decimal STRINGS. JSON numbers are rejected: they cannot carry int64 or
+#   microsecond precision without floating point loss.
+# - Integer format: "0" or decimal digits without leading zeros. Positive sign,
+#   whitespace, exponent notation, fractional part and "-0" are all rejected.
+# - Non-negative business range: 0..9223372036854775807. Signed range:
+#   -9223372036854775807..9223372036854775807.
+# - The `pattern` enforces the lexical form; the numeric bound cannot be expressed
+#   by JSON Schema over strings, so the inclusive `x-value-min` / `x-value-max`
+#   bounds are enforced by the contract semantic checker
+#   (server/src/billing-contract/validate-fixtures.ts + money-time.ts). This is a
+#   documented schema expressiveness boundary: run-time enforcement belongs to the
+#   ledger implementation tickets (#64–#66).
+components:
+  schemas:
+    Microcredits:
+      type: string
+      description: >-
+        Non-negative integer amount of microcredits. 1 credit = 1,000,000
+        microcredits; the smallest billable unit is "1" (displayed as 0.000001
+        credits). Lexical form: "0" or digits without leading zeros. Inclusive
+        range 0..9223372036854775807 microcredits. Amounts that are semantically
+        a price, a reservation ceiling, or a per-item charge must additionally be
+        greater than zero; that stricter rule is carried by the field
+        descriptions of the objects that use them.
+      pattern: "^(0|[1-9][0-9]{0,18})$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "0"
+      x-value-max: "9223372036854775807"
+      examples: ["0", "1", "1000123", "9223372036854775807"]
+    PositiveMicrocredits:
+      type: string
+      description: >-
+        Microcredits strictly greater than zero (for granted/reserved/frozen/
+        charged amounts and reservation ceilings). Range 1..9223372036854775807.
+      pattern: "^[1-9][0-9]{0,18}$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "1"
+      x-value-max: "9223372036854775807"
+      examples: ["1", "1000123"]
+    Fen:
+      type: string
+      description: >-
+        Non-negative integer amount of CNY fen (1 yuan = 100 fen). CNY and
+        microcredits are independent units and are never implicitly converted.
+        Lexical form and range follow Microcredits; order totals must be > 0.
+      pattern: "^(0|[1-9][0-9]{0,18})$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "0"
+      x-value-max: "9223372036854775807"
+      examples: ["9900"]
+    SignedAdjustmentDelta:
+      type: string
+      description: >-
+        Signed integer microcredits delta for ledger corrections. A single
+        leading "-" is allowed for negative deltas; "-0", "+1", " 1" and "1e3"
+        are rejected. Inclusive range -9223372036854775807..9223372036854775807.
+      pattern: "^(0|[1-9][0-9]{0,18}|-([1-9][0-9]{0,18}))$"
+      minLength: 1
+      maxLength: 20
+      x-value-min: "-9223372036854775807"
+      x-value-max: "9223372036854775807"
+      examples: ["-5000", "0", "12500"]
+    TimestampUs:
+      type: string
+      description: >-
+        Precise UTC instant in microseconds since 1970-01-01T00:00:00Z, serialized
+        as a decimal string ("0" or digits without leading zeros). Inclusive range
+        0 ("1970-01-01T00:00:00.000000Z") .. 253402300799999999
+        ("9999-12-31T23:59:59.999999Z"). Any ISO-8601 output must be derived from
+        this integer with exactly six fractional digits and never through a
+        floating point conversion. Interval fields use [start_us, end_us) semantics.
+      pattern: "^(0|[1-9][0-9]{0,17})$"
+      minLength: 1
+      maxLength: 18
+      x-value-min: "0"
+      x-value-max: "253402300799999999"
+      examples: ["1700000000000000", "253402300799999999"]
+    PriceNumerator:
+      type: string
+      description: >-
+        Non-negative integer numerator of a rational unit price. Range
+        0..9223372036854775807. Zero is allowed only for the Lago zero-amount
+        mirror pricing; OpenBot-side charged prices must be positive.
+      pattern: "^(0|[1-9][0-9]{0,18})$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "0"
+      x-value-max: "9223372036854775807"
+      examples: ["1", "37"]
+    PriceDenominator:
+      type: string
+      description: >-
+        Positive integer denominator of a rational unit price (price = numerator /
+        denominator per price unit). Range 1..9223372036854775807.
+      pattern: "^[1-9][0-9]{0,18}$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "1"
+      x-value-max: "9223372036854775807"
+      examples: ["1000000"]
+    UnsignedInt64:
+      type: string
+      description: >-
+        Generic non-negative integer (usage quantities, counts, revisions, row
+        values). Lexical form and range as in Microcredits.
+      pattern: "^(0|[1-9][0-9]{0,18})$"
+      minLength: 1
+      maxLength: 19
+      x-value-min: "0"
+      x-value-max: "9223372036854775807"
+      examples: ["42"]
+    Uuid:
+      type: string
+      description: >-
+        Server-generated, immutable, never-reused identifier (UUID lowercase
+        hexadecimal). External channel identifiers are stored separately and are
+        never used as personal identity or as these primary keys.
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      minLength: 36
+      maxLength: 36
+      examples: ["0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"]
+    Revision:
+      type: string
+      description: >-
+        Monotonic per-object revision counter starting at "1"; incremented on
+        every observed state change. Immutable ledger records keep revision "1".
+      pattern: "^[1-9][0-9]{0,17}$"
+      minLength: 1
+      maxLength: 18
+      x-value-min: "1"
+      x-value-max: "9223372036854775807"
+      examples: ["1", "2"]
+    CurrencyCode:
+      type: string
+      description: >-
+        Fixed currency. The personal billing ledger is CNY-only; no implicit
+        currency conversion exists in this contract.
+      const: CNY
+      examples: ["CNY"]
+    SchemaVersion:
+      type: string
+      description: Contract version of the serialized billing object.
+      const: billing.v1
+      examples: ["billing.v1"]
+    SubjectId:
+      type: string
+      description: >-
+        Stable server-side personal identity subject id resolved by the identity
+        service (#67). Never an email address, deployer identity, bot creator id,
+        or any client-submitted payer claim. Distinct from BillingAccount id and
+        from organization scope.
+      minLength: 1
+      maxLength: 128
+      pattern: "^[A-Za-z0-9._:-]{1,128}$"
+      examples: ["subj_01hx8z3k2m"]
+    CursorToken:
+      type: string
+      description: >-
+        Opaque, server-signed pagination cursor. Bindings (enforced server-side,
+        declared by x-cursor-binding on list operations): organization, billing
+        account, request filters, fixed snapshot watermark, and the immutable
+        (created_at_us, id) sort key. Cross-scope or altered cursors are rejected
+        with 400 invalid_cursor. Inserted rows during pagination do not change the
+        already-fixed set. Clients must treat the value as opaque; non-opaque or
+        hand-built values are rejected.
+      pattern: "^[A-Za-z0-9_-]{16,512}$"
+      minLength: 16
+      maxLength: 512
+      examples: ["eyJvIjoiYWNjdCIsInciOjE3MDAwMDAwMDAwMDAwMDB9s0mT"]
+    IdempotencyKeyValue:
+      type: string
+      description: >-
+        Business write idempotency key supplied as the Idempotency-Key header:
+        1..128 ASCII printable (non-space) characters. Scope is
+        (organization_id, billing_account_id, operation, logical_resource_id, key);
+        operation is pinned by the source contract operationId. GET requests do
+        not require a key. Authentication precedes replay handling.
+      minLength: 1
+      maxLength: 128
+      pattern: "^[\\x21-\\x7e]+$"
+      examples: ["order-2026-11-17-0001"]
+    CostBearer:
+      type: string
+      description: >-
+        Who bears a charge. user: the payer account. platform: invalid or unknown
+        consumption after release, overage beyond reservation, and platform
+        faults — never billed to the user and never creating a negative balance.
+        self_paid: self-hosted / BYOK models do not consume platform credits
+        (other paid platform resources may still charge). No new self-paid
+        onboarding capability is introduced by this contract.
+      enum: [user, platform, self_paid]
+      examples: ["user"]
+    ChannelName:
+      type: string
+      description: Supported payment channel.
+      enum: [wechat, alipay]
+      examples: ["wechat"]
+    TimestampUsNullable:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/TimestampUs"
+      description: TimestampUs or null (absent instant).
+    UuidNullable:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/Uuid"
+      description: Uuid or null (no referenced object yet).
+    SubjectIdNullable:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/SubjectId"
+      description: SubjectId or null (not yet determined, e.g. unreviewed refund).
+    UnsignedInt64Nullable:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/UnsignedInt64"
+      description: UnsignedInt64 or null (not applicable, e.g. credit pack period).
+    CursorTokenNull:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/CursorToken"
+      description: Cursor token for the next page, or null on the last page.
+    MicrocreditsNullable:
+      type: ["string", "null"]
+      oneOf:
+        - type: "null"
+        - $ref: "#/components/schemas/Microcredits"
+      description: Microcredits or null (no credits granted by this product).

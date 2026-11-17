@@ -1,0 +1,24 @@
+{
+  "expect": "reject",
+  "kind": "idempotency",
+  "case": "different_content_conflict",
+  "operationId": "createOrder",
+  "logical_resource_id": "billing_account_root",
+  "request_a": {
+    "product_id": "pack_1m_credits",
+    "product_type": "credit_pack",
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+  },
+  "request_b": {
+    "product_id": "pack_5m_credits",
+    "product_type": "credit_pack",
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+  },
+  "via": "semantic",
+  "code": "idempotency_conflict",
+  "expected": {
+    "status": 409,
+    "no_second_order": true
+  },
+  "note": "same key with different normalized request must conflict"
+}

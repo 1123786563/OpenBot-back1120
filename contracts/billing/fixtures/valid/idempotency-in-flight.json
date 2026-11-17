@@ -1,0 +1,15 @@
+{
+  "expect": "accept",
+  "kind": "idempotency",
+  "case": "in_flight_retry_after",
+  "operationId": "settleReservation",
+  "logical_resource_id": "4c5d6e7f-8091-4a0b-9c2d-3e4f5a6b7c8d",
+  "expected": {
+    "status": 409,
+    "code": "idempotency_in_progress",
+    "retry_after_header": true,
+    "no_commit_yet": true,
+    "uncommitted_503_retryable": true
+  },
+  "note": "first execution still in flight"
+}

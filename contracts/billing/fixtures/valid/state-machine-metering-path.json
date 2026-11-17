@@ -1,0 +1,13 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "MeteringRelationship",
+  "transitions": [
+    ["pending", "active"],
+    ["active", "suspended"],
+    ["suspended", "active"],
+    ["active", "ended"],
+    ["suspended", "ended"]
+  ],
+  "note": "independent of subscription expiry"
+}

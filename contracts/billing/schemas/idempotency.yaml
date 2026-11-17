@@ -1,0 +1,87 @@
+# billing contract — idempotency contract
+#
+# Scope: (organization_id, billing_account_id, operation, logical_resource_id, key).
+# operation is pinned by the source contract operationId; creation operations use
+# the billing-account root resource as logical_resource_id. Authentication
+# precedes replay handling: an unauthorized or suspended caller can never observe
+# another caller's replay result.
+#
+# Semantics (declared here, enforced by the ledger tickets #64/#66/#68):
+# - Same scope + semantically equal normalized request -> the FIRST persisted
+#   result is returned again (same object id and revision); no second grant,
+#   deduction, fulfillment or ledger entry.
+# - Same scope + different normalized request -> 409 idempotency_conflict.
+# - Same scope, first execution still in flight -> 409 idempotency_in_progress
+#   with Retry-After; a committed result is never recomputed, an uncommitted
+#   503 may be retried.
+# - Normalization covers path, business fields and contract version; it excludes
+#   transport details (trace ids, header order). Unknown fields are rejected;
+#   omitted-vs-null equivalence is fixed per schema (fields are either required
+#   or explicitly nullable — omitted non-nullable fields are errors, so there is
+#   no ambiguity).
+# - The idempotency mapping is retained together with the associated ledger
+#   records; no post-retention re-execution semantics exist.
+# - Business-unique constraints (settlement reservation_id, adjustment scope,
+#   order fulfillment, channel transaction/refund references) hold independently
+#   of the HTTP key: a different key still cannot duplicate an entry.
+components:
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      description: >-
+        REQUIRED on every business write (POST). 1..128 ASCII printable
+        characters. Scope (organization_id, billing_account_id, operation,
+        logical_resource_id, key) with operation pinned by the operationId.
+        GET requests do not require a key.
+      required: true
+      schema:
+        $ref: "./scalars.yaml#/components/schemas/IdempotencyKeyValue"
+      examples:
+        first-order:
+          value: "order-2026-11-17-0001"
+  headers:
+    RetryAfter:
+      description: >-
+        Seconds after which the client may retry a 409 idempotency_in_progress.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 3600
+      examples:
+        retry-soon:
+          value: 5
+  schemas:
+    IdempotentReplayBehavior:
+      type: object
+      description: >-
+        Contract-level description used by fixtures and the checker: replay of
+        the same scope+content returns the original success response at the
+        business level (same id/revision); transport metadata (request_id,
+        Date header) may differ. Documents behavior only — the authoritative
+        enforcement lives in the ledger tickets.
+      required: [scope_fields, same_content, different_content, in_flight]
+      additionalProperties: false
+      properties:
+        scope_fields:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            type: string
+            enum: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        same_content:
+          type: string
+          const: replay_first_result
+        different_content:
+          type: string
+          const: conflict_409_idempotency_conflict
+        in_flight:
+          type: string
+          const: conflict_409_idempotency_in_progress_with_retry_after
+      examples:
+        - scope_fields: [organization_id, billing_account_id, operation, logical_resource_id, key]
+          same_content: replay_first_result
+          different_content: conflict_409_idempotency_conflict
+          in_flight: conflict_409_idempotency_in_progress_with_retry_after

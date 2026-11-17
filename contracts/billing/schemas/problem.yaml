@@ -1,0 +1,111 @@
+# billing contract — error contract (RFC 9457 application/problem+json)
+#
+# The `code` enum is CLOSED: adding an error code requires a contract change.
+# Every code below must appear in the x-error-codes of at least one operation
+# response and must have at least one fixture; the contract checker enforces both.
+components:
+  schemas:
+    ErrorCode:
+      type: string
+      description: Closed error-code enumeration. ledger_unavailable (local ledger cannot commit) is distinct from insufficient_credits (enough to refuse) and from dependency_unavailable (external system down while the local ledger is fine).
+      enum:
+        - missing_idempotency_key   # 400 — business write without Idempotency-Key
+        - invalid_cursor            # 400 — malformed, non-opaque or cross-scope cursor
+        - unauthenticated           # 401 — no/invalid credentials
+        - forbidden                 # 403 — authenticated but not authorized for this scope/operation
+        - resource_not_found        # 404 — includes cross-organization objects (never reveals existence)
+        - idempotency_conflict      # 409 — same key, semantically different normalized request
+        - idempotency_in_progress   # 409 — first execution still in flight (Retry-After)
+        - state_conflict            # 409 — object not in a state allowing the transition
+        - price_version_conflict    # 409 — referenced price version not active/not the pinned one
+        - invalid_integer           # 422 — lexical integer format violation (exponent, sign, leading zeros, JSON number)
+        - out_of_range              # 422 — integer/time outside the closed range
+        - insufficient_credits      # 422 — balance/lots cannot cover the reservation
+        - run_limit_exceeded        # 422 — root run cap (settled + outstanding reserved) reached
+        - unknown_payer             # 422 — payer cannot be resolved server-side from stable identity
+        - unbounded_cost            # 422 — step cost cannot be bounded by a reservation ceiling
+        - rate_limited              # 429
+        - ledger_unavailable        # 503 — local ledger unavailable; new consumption must stop
+        - dependency_unavailable    # 503 — external dependency (payment channel, Lago) down; local ledger unaffected
+      examples: ["insufficient_credits"]
+    ProblemFieldError:
+      type: object
+      description: One offending request field.
+      required: [field, issue]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: JSON-path-ish locator of the offending field in the request.
+        issue:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Stable machine-readable issue (e.g. "not_a_decimal_string").
+      examples:
+        - field: "max_cost_microcredits"
+          issue: "not_a_decimal_string"
+    ProblemDocument:
+      type: object
+      description: >-
+        Error payload for every business error response. Never contains secrets,
+        channel credentials, or details about other accounts. Responses use
+        content type application/problem+json. `instance` carries the request
+        path; `request_id` correlates logs for support.
+      required: [type, title, status, detail, instance, code, request_id]
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          description: Problem type URI fragment identifying the code (e.g. "https://openbot.dev/billing/errors/insufficient_credits").
+          minLength: 1
+          maxLength: 256
+        title:
+          type: string
+          minLength: 1
+          maxLength: 128
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        instance:
+          type: string
+          minLength: 1
+          maxLength: 512
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Server-generated request correlation id (opaque).
+        field_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProblemFieldError"
+          description: Present for request-validation failures (422 invalid_integer / out_of_range).
+        retryable:
+          type: boolean
+          description: Present for 429/503; idempotency_in_progress is always retryable after Retry-After.
+      x-problem-content-type: application/problem+json
+      examples:
+        - type: "https://openbot.dev/billing/errors/insufficient_credits"
+          title: "Insufficient credits"
+          status: 422
+          detail: "Balance and lots cannot cover max_cost_microcredits=200000 for reservation."
+          instance: "/internal/v1/billing/reservations"
+          code: insufficient_credits
+          request_id: "req_01hxyz"
+        - type: "https://openbot.dev/billing/errors/idempotency_conflict"
+          title: "Idempotency key reuse with different content"
+          status: 409
+          detail: "Idempotency-Key was already used with a different normalized request."
+          instance: "/api/v1/organizations/2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d/billing/orders"
+          code: idempotency_conflict
+          request_id: "req_01hxyy"

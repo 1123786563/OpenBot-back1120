@@ -1,0 +1,107 @@
+# billing contract — shared object fragments (authoritative; referenced from openapi.yaml)
+components:
+  schemas:
+    CommonFields:
+      type: object
+      description: >-
+        Fields shared by every billing object. Identity is three-dimensional and
+        never collapsed: owner_subject_id (personal identity), billing_account_id
+        (payment account) and organization_id (organization scope) are resolved
+        server-side and are mutually consistent — every relationship in the
+        contract must stay within the same billing account AND the same
+        organization. External channel identifiers (merchant_reference,
+        provider_transaction_id, provider_refund_reference,
+        external_customer_id, external_subscription_id) are stored in dedicated
+        fields, are marked x-not-personal-identity, and must never be treated as
+        personal identity or as primary keys.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - created_at_us
+        - updated_at_us
+        - revision
+      properties:
+        id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: Server-generated immutable primary key; for BillingAccount itself this IS the billing account id.
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        created_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        updated_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+          description: >-
+            For immutable ledger records (Settlement, Adjustment, posted
+            objects) this equals created_at_us; corrections are appended as new
+            records (e.g. Adjustment), never by mutation.
+        revision:
+          $ref: "./scalars.yaml#/components/schemas/Revision"
+    Allocation:
+      type: object
+      description: >-
+        One credit-lot allocation inside a reservation. Sum of allocations must
+        not exceed the reservation max_cost_microcredits and every referenced lot
+        must belong to the same billing account and organization.
+      required: [lot_id, amount_microcredits]
+      additionalProperties: false
+      properties:
+        lot_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        amount_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+      examples:
+        - lot_id: "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+          amount_microcredits: "150000"
+    FrozenAllocation:
+      type: object
+      description: >-
+        One credit-lot freeze created by an approved refund review. Freezing is
+        atomic with the approval; unfreeze keeps the original lot expiry (expired
+        released amounts move to expired, never back to available).
+      required: [lot_id, amount_microcredits]
+      additionalProperties: false
+      properties:
+        lot_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        amount_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+      examples:
+        - lot_id: "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+          amount_microcredits: "500000"
+    UsageItem:
+      type: object
+      description: >-
+        One metered resource line inside a settlement. Quantities are exact
+        integers; the per-step charge is computed from ALL resources first with
+        arbitrary precision and then rounded HALF_UP to whole microcredits —
+        never per token or per fragment.
+      required: [resource, quantity]
+      additionalProperties: false
+      properties:
+        resource:
+          $ref: "./objects.yaml#/components/schemas/ResourceKind"
+        quantity:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+          description: Exact usage quantity for this resource in this settlement; zero is allowed (display zero does not imply the resource was unused).
+        price_version_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: Price version pinned at reserve time; later price changes do not affect this line.
+      examples:
+        - resource: model_input_tokens
+          quantity: "1250"
+          price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"

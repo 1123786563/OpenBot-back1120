@@ -1,0 +1,13 @@
+{
+  "expect": "reject",
+  "kind": "state-machine",
+  "object": "CreditLot",
+  "transitions": [
+    ["expired", "active"],
+    ["exhausted", "active"],
+    ["revoked", "active"]
+  ],
+  "via": "semantic",
+  "code": "state_conflict",
+  "note": "released-after-expiry goes to expired, never back to available"
+}

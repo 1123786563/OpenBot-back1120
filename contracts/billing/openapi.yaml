@@ -1,0 +1,1484 @@
+# =============================================================================
+# OpenBot unified billing contract — SINGLE SOURCE OF TRUTH (OpenAPI 3.1)
+# Issue #62 (parent #61). All paths below are NEW v1 interfaces specified by
+# this contract. They are NOT a mirror of any existing backend capability;
+# there is no billing ledger, reservation, order, refund or metering endpoint
+# in the current server (server/src/model-billing.ts only recognizes provider
+# balance-refusal messages). Enforcing them is the job of #64–#78.
+#
+# Public API:     /api/v1/organizations/{organization_id}/billing  (personal
+#                 identity via server-resolved session/credential; organization
+#                 scope checked per object; problem+json errors; Idempotency-Key
+#                 on writes; cursor/limit pagination)
+# Internal API:   /internal/v1/billing  (trusted service credential with
+#                 minimal capability; never exposed to browsers; CORS is not
+#                 access control)
+# Channel entry:  /payment-callbacks/{channel}  (channel-protocol auth only,
+#                 never a user session)
+# =============================================================================
+openapi: 3.1.0
+info:
+  title: OpenBot Billing Contract
+  version: 0.1.0
+  summary: Unified account/credit/order/payment/metering contract for issue #62
+  description: >-
+    Executable contract shared by accounts, credits, orders, payment channels,
+    usage metering and model execution (issues #62/#61).
+
+    Passing this contract check proves the CONTRACT is consistent and
+    machine-verifiable. It does NOT prove that a backend, gateway, payment
+    channel or production capability exists; those are delivered and proven by
+    tickets #64–#78.
+
+    Numeric and time semantics: 1 credit = 1,000,000 microcredits; money uses
+    integer CNY fen; the two are never implicitly converted. All amounts, usage
+    integers and microsecond instants travel as JSON decimal strings (never
+    JSON numbers) so generated clients keep exact string types with zero
+    floating point loss. Step costs are summed exactly over all resources and
+    then rounded HALF_UP to whole microcredits. Prices are versioned; orders
+    and reservations pin a price version. Unknown usage must resolve within at
+    most 24 hours from reserve; RootRunBudget caps shared by all child runs.
+    Beijing (Asia/Shanghai) governs subscription periods; Lago stays UTC.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: https://billing.openbot.invalid
+    description: Placeholder; real deployment endpoints are bound by the implementation tickets.
+tags:
+  - name: public-billing
+    description: Browser/app-facing billing API in the personal account's organization scope.
+  - name: internal-billing
+    description: Trusted-service billing API (execution, settlement, operations). Never browser-reachable; CORS is not access control.
+  - name: payment-channel
+    description: Inbound payment channel gateway callbacks authenticated by protocol, not session.
+paths:
+  # ------------------------------------------------------------------ account
+  /api/v1/organizations/{organization_id}/billing/account:
+    get:
+      operationId: getBillingAccount
+      tags: [public-billing]
+      summary: Exact balance projection of the caller's billing account
+      description: >-
+        Server maps the authenticated personal identity to the single personal
+        payment account inside the organization scope; per-object scope is
+        checked after mapping. Returns precise microcredit balances.
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          description: The billing account with exact balances.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/BillingAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, rate_limited, ledger_unavailable]
+
+  # --------------------------------------------------------------------- lots
+  /api/v1/organizations/{organization_id}/billing/lots:
+    get:
+      operationId: listCreditLots
+      tags: [public-billing]
+      summary: Paginated credit lots of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of credit lots ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/CreditLotPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
+  # ------------------------------------------------------------------- orders
+  /api/v1/organizations/{organization_id}/billing/orders:
+    get:
+      operationId: listOrders
+      tags: [public-billing]
+      summary: Paginated orders of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of orders ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/OrderPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+    post:
+      operationId: createOrder
+      tags: [public-billing]
+      summary: Create a purchase order (account owner only)
+      description: >-
+        Only the personal account OWNER may purchase; organization membership
+        alone is insufficient. The client submits product_id + product_type +
+        price_version_id only — unit price and payer are NEVER accepted from
+        the client; amount_fen and payer identity come from the server-resolved
+        product snapshot and stable subject. The order expires 30 minutes after
+        creation. Idempotent under (organization_id, billing_account_id,
+        createOrder, account-root, key).
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created (or first-execution replay returned) with the fixed product snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createOrder
+        logical_resource_id: billing_account_root
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, price_version_conflict, invalid_integer, out_of_range, unknown_payer, rate_limited, ledger_unavailable]
+
+  /api/v1/organizations/{organization_id}/billing/orders/{order_id}:
+    get:
+      operationId: getOrder
+      tags: [public-billing]
+      summary: Locally verified order with entitlement state
+      description: >-
+        Returns the order as verified locally (never the raw channel state) plus
+        aggregated refund progress; cross-organization ids answer 404 without
+        revealing existence.
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: The order and its aggregated refund progress.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, rate_limited, ledger_unavailable]
+
+  /api/v1/organizations/{organization_id}/billing/orders/{order_id}/payment-attempts:
+    post:
+      operationId: createPaymentAttempt
+      tags: [public-billing]
+      summary: Start a payment attempt on an order (account owner only)
+      description: >-
+        Creates the channel payment via the server-side payment adapter (the
+        only external-payment boundary; see tests/billing/payment-stub).
+        return_url must match the configured whitelist. The payment link never
+        extends the order expiry. Idempotent under (organization_id,
+        billing_account_id, createPaymentAttempt, order_id, key).
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentAttemptRequest"
+      responses:
+        "201":
+          description: Payment attempt created (or replayed) with the payment action.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAttemptMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createPaymentAttempt
+        logical_resource_id: order_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, rate_limited, dependency_unavailable, ledger_unavailable]
+
+  /api/v1/organizations/{organization_id}/billing/orders/{order_id}/refresh:
+    post:
+      operationId: refreshOrder
+      tags: [public-billing]
+      summary: Ask the server to query the channel for the real payment state
+      description: >-
+        Accepts an order id ONLY — a client claim of "already paid" is never
+        accepted as evidence; the server verifies through the payment adapter.
+        The endpoint triggers/updates a query task and returns the CURRENT
+        confirmation state; fulfillment stays server-driven and exactly-once.
+        Idempotent under (organization_id, billing_account_id, refreshOrder,
+        order_id, key).
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshOrderRequest"
+      responses:
+        "202":
+          description: Query task accepted; current confirmation state returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshOrderResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: refreshOrder
+        logical_resource_id: order_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, rate_limited, dependency_unavailable, ledger_unavailable]
+
+  # ------------------------------------------------------------------ refunds
+  /api/v1/organizations/{organization_id}/billing/refunds:
+    get:
+      operationId: listRefunds
+      tags: [public-billing]
+      summary: Paginated refunds of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of refunds ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/RefundPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+    post:
+      operationId: createRefund
+      tags: [public-billing]
+      summary: Request a refund (account owner only)
+      description: >-
+        Creates a refund in requested state. Eligibility (unused credit pack,
+        subscription period not started) is verified server-side; acceptance is
+        NOT success and freezes nothing yet — freezing happens atomically at
+        approval. Idempotent under (organization_id, billing_account_id,
+        createRefund, order_id, key).
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRefundRequest"
+      responses:
+        "201":
+          description: Refund request created (or replayed) in requested state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createRefund
+        logical_resource_id: order_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, out_of_range, rate_limited, ledger_unavailable]
+
+  # -------------------------------------------------- public read-only ledgers
+  /api/v1/organizations/{organization_id}/billing/reservations:
+    get:
+      operationId: listReservations
+      tags: [public-billing]
+      summary: Paginated reservations of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of reservations ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/ReservationPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
+  /api/v1/organizations/{organization_id}/billing/settlements:
+    get:
+      operationId: listSettlements
+      tags: [public-billing]
+      summary: Paginated settlements of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of immutable settlements ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/SettlementPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
+  /api/v1/organizations/{organization_id}/billing/adjustments:
+    get:
+      operationId: listAdjustments
+      tags: [public-billing]
+      summary: Paginated adjustments of the caller's billing account
+      security:
+        - PersonalSessionAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of immutable adjustments ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/AdjustmentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
+  # ------------------------------------------------------- channel callback
+  /payment-callbacks/{channel}:
+    post:
+      operationId: handlePaymentCallback
+      tags: [payment-channel]
+      summary: Inbound payment channel gateway notification
+      description: >-
+        Authenticated by the CHANNEL PROTOCOL ONLY (signature/certificate/
+        decryption of raw payload) — never by a user session, cookie, or
+        bearer token; x-channel-auth: protocol. Ownership is verified
+        server-side via merchant/application + order + amount + currency
+        matching after decrypt/verify; URL parameters and user redirects are
+        never trusted. The raw message is durably persisted BEFORE the ack is
+        returned; fulfillment is asynchronous and exactly-once. Dedupe uses the
+        channel message/transaction id (channels never send business
+        idempotency headers). The response body is the channel acknowledgment
+        format — deliberately separate from business problem+json.
+      security:
+        - ChannelProtocolAuth: []
+      x-channel-auth: protocol
+      parameters:
+        - $ref: "#/components/parameters/CallbackChannel"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/channel.yaml#/components/schemas/CallbackEnvelope"
+      responses:
+        "200":
+          description: Channel-protocol acknowledgment (receipt of the persisted raw message).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/ChannelAcknowledgment"
+        "429":
+          description: Gateway overload; channel will retry per protocol.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/ChannelAcknowledgment"
+      x-error-codes: [rate_limited, dependency_unavailable]
+      x-no-session-auth: true
+
+  # ============================================================ internal API
+  /internal/v1/billing/reservations:
+    post:
+      operationId: createReservation
+      tags: [internal-billing]
+      summary: Reserve credits for one execution step (trusted execution service)
+      description: >-
+        Reserve-first: a step may execute only after this succeeds. The caller
+        is a trusted execution service with the reserve capability; the payer
+        authorization is re-verified server-side (never trusted from the
+        request alone). Locks the full price_version_id snapshot, allocates
+        lots (nearest expiry first), enforces both balance and the root-run
+        cap atomically, and sets unknown_usage_deadline_us <= reserve+24h.
+        Unbounded-cost steps are rejected. Not browser-reachable; CORS is not
+        access control. Idempotent under (organization_id, billing_account_id,
+        createReservation, step_id, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:reserve
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+      responses:
+        "201":
+          description: Reservation created (or replayed) with lot allocations and remaining root-run budget.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createReservation
+        logical_resource_id: step_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, price_version_conflict, invalid_integer, out_of_range, insufficient_credits, run_limit_exceeded, unknown_payer, unbounded_cost, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/reservations/{reservation_id}/settle:
+    post:
+      operationId: settleReservation
+      tags: [internal-billing]
+      summary: Post the immutable final settlement of a reservation (trusted settlement service)
+      description: >-
+        Usage is accepted ONLY from the trusted settlement service — never a
+        browser self-report. Posts the immutable Settlement (business-unique
+        per reservation_id), charges allocated lots, releases the unused
+        remainder (to expired if the lot expired meanwhile), marks overage
+        platform-borne, and updates balances, ledger entries, idempotency
+        mapping and outbox atomically. Late usage after posting becomes an
+        appended attribution/adjustment, never a rewritten settlement. Terminal
+        race: settle vs release vs deadline — one atomic terminal condition,
+        the successful committer wins. Idempotent under (organization_id,
+        billing_account_id, settleReservation, reservation_id, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:settle
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettleReservationRequest"
+      responses:
+        "201":
+          description: Settlement posted (or replayed) with resulting balances.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: settleReservation
+        logical_resource_id: reservation_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, price_version_conflict, invalid_integer, out_of_range, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/reservations/{reservation_id}/release:
+    post:
+      operationId: releaseReservation
+      tags: [internal-billing]
+      summary: Release a reservation to terminal released state (execution/recovery service)
+      description: >-
+        Known valid consumption is settled FIRST (settlement embedded in the
+        result); early release with unknown usage requires the platform-bearer
+        commitment — costs appearing after release are platform-borne and the
+        reservation is never reopened. Releasing amounts from expired lots
+        moves them to expired, never back to available. After the 24h deadline
+        no NEW user charge may be created. Terminal race handled atomically
+        with settle. Idempotent under (organization_id, billing_account_id,
+        releaseReservation, reservation_id, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:release
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseReservationRequest"
+      responses:
+        "200":
+          description: Terminal reservation (or replay) plus the settlement when known consumption was settled first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: releaseReservation
+        logical_resource_id: reservation_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/adjustments:
+    post:
+      operationId: createAdjustment
+      tags: [internal-billing]
+      summary: Append an immutable ledger correction (authorized operations/compensation service)
+      description: >-
+        Requires the billing:adjust capability and an audited
+        actor_subject_id. Business uniqueness
+        (billing_account_id, original_event_id, adjustment_type) holds
+        independently of the idempotency key. Positive compensation deltas
+        create/extend a CompensationLot; compensation sourced from an expired
+        subscription is valid 30 days from grant. Adjustments stay in the
+        ORIGINAL period. Idempotent under (organization_id, billing_account_id,
+        createAdjustment, original_event_id+adjustment_type, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:adjust
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAdjustmentRequest"
+      responses:
+        "201":
+          description: Adjustment posted (or replayed) with any compensation lot created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdjustmentMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createAdjustment
+        logical_resource_id: original_event_id+adjustment_type
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/refunds/{refund_id}/review:
+    post:
+      operationId: reviewRefund
+      tags: [internal-billing]
+      summary: Approve or reject a refund request (authorized human reviewer)
+      description: >-
+        Requires the billing:review-refund capability; reviewed_by records the
+        human reviewer. Approval atomically freezes the corresponding
+        entitlements; rejection closes without freeze. If the channel result is
+        unknown the refund stays processing/unknown — approval does not claim
+        success; after 24h unresolved the case is escalated to manual handling
+        and is never auto-unfrozen. expected_revision provides optimistic
+        concurrency on the refund object. Idempotent under (organization_id,
+        billing_account_id, reviewRefund, refund_id, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:review-refund
+      parameters:
+        - $ref: "#/components/parameters/RefundId"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRefundRequest"
+      responses:
+        "200":
+          description: Review recorded (or replayed) with freeze result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRefundResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: reviewRefund
+        logical_resource_id: refund_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, out_of_range, rate_limited, ledger_unavailable]
+
+# ---------------------------------------------------------------------------
+components:
+  securitySchemes:
+    PersonalSessionAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Server-resolved personal identity of the billing account owner (session
+        or user token issued after authentication). The SUBJECT is resolved
+        server-side from stable identity — clients can never submit a payer.
+        Organization scope is checked per object. This scheme is NEVER valid
+        for the internal API or for channel callbacks.
+    ServiceCredentialAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Trusted service credential carrying a minimal capability
+        (x-required-capability on each internal operation). Issued only to
+        backend services; browsers must never obtain it and trusted context can
+        never be supplied or overridden by a browser. CORS is not access
+        control: the internal prefix must not be routed/exposed to browsers.
+    ChannelProtocolAuth:
+      type: apiKey
+      in: header
+      name: X-Channel-Signature
+      description: >-
+        Placeholder header standing for the channel's protocol authentication
+        material (signature headers, certificate serial, decryption key id —
+        see CallbackEnvelope.protocol_metadata). Verification uses the
+        protocol's own rules with server-held channel credentials; user
+        sessions play no part.
+
+  parameters:
+    OrganizationId:
+      name: organization_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    OrderId:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    ReservationId:
+      name: reservation_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    RefundId:
+      name: refund_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    CallbackChannel:
+      name: channel
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/ChannelName"
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        $ref: "./schemas/pagination.yaml#/components/schemas/LimitQuery"
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        $ref: "./schemas/pagination.yaml#/components/schemas/CursorQuery"
+    FromUs:
+      name: from_us
+      in: query
+      required: false
+      schema:
+        $ref: "./schemas/pagination.yaml#/components/schemas/FromUsQuery"
+    ToUs:
+      name: to_us
+      in: query
+      required: false
+      schema:
+        $ref: "./schemas/pagination.yaml#/components/schemas/ToUsQuery"
+    IdempotencyKeyHeader:
+      $ref: "./schemas/idempotency.yaml#/components/parameters/IdempotencyKeyHeader"
+
+  responses:
+    BadRequest:
+      description: >-
+        Malformed request: missing Idempotency-Key on a business write
+        (missing_idempotency_key) or invalid/cross-scope cursor
+        (invalid_cursor).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [missing_idempotency_key, invalid_cursor]
+    Unauthorized:
+      description: No or invalid credentials (unauthenticated).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [unauthenticated]
+    Forbidden:
+      description: >-
+        Authenticated but not authorized for this organization/object/operation
+        or missing required service capability (forbidden). Internal
+        capabilities are never browser-reachable.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [forbidden]
+    NotFound:
+      description: >-
+        Object not found, or exists outside the caller's organization/account
+        scope — the response never reveals which (resource_not_found).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [resource_not_found]
+    Conflict:
+      description: >-
+        idempotency_conflict (same key, different normalized request) or
+        idempotency_in_progress (first execution still in flight; response
+        carries Retry-After). Operations may also report state_conflict
+        (transition not allowed in the current state, including refund review
+        revision mismatch) and price_version_conflict (referenced price version
+        not active or not the pinned one) as 409s.
+      headers:
+        Retry-After:
+          $ref: "./schemas/idempotency.yaml#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [idempotency_conflict, idempotency_in_progress, state_conflict, price_version_conflict]
+    UnprocessableEntity:
+      description: >-
+        Semantically invalid request: integer lexical/range violations
+        (invalid_integer, out_of_range), insufficient balance/lots
+        (insufficient_credits), root-run cap exhausted (run_limit_exceeded),
+        unresolvable payer (unknown_payer), unbounded step cost
+        (unbounded_cost).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [invalid_integer, out_of_range, insufficient_credits, run_limit_exceeded, unknown_payer, unbounded_cost]
+    RateLimited:
+      description: Too many requests (rate_limited).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [rate_limited]
+    LedgerUnavailable:
+      description: >-
+        Local ledger could not durably commit (ledger_unavailable). Distinct
+        from insufficient_credits and from dependency_unavailable: the ledger
+        is authoritative and new consumption MUST stop until it recovers.
+        Uncommitted 503s may be retried with the same idempotency key; already
+        committed results are never recomputed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [ledger_unavailable]
+    DependencyUnavailable:
+      description: >-
+        External dependency (payment channel, Lago) unavailable while the local
+        ledger remains fine (dependency_unavailable). The local ledger can
+        continue operating during Lago outages.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "./schemas/problem.yaml#/components/schemas/ProblemDocument"
+      x-error-codes: [dependency_unavailable]
+
+  schemas:
+    CreateOrderRequest:
+      type: object
+      description: Client supplies WHAT to buy and which price version — never the price or the payer.
+      required: [product_id, product_type, price_version_id]
+      additionalProperties: false
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        product_type:
+          type: string
+          enum: [subscription_monthly, credit_pack]
+        price_version_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    OrderMutationResult:
+      type: object
+      description: Created (or replayed) order; the object id and revision are stable under replay.
+      required: [order, request_id]
+      additionalProperties: false
+      properties:
+        order:
+          $ref: "./schemas/objects.yaml#/components/schemas/Order"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    OrderDetail:
+      type: object
+      description: Locally verified order plus aggregated refund progress (never raw channel state).
+      required: [order, refund_summary, request_id]
+      additionalProperties: false
+      properties:
+        order:
+          $ref: "./schemas/objects.yaml#/components/schemas/Order"
+        refund_summary:
+          type: object
+          description: Aggregated refund progress; does not overwrite the fact that payment arrived.
+          required: [open_refunds, refunded_fen_total]
+          additionalProperties: false
+          properties:
+            open_refunds:
+              type: integer
+              format: int32
+              minimum: 0
+            refunded_fen_total:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Fen"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreatePaymentAttemptRequest:
+      type: object
+      required: [channel, payment_scenario, return_url]
+      additionalProperties: false
+      properties:
+        channel:
+          $ref: "./schemas/scalars.yaml#/components/schemas/ChannelName"
+        payment_scenario:
+          type: string
+          enum: [h5, native, jsapi]
+          description: Channel-supported payment scenario; must be one the server actually supports.
+        return_url:
+          type: string
+          maxLength: 512
+          description: Redirect target after payment; MUST match the server-side whitelist. Returning to the app never proves payment.
+    PaymentAttemptMutationResult:
+      type: object
+      required: [payment_attempt, payment_action, request_id]
+      additionalProperties: false
+      properties:
+        payment_attempt:
+          $ref: "./schemas/objects.yaml#/components/schemas/PaymentAttempt"
+        payment_action:
+          type: object
+          description: What the client should do to pay; link validity never extends the order expiry.
+          required: [action_type, value, expires_at_us]
+          additionalProperties: false
+          properties:
+            action_type:
+              type: string
+              enum: [redirect_url, qrcode_content]
+            value:
+              type: string
+              minLength: 1
+              maxLength: 2048
+            expires_at_us:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    RefreshOrderRequest:
+      type: object
+      description: Intentionally EMPTY — the order id in the path is the only input; there is no client-supplied payment claim to accept.
+      additionalProperties: false
+      properties: {}
+    RefreshOrderResult:
+      type: object
+      required: [order_id, refresh_status, order, request_id]
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        refresh_status:
+          type: string
+          enum: [queued, verifying, confirmed, no_change]
+          description: queued/verifying = query task in flight; confirmed = server verified a state change; no_change = nothing new verified.
+        order:
+          $ref: "./schemas/objects.yaml#/components/schemas/Order"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreateRefundRequest:
+      type: object
+      required: [order_id, reason]
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+    RefundMutationResult:
+      type: object
+      required: [refund, request_id]
+      additionalProperties: false
+      properties:
+        refund:
+          $ref: "./schemas/objects.yaml#/components/schemas/Refund"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreateReservationRequest:
+      type: object
+      description: Trusted execution context. billing_account_id and the payer authorization are re-verified server-side against the service capability and stable identity — a request can never self-report an arbitrary payer.
+      required:
+        - billing_account_id
+        - owner_subject_id
+        - root_run_id
+        - run_id
+        - step_id
+        - call_id
+        - bot_id
+        - payer_authorization_id
+        - price_version_id
+        - max_cost_microcredits
+        - occurred_at_us
+      additionalProperties: false
+      properties:
+        billing_account_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        owner_subject_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/SubjectId"
+        root_run_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        run_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        step_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        call_id:
+          type: ["string", "null"]
+          description: null for non-model steps; one reservation per actual model call.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        bot_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        payer_authorization_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        price_version_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        max_cost_microcredits:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/PositiveMicrocredits"
+        occurred_at_us:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+    ReservationMutationResult:
+      type: object
+      required: [reservation, remaining_budget, request_id]
+      additionalProperties: false
+      properties:
+        reservation:
+          $ref: "./schemas/objects.yaml#/components/schemas/Reservation"
+        remaining_budget:
+          type: object
+          description: Root-run budget state after this reservation.
+          required: [cap_microcredits, settled_microcredits, outstanding_reserved_microcredits]
+          additionalProperties: false
+          properties:
+            cap_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/PositiveMicrocredits"
+            settled_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Microcredits"
+            outstanding_reserved_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Microcredits"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    SettleReservationRequest:
+      type: object
+      description: Trusted usage report with the locked price version and bearer evidence.
+      required: [source_event_id, usage_items, price_version_id, occurred_at_us, cost_bearer, bearer_evidence]
+      additionalProperties: false
+      properties:
+        source_event_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        usage_items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "./schemas/common.yaml#/components/schemas/UsageItem"
+        price_version_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: MUST equal the reservation's pinned price_version_id, else 409 price_version_conflict.
+        occurred_at_us:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+        cost_bearer:
+          $ref: "./schemas/scalars.yaml#/components/schemas/CostBearer"
+        bearer_evidence:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Why this bearer decision holds (e.g. platform-fault evidence, self-paid model reference). Audited.
+    SettlementMutationResult:
+      type: object
+      required: [settlement, account_balances, request_id]
+      additionalProperties: false
+      properties:
+        settlement:
+          $ref: "./schemas/objects.yaml#/components/schemas/Settlement"
+        account_balances:
+          type: object
+          description: Exact account balances after settlement.
+          required: [available_microcredits, reserved_microcredits, refund_frozen_microcredits]
+          additionalProperties: false
+          properties:
+            available_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Microcredits"
+            reserved_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Microcredits"
+            refund_frozen_microcredits:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/Microcredits"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ReleaseReservationRequest:
+      type: object
+      required: [reason, source_event_id, executed_usage]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [canceled_by_user, deadline_unknown_usage, execution_failure, platform_fault, replaced_by_new_reservation]
+        source_event_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        executed_usage:
+          type: object
+          description: What actually executed before release. unknown keeps the platform-bearer commitment; known usage is settled BEFORE release.
+          required: [status]
+          additionalProperties: false
+          properties:
+            status:
+              type: string
+              enum: [none, known, unknown]
+            usage_items:
+              type: array
+              items:
+                $ref: "./schemas/common.yaml#/components/schemas/UsageItem"
+              description: Required when status=known.
+            occurred_at_us:
+              type: string
+              $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+            settlement_source_event_id:
+              type: string
+              minLength: 1
+              maxLength: 128
+              pattern: "^[A-Za-z0-9._:-]{1,128}$"
+              description: Required when status=known — source event of the embedded settlement.
+    ReleaseMutationResult:
+      type: object
+      required: [reservation, settlement, request_id]
+      additionalProperties: false
+      properties:
+        reservation:
+          $ref: "./schemas/objects.yaml#/components/schemas/Reservation"
+          description: Terminal (usage_status=released) reservation.
+        settlement:
+          oneOf:
+            - type: "null"
+            - $ref: "./schemas/objects.yaml#/components/schemas/Settlement"
+          description: Present only when known consumption was settled before release; null otherwise.
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    CreateAdjustmentRequest:
+      type: object
+      required:
+        - original_event_id
+        - adjustment_type
+        - source_event_id
+        - signed_delta_microcredits
+        - reason
+        - actor_subject_id
+        - original_period_id
+        - effective_at_us
+      additionalProperties: false
+      properties:
+        original_event_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        adjustment_type:
+          type: string
+          enum: [charge_correction, compensation, late_usage_attribution, expiry_correction, revocation]
+        source_event_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        signed_delta_microcredits:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+        actor_subject_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/SubjectId"
+        original_period_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        effective_at_us:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+    AdjustmentMutationResult:
+      type: object
+      required: [adjustment, compensation_lot, request_id]
+      additionalProperties: false
+      properties:
+        adjustment:
+          $ref: "./schemas/objects.yaml#/components/schemas/Adjustment"
+        compensation_lot:
+          oneOf:
+            - type: "null"
+            - $ref: "./schemas/objects.yaml#/components/schemas/CreditLot"
+          description: Compensation lot created/extended by a positive delta; null otherwise.
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ReviewRefundRequest:
+      type: object
+      required: [decision, reason, expected_revision]
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+        expected_revision:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Revision"
+          description: Optimistic concurrency on the refund object; mismatch -> 409 state_conflict.
+    ReviewRefundResult:
+      type: object
+      required: [refund, frozen_allocations, request_id]
+      additionalProperties: false
+      properties:
+        refund:
+          $ref: "./schemas/objects.yaml#/components/schemas/Refund"
+          description: After approval the status is approved/processing/unknown — a channel-unknown result NEVER becomes succeeded here.
+        frozen_allocations:
+          type: array
+          items:
+            $ref: "./schemas/common.yaml#/components/schemas/FrozenAllocation"
+          description: Entitlement freeze applied atomically at approval; empty on rejection.
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+  # Contract-level registry of every error code with its expected HTTP status.
+  # Checked by server/src/billing-contract/validate-fixtures.ts against
+  # x-error-codes coverage and ProblemDocument.code enum.
+  x-error-code-registry:
+    - {code: missing_idempotency_key, status: 400}
+    - {code: invalid_cursor, status: 400}
+    - {code: unauthenticated, status: 401}
+    - {code: forbidden, status: 403}
+    - {code: resource_not_found, status: 404}
+    - {code: idempotency_conflict, status: 409}
+    - {code: idempotency_in_progress, status: 409}
+    - {code: state_conflict, status: 409}
+    - {code: price_version_conflict, status: 409}
+    - {code: invalid_integer, status: 422}
+    - {code: out_of_range, status: 422}
+    - {code: insufficient_credits, status: 422}
+    - {code: run_limit_exceeded, status: 422}
+    - {code: unknown_payer, status: 422}
+    - {code: unbounded_cost, status: 422}
+    - {code: rate_limited, status: 429}
+    - {code: ledger_unavailable, status: 503}
+    - {code: dependency_unavailable, status: 503}

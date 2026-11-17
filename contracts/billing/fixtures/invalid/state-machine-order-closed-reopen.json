@@ -1,0 +1,13 @@
+{
+  "expect": "reject",
+  "kind": "state-machine",
+  "object": "Order",
+  "transitions": [
+    ["closed", "paid"],
+    ["exception", "paid"],
+    ["fulfilled", "pending"]
+  ],
+  "via": "semantic",
+  "code": "state_conflict",
+  "note": "closed/exception never return to paid states"
+}

@@ -1,0 +1,8 @@
+{
+  "expect": "reject",
+  "schema": "PositiveMicrocredits",
+  "instance": "0",
+  "via": "schema",
+  "code": "out_of_range",
+  "note": "strictly positive only"
+}

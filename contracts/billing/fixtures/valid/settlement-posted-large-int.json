@@ -1,0 +1,37 @@
+{
+  "expect": "accept",
+  "schema": "Settlement",
+  "instance": {
+    "id": "7f8a9b0c-1d2e-4f3a-8b4c-5d6e7f8a9b0c",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "1",
+    "reservation_id": "4c5d6e7f-8091-4a0b-9c2d-3e4f5a6b7c8d",
+    "source_event_id": "evt_settle_call_9f8e7d6c",
+    "usage_items": [
+      {
+        "resource": "model_input_tokens",
+        "quantity": "1250",
+        "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+      },
+      {
+        "resource": "model_output_tokens",
+        "quantity": "480",
+        "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+      }
+    ],
+    "charged_microcredits": "9007199254740993",
+    "released_microcredits": "190999",
+    "platform_cost_microcredits": "7",
+    "cost_bearer": "user",
+    "occurred_at_us": "1700000300000000",
+    "settled_at_us": "1700000305000000",
+    "source_period_ids": ["period_2026-11"],
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "status": "posted"
+  },
+  "note": "charged_microcredits above 2^53 must round-trip with zero loss as a string"
+}

@@ -1,0 +1,9 @@
+{
+  "expect": "reject",
+  "kind": "state-machine",
+  "object": "Refund",
+  "transitions": [["requested", "succeeded"], ["unknown", "succeeded"]],
+  "via": "semantic",
+  "code": "state_conflict",
+  "note": "no path from requested straight to success; unknown never auto-succeeds"
+}

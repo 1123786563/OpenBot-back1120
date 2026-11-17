@@ -1,0 +1,25 @@
+{
+  "expect": "accept",
+  "schema": "PaymentAttempt",
+  "instance": {
+    "id": "9e0f1a2b-c3d4-4e5f-8a6b-7c8d9e0f1a2b",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000450000000",
+    "updated_at_us": "1700000460000000",
+    "revision": "2",
+    "order_id": "8d9e0f10-a1b2-4c3d-9e4f-6a7b8c9d0e1f",
+    "channel": "wechat",
+    "merchant_reference": "mref_202611170001",
+    "provider_transaction_id": "wx_txn_4112233445",
+    "protocol_version": "v3",
+    "amount_fen": "9900",
+    "currency": "CNY",
+    "link_expires_at_us": "1700002250000000",
+    "provider_paid_at_us": "1700000460000000",
+    "verified_at_us": null,
+    "status": "unknown"
+  },
+  "note": "verified_at_us null while channel result indeterminate"
+}

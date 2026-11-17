@@ -1,0 +1,23 @@
+{
+  "expect": "accept",
+  "schema": "Adjustment",
+  "instance": {
+    "id": "0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3e",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "1",
+    "original_event_id": "evt_settle_call_9f8e7d6c",
+    "adjustment_type": "compensation",
+    "source_event_id": "evt_comp_2026_0001",
+    "signed_delta_microcredits": "-5000",
+    "reason": "platform fault duplicated a step charge",
+    "actor_subject_id": "subj_op_771",
+    "original_period_id": "period_2026-11",
+    "effective_at_us": "1700000400000000",
+    "compensation_lot_id": "7f8091a2-b3c4-4d5e-8f6a-7b8c9d0e1f2a",
+    "status": "posted"
+  }
+}

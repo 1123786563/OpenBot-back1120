@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "PaymentAttempt",
+  "transitions": [
+    ["created", "pending"],
+    ["pending", "unknown"],
+    ["unknown", "succeeded"],
+    ["unknown", "failed"],
+    ["pending", "succeeded"],
+    ["pending", "failed"],
+    ["created", "closed"],
+    ["pending", "closed"]
+  ],
+  "note": "unknown is resolvable in both directions until closed"
+}

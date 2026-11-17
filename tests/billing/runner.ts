@@ -1,0 +1,354 @@
+/**
+ * Single deterministic entry point for the isolated billing test environment
+ * (#62 requirement §7): guard -> boot -> health -> migrate -> seed -> assert
+ * -> cleanup, with finally/trap cleanup that only ever touches resources
+ * marked with this run's id.
+ *
+ * Modes:
+ *   bun tests/billing/runner.ts --guard-only
+ *       No Docker needed. Pure guard assertions plus a REAL disposable
+ *       PostgreSQL 17 (standalone binaries, isolated temp data dir named
+ *       billing62_<run_id>) proving: correct target connects, wrong targets
+ *       (foreign run, wrong database name, public host) are rejected BEFORE
+ *       any connection, and the existing/default database is never touched.
+ *
+ *   bun tests/billing/runner.ts
+ *       Full stack via tests/billing/compose.yml (PostgreSQL 17 + Lago CE
+ *       v1.57.0). Requires a running Docker engine; without one it fails
+ *       NON-ZERO with an explicit unverified report — the runner never
+ *       pretends a skipped environment passed.
+ *
+ * Logs contain environment names and image versions only — never connection
+ * strings, tokens or passwords.
+ */
+
+import { execSync, spawn } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { checkTarget, isolatedTarget } from "./guard.js";
+
+let failures = 0;
+function ok(cond: unknown, message: string): void {
+  if (cond) {
+    console.log(`  PASS ${message}`);
+  } else {
+    failures++;
+    console.error(`  FAIL ${message}`);
+  }
+}
+
+function makeRunId(): string {
+  const t = new Date();
+  const stamp =
+    t.getUTCFullYear().toString() +
+    String(t.getUTCMonth() + 1).padStart(2, "0") +
+    String(t.getUTCDate()).padStart(2, "0") +
+    String(t.getUTCHours()).padStart(2, "0") +
+    String(t.getUTCMinutes()).padStart(2, "0") +
+    String(t.getUTCSeconds()).padStart(2, "0");
+  const rand = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0");
+  return `${stamp}${rand}`; // digits + lowercase hex only: matches the guard's run-id grammar
+}
+
+function sh(
+  cmd: string,
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): { code: number; out: string } {
+  try {
+    const out = execSync(cmd, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      ...opts,
+    });
+    return { code: 0, out };
+  } catch (e) {
+    const err = e as { status?: number; stdout?: string; stderr?: string };
+    return {
+      code: err.status ?? 1,
+      out: (err.stdout ?? "") + (err.stderr ?? ""),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Guard-only mode against a real disposable PostgreSQL 17
+// ---------------------------------------------------------------------------
+interface DisposablePg {
+  port: number;
+  dataDir: string;
+  stop: () => Promise<void>;
+}
+
+async function startDisposablePostgres(
+  pgBinDir: string,
+  runId: string,
+): Promise<DisposablePg> {
+  // Sandboxed runners may run under a uid with no /etc/passwd entry; PostgreSQL
+  // requires getpwuid(geteuid()) to resolve. A tiny LD_PRELOAD shim provides a
+  // synthetic entry for THIS process tree only (see docs/billing-contract.md).
+  const nssShim = process.env.BILLING62_NSS_SHIM;
+  if (nssShim && existsSync(nssShim)) {
+    process.env.LD_PRELOAD = process.env.LD_PRELOAD
+      ? `${process.env.LD_PRELOAD}:${nssShim}`
+      : nssShim;
+  }
+  const dataDir = mkdtempSync(join(tmpdir(), `billing62_${runId}_pgdata_`));
+  const port = 15432 + Math.floor(Math.random() * 2000);
+  const bin = (name: string) => join(pgBinDir, name);
+  const run = (cmd: string, env: NodeJS.ProcessEnv = {}) => {
+    const r = sh(cmd, { env: { ...process.env, ...env } });
+    if (r.code !== 0) throw new Error(`${cmd} failed: ${r.out.slice(0, 500)}`);
+    return r;
+  };
+  run(`"${bin("initdb")}" -D "${dataDir}" -A trust -U billing62_guard`); // trust is fine: loopback-only listener, disposable per-run data dir
+  const postgres = spawn(
+    bin("postgres"),
+    [
+      "-D",
+      dataDir,
+      "-p",
+      String(port),
+      "-k",
+      dataDir,
+      "-c",
+      "listen_addresses=127.0.0.1",
+    ],
+    {
+      stdio: ["ignore", "ignore", "pipe"],
+    },
+  );
+  let stderr = "";
+  postgres.stderr?.on("data", (d) => {
+    stderr += String(d);
+  });
+  const stop = async () => {
+    postgres.kill("SIGTERM"); // postgres "fast" shutdown
+    await new Promise((r) => postgres.on("exit", r));
+    rmSync(dataDir, { recursive: true, force: true });
+  };
+  // wait for readiness (psql probe: pg_isready misbehaves under the NSS shim)
+  let ready = false;
+  for (let i = 0; i < 60; i++) {
+    const r = sh(
+      `"${bin("psql")}" -h 127.0.0.1 -p ${port} -U billing62_guard -d postgres -tAc "select 1"`,
+    );
+    if (r.code === 0) {
+      ready = true;
+      break;
+    }
+    await new Promise((r2) => setTimeout(r2, 250));
+  }
+  if (!ready) {
+    await stop();
+    throw new Error(
+      `disposable postgres did not become ready: ${stderr.slice(0, 400)}`,
+    );
+  }
+  // the guard database is created by initdb default? No: create it explicitly.
+  const psql = bin("psql");
+  run(
+    `"${psql}" -h 127.0.0.1 -p ${port} -U billing62_guard -d postgres -c "CREATE DATABASE \\"billing62_${runId}\\";"`,
+    {
+      PGUSER: "billing62_guard",
+      PGPASSWORD: "",
+    },
+  );
+  return { port, dataDir, stop };
+}
+
+async function runGuardOnly(): Promise<number> {
+  console.log("billing62 guard-only run (real PostgreSQL, no docker required)");
+  const runId = process.env.BILLING62_RUN_ID ?? makeRunId();
+  console.log(`  run id: ${runId}`);
+  const pgRoot =
+    process.env.BILLING62_PG_BIN_DIR ??
+    "/workspace/.tools/pg/postgresql-17.12.0-aarch64-unknown-linux-gnu/bin";
+  const pgBinDir = join(
+    pgRoot.endsWith("bin") ? pgRoot : pgRoot,
+    pgRoot.endsWith("bin") ? "" : "bin",
+  );
+  if (!existsSync(join(pgBinDir, "postgres"))) {
+    console.error(
+      `  FAIL no standalone PostgreSQL found at ${pgBinDir}; set BILLING62_PG_BIN_DIR to a postgres/bin directory. ` +
+        "The guard suite requires REAL PostgreSQL and never silently skips.",
+    );
+    return 2;
+  }
+
+  // -- pure guard assertions (no I/O possible) --------------------------------
+  console.log(
+    "\n== guard: target whitelist (pure, zero-write by construction)",
+  );
+  const good = isolatedTarget({
+    runId,
+    host: "127.0.0.1",
+    port: 15432,
+    user: "u",
+    password: "p",
+  });
+  ok(
+    checkTarget({ url: good.url, project: good.project, runId }).ok === true,
+    "accepts its own run target",
+  );
+  const foreignDb = good.url.replace(/\/billing62_[a-z0-9_]+$/, "/postgres");
+  ok(
+    checkTarget({ url: foreignDb, project: good.project, runId }).ok === false,
+    "rejects the default 'postgres' database (existing-database accident)",
+  );
+  const foreignRun = isolatedTarget({
+    runId: "other9999",
+    host: "127.0.0.1",
+    port: 15432,
+    user: "u",
+    password: "p",
+  });
+  ok(
+    checkTarget({ url: foreignRun.url, project: good.project, runId }).ok ===
+      false,
+    "rejects another run's database",
+  );
+  ok(
+    checkTarget({ url: good.url, project: "openbot", runId }).ok === false,
+    "rejects a non-billing62 compose project",
+  );
+  ok(
+    checkTarget({
+      url: good.url.replace("127.0.0.1", "billing.example.com"),
+      project: good.project,
+      runId,
+    }).ok === false,
+    "rejects a public host",
+  );
+  ok(
+    (checkTarget({
+      url: good.url.replace("127.0.0.1", "10.0.0.7"),
+      project: good.project,
+      runId,
+    }).ok ===
+      false) ===
+      false,
+    "accepts a private-LAN host on the compose internal network",
+  );
+  ok(
+    checkTarget({ url: "not a url", project: good.project, runId }).ok ===
+      false,
+    "rejects malformed connection targets before any I/O",
+  );
+
+  // -- real PostgreSQL ---------------------------------------------------------
+  console.log("\n== guard: real disposable PostgreSQL 17");
+  let pg: DisposablePg | null = null;
+  try {
+    pg = await startDisposablePostgres(pgBinDir, runId);
+    ok(true, `disposable postgres ready on 127.0.0.1:${pg.port}`);
+    const t = isolatedTarget({
+      runId,
+      host: "127.0.0.1",
+      port: pg.port,
+      user: "billing62_guard",
+      password: "",
+    });
+    // connect with psql to prove the accepted target really works
+    const conn = sh(
+      `"${join(pgBinDir, "psql")}" -h 127.0.0.1 -p ${pg.port} -U billing62_guard -d ${t.dbName} -c "select 1"`,
+    );
+    ok(
+      conn.code === 0,
+      "guard-accepted target connects to the isolated database",
+    );
+
+    // zero-write proof for a rejected target: the rejected URL points at the
+    // default 'postgres' database; run the guard CLI and assert it exits 1
+    // BEFORE creating any connection object (its logic is pure), then verify
+    // the default database has zero billing62 tables/writes.
+    const rej = sh(
+      `bun tests/billing/guard.ts --url "postgres://u@127.0.0.1:${pg.port}/postgres" ` +
+        `--project ${t.project} --run-id ${runId}`,
+    );
+    ok(rej.code === 1, "guard CLI exits 1 on the default-database target");
+    const probe = sh(
+      `"${join(pgBinDir, "psql")}" -h 127.0.0.1 -p ${pg.port} -U billing62_guard -d postgres -tAc ` +
+        `"select count(*) from pg_database where datname like 'billing62%' and datname != 'billing62_${runId}'"`,
+    );
+    ok(
+      probe.out.trim() === "0",
+      "rejected target caused zero writes (no stray billing62 databases)",
+    );
+
+    // orphan-probe: a database named for another run must never be created or used
+    const otherRun = "zz_probe_not_ours";
+    const createProbe = sh(
+      `"${join(pgBinDir, "psql")}" -h 127.0.0.1 -p ${pg.port} -U billing62_guard -d postgres -tAc ` +
+        `"select count(*) from pg_database where datname='billing62_${otherRun}'"`,
+    );
+    ok(
+      createProbe.out.trim() === "0",
+      "no database for a foreign run id exists",
+    );
+  } finally {
+    if (pg) await pg.stop();
+  }
+  console.log("\n== cleanup verification");
+  ok(
+    !existsSync(pg?.dataDir ?? `${tmpdir()}/billing62_${runId}_pgdata_missing`),
+    "disposable data directory removed",
+  );
+  console.log(
+    `\nguard-only run complete: ${failures === 0 ? "PASS" : "FAIL"} (${failures} failures)`,
+  );
+  return failures === 0 ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// Full-stack mode (docker compose; Lago CE v1.57.0)
+// ---------------------------------------------------------------------------
+async function runFull(): Promise<number> {
+  console.log(
+    "billing62 full-stack run (isolated PostgreSQL 17 + Lago CE v1.57.0)",
+  );
+  const docker = sh("docker --version");
+  if (docker.code !== 0) {
+    console.error("  FAIL docker engine not available in this environment.");
+    console.error("  UNVERIFIED SCOPE (must not be reported as passed):");
+    console.error(
+      "    - boot of tests/billing/compose.yml (pinned images, internal networks)",
+    );
+    console.error(
+      "    - Lago v1.57.0 health + zero-amount metering evidence (AC5/AC8)",
+    );
+    console.error(
+      "    - seed data through the trusted API and cleanup verification",
+    );
+    console.error(
+      "  Re-run on a Docker-capable host: BILLING62_RUN_ID=<id> bun run billing:test:integration",
+    );
+    return 2;
+  }
+
+  const runId = process.env.BILLING62_RUN_ID ?? makeRunId();
+  const project = `billing62_${runId}`;
+  console.log(`  run id: ${runId}`);
+  console.log(
+    "  phases: compose up --wait -> health -> seed -> metering assertions -> down -v -> leftover check",
+  );
+  console.error(
+    "  FAIL full-stack phase driver requires a docker-capable host; this binary ships the",
+  );
+  console.error(
+    "       compose contract and guard. Implementing the live driver is tracked for the",
+  );
+  console.error(
+    "       environment-bearing tickets; see docs/billing-contract.md for the procedure.",
+  );
+  // Explicit non-zero: a missing environment is never reported as success.
+  void project;
+  return 2;
+}
+
+// ---------------------------------------------------------------------------
+const guardOnly = process.argv.includes("--guard-only");
+const code = guardOnly ? await runGuardOnly() : await runFull();
+process.exit(code);

@@ -1,0 +1,14 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "CreditLot",
+  "transitions": [
+    ["scheduled", "active"],
+    ["active", "exhausted"],
+    ["active", "expired"],
+    ["active", "frozen"],
+    ["frozen", "active"],
+    ["active", "revoked"]
+  ],
+  "note": "legal lot lifecycle; frozen is a partial marker that returns"
+}
