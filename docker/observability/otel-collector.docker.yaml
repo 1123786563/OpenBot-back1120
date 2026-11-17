@@ -1,0 +1,107 @@
+# Compose-deployment overlay on top of `otel-collector.yaml`, loaded after it:
+#
+#   otelcol-contrib --config otel-collector.yaml --config otel-collector.docker.yaml
+#
+# What the overlay adds is container discovery: the Docker socket (read-only) plus a
+# receiver_creator that starts one `filelog` per running container, pointed at that container's own
+# json-file. The endpoint's `container_id` expands into the include path, and the creator's default
+# resource attributes give every record a `container.name` — which the base config's runtime
+# transform promotes to `service.name` and which replaces the file-name heuristic the bare-binary
+# path uses.
+#
+# The collector's own container and OpenObserve's are excluded from discovery: the collector must
+# not ingest its own export logs, and there is no reason to ship the log store's own chatter.
+#
+# Without this overlay (bare-binary verification, or a host where the collector reads process log
+# files directly) the base `filelog/runtime` receiver alone does the work.
+
+extensions:
+  # Read-only use of the Docker socket: which containers run and what their names are.
+  docker_observer/containers:
+    endpoint: ${env:OO_DOCKER_SOCKET}
+    include_all_containers: true
+    excluded_images:
+      # The collector and OpenObserve themselves — the collector's own chatter must not come back
+      # to it as input, and the log store has nothing to say to itself.
+      - "otel/opentelemetry-collector-contrib*"
+      - "openobserve/openobserve*"
+
+receivers:
+  receiver_creator/logs:
+    watch_observers:
+      - docker_observer/containers
+    receivers:
+      filelog/containers:
+        rule: 'type == "container"'
+        # `container_id` comes from the discovered endpoint; every expansion below is one
+        # container's json-file. Everything else in this receiver is identical to the base
+        # `filelog/runtime` operators, on purpose: the same envelope, the same OpenBot JSON
+        # convention, the same attribution.
+        config:
+          include:
+            - /var/lib/docker/containers/`container_id`/`container_id`-json.log
+          start_at: end
+          include_file_path: true
+          poll_interval: 500ms
+          max_log_size: 8KiB
+          operators:
+            - type: json_parser
+              parse_from: body
+              if: 'body matches "^\\s*\\{"'
+              on_error: send
+            - type: move
+              from: attributes.log
+              to: body
+              if: 'attributes["log"] != nil'
+            - type: move
+              from: attributes.time
+              to: attributes["docker.time"]
+              if: 'attributes["time"] != nil'
+            - type: move
+              from: attributes.stream
+              to: attributes["log.iostream"]
+              if: 'attributes["stream"] != nil'
+            - type: json_parser
+              parse_from: body
+              parse_to: attributes.oo_parsed
+              if: 'body matches "^\\s*\\{"'
+              on_error: send
+            - type: move
+              from: attributes.oo_parsed.type
+              to: attributes["openbot.log_type"]
+              if: 'attributes["oo_parsed"] != nil and attributes["oo_parsed"]["type"] != nil'
+        # In addition to the defaults (`container.name` = `name`,
+        # `container.image.name` = `image`), carry the container ID so a query can follow a
+        # container across restarts.
+        resource_attributes:
+          container.id: "`container_id`"
+
+service:
+  extensions:
+    - file_storage/queue
+    - docker_observer/containers
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    logs/runtime:
+      receivers:
+        - receiver_creator/logs
+      processors:
+        - memory_limiter
+        - groupbyattrs/runtime
+        - transform/runtime
+        - batch
+      exporters:
+        - otlphttp/openobserve
+        - file/payload
+    logs/audit:
+      receivers:
+        - otlp/audit
+      processors:
+        - memory_limiter
+        - transform/audit
+        - batch
+      exporters:
+        - otlphttp/openobserve
+        - file/payload
