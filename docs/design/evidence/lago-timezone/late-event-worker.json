@@ -1,0 +1,11 @@
+{
+  "event_id": "58f929cb-5269-4f6f-af40-b93431787db7",
+  "worker_result": {
+    "level": "info",
+    "event": "perform",
+    "status": "success",
+    "job": "Events::PostProcessJob",
+    "duration": 4.65,
+    "job_id": "f730e63d-7077-402f-9010-d74a556cef6c"
+  }
+}

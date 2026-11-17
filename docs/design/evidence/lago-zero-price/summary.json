@@ -1,0 +1,31 @@
+{
+  "metering_status": "passed",
+  "license": {
+    "premium": false,
+    "license_present": false
+  },
+  "image": "getlago/lago:v1.57.0",
+  "image_index_digest": "sha256:5673b34f7bd73427a4f1a6b4720cc0b4fa8c19e3cfac7b851e0013bb95cd761c",
+  "platform_manifest_digest": "sha256:bc35c4fe6e3a377bba92d2d1ced17a9d693ee67ba2be763bed107cfd4e0f323e",
+  "platform": "linux/arm64",
+  "currency": "CNY",
+  "token_units": "17.0",
+  "microcredit_units": "1000123.0",
+  "input_microcredits": [
+    123,
+    1000000
+  ],
+  "duplicate_status": 422,
+  "current_usage_amount_cents": 0,
+  "current_usage_total_amount_cents": 0,
+  "invoice_status": "finalized",
+  "invoice_total_amount_cents": 0,
+  "invoice_total_due_amount_cents": 0,
+  "invoice_payment_status": "succeeded",
+  "requested_customer_timezone": "Asia/Shanghai",
+  "returned_customer_timezone": null,
+  "returned_applicable_timezone": "UTC",
+  "timezone_validation": "not passed: requested timezone ignored; UTC returned",
+  "verification_note": "Initial script fee assertion used incorrect invoice serializer field. Corrected parser (fees.item.code) revalidated saved real API responses; no service/data change.",
+  "cleanup": "Disposable container, compose network and data volume removed after verification"
+}
