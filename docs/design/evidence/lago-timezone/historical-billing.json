@@ -1,0 +1,7 @@
+{
+  "invocation": "require \"time\"; s = Subscription.find_by!(external_id: \"timezone_subscription\");\nraise \"unexpected premium license\" if License.premium?;\nBillSubscriptionJob.perform_now([s], Time.iso8601(\"2024-03-01T00:00:00Z\").to_i, invoicing_reason: :subscription_periodic);\nputs({premium: License.premium?, billing_timestamp: \"2024-03-01T00:00:00Z\"}.to_json)",
+  "result": {
+    "premium": false,
+    "billing_timestamp": "2024-03-01T00:00:00Z"
+  }
+}

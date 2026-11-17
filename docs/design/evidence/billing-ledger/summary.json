@@ -1,0 +1,43 @@
+{
+  "status": "passed",
+  "scope": "SQLite transactional reference model, not production",
+  "results": {
+    "cross_cycle_multilot": {
+      "old_consumed": 100,
+      "pack_consumed": 20,
+      "pack_available": 80,
+      "parallel_retries": 16,
+      "commits": 1,
+      "outbox_records": 1,
+      "crash_rollback": true,
+      "conflict_rejected": true
+    },
+    "adjustments": {
+      "parallel_retries": 16,
+      "records": 1,
+      "delta": 17,
+      "restart_retry_noop": true,
+      "changed_period_or_amount_rejected": true,
+      "atomic_outbox_records": 1,
+      "crash_rollback": true
+    },
+    "overspend_and_timeout": {
+      "competing_reservations": 2,
+      "accepted": 1,
+      "late_cost_payer": "platform",
+      "pack_available_after_late_result": 80
+    },
+    "expired_remainder": {
+      "consumed": 60,
+      "expired": 40,
+      "available": 0,
+      "next_step_rejected": true
+    },
+    "deadline_race": {
+      "release_and_settle_at_24h": true,
+      "available": 100,
+      "payer": "platform",
+      "premature_release_rejected": true
+    }
+  }
+}
