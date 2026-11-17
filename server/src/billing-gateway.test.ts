@@ -49,7 +49,7 @@ afterAll(() => ledger.stop(true));
 const client = () =>
   new BillingGatewayClient({
     baseUrl: ledger.url.origin,
-    fetcher: (input, init) => fetch(input, init),
+    fetcher: fetch,
   });
 
 const call = { runId: "run-1", callId: "call-1", attempt: 1 };
