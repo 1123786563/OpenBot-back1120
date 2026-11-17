@@ -13,7 +13,7 @@ OpenBot ships three public-web research providers in the plugin catalogue: **Par
 
 ## Enable research
 
-1. As an administrator, open Plugins and add a provider from the catalogue. For the keyed entries, enter the provider's API key; it is stored in the server-side credential vault.
+1. As an administrator, open Apps and add a provider from the catalogue. For the keyed entries, enter the provider's API key; it is stored in the server-side credential vault.
 2. Grant that provider's search and fetch tools to the Bots that should research the public web. The fintech package's **Research Desk** is written for this; it ships in `examples/fintech/catalog/` and is loaded only once its file is copied into `examples/fintech/agents/`.
 3. Ask the Bot to research a topic. It searches, reads selected sources and cites their URLs. Run `/research-public-web` to select the example skill explicitly if your deployment has many tools.
 
@@ -35,6 +35,6 @@ The provider receives model-selected objectives, search queries, requested publi
 
 ## Adding a provider
 
-A provider is a catalogue entry in `server/src/plugins/catalogue.ts`, plus its two tools in `RESEARCH_TOOLS` in `shared/research.ts` (`{ search, fetch, notes? }`, keyed by the entry's key). The table is shared because the app labels these tools too. Add `readTools` to the entry when its write tools cannot be listed exhaustively. A vendor that reads its key from its own header names it in `auth: { kind: "deployment-bearer", header }`. The Bot guidance, the skill roles and the transcript labels pick the new entry up with no other change.
+A provider is an entry in the server's plugin catalogue, plus its two tools in `RESEARCH_TOOLS` in `shared/research.ts` (`{ search, fetch, notes? }`, keyed by the entry's key). The table is shared because the app labels these tools too. Add `readTools` to the entry when its write tools cannot be listed exhaustively. A vendor that reads its key from its own header names it in `auth: { kind: "deployment-bearer", header }`. The Bot guidance, the skill roles and the transcript labels pick the new entry up with no other change.
 
 Provider documentation: [Parallel](https://docs.parallel.ai/integrations/mcp/search-mcp), [Exa](https://exa.ai/docs/reference/exa-mcp), [Firecrawl](https://docs.firecrawl.dev/mcp-server).

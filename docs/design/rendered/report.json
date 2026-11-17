@@ -1,0 +1,70 @@
+{
+  "mermaidVersion": "12.3.0",
+  "browserVersion": "157.0.8103.79",
+  "diagrams": [
+    {
+      "id": "system-architecture-1",
+      "title": "系统上下文",
+      "source": "system-architecture.md",
+      "width": 1100,
+      "height": 328,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "system-architecture-2",
+      "title": "容器与职责",
+      "source": "system-architecture.md",
+      "width": 1223,
+      "height": 1064,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "system-architecture-3",
+      "title": "本地 Compose 的网络与存储边界",
+      "source": "system-architecture.md",
+      "width": 1234,
+      "height": 716,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "data-flows-1",
+      "title": "一级数据流：请求、执行与结果",
+      "source": "data-flows.md",
+      "width": 1496,
+      "height": 414,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "data-flows-2",
+      "title": "聊天执行与线程回放",
+      "source": "data-flows.md",
+      "width": 1144,
+      "height": 915,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "data-flows-3",
+      "title": "工具执行与审批",
+      "source": "data-flows.md",
+      "width": 540,
+      "height": 1252,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "data-flows-4",
+      "title": "主动与持续工作",
+      "source": "data-flows.md",
+      "width": 1538,
+      "height": 245,
+      "textOutsideCanvas": []
+    },
+    {
+      "id": "data-flows-5",
+      "title": "Recorder 与学习数据",
+      "source": "data-flows.md",
+      "width": 1140,
+      "height": 1070,
+      "textOutsideCanvas": []
+    }
+  ]
+}

@@ -118,9 +118,10 @@ everywhere else here, from "the app advertises nothing".
 COMPOSIO_API_KEY=... bun run composio:smoke -- --user <id> [--call]
 ```
 
-`scripts/composio-smoke.ts` is the one command to run when Composio misbehaves and nothing on screen
-says why. It ships inside the container image, so it is run where the key is — in the deployment,
-not on a laptop — and it answers the question no page can: whether *this* key opens *this* project. A
+`bun run composio:smoke` is the one command to run when Composio misbehaves and nothing on screen
+says why. It is a command of the server image (`openbot composio-smoke`), which the script runs in a
+one-off server container with this checkout's `.env`, and in a deployment it runs where the key is.
+It answers the question no page can: whether *this* key opens *this* project. A
 key with no project behind it, a project with no authorization config for the app, and a person who
 never finished the consent page all leave a product that looks configured and answers nothing.
 
@@ -486,7 +487,7 @@ them, and an enable that finds them gone is refused rather than creating a confi
 Such an app connects only as one [shared account](#shared-apps). The person connecting types only
 what the connection names, such as Shopify's store subdomain, and the credential is the deployment's
 client, so a personal account would give anyone who can see the app the organization's full
-access. **Connect** refuses a personal account, and the Connections page and the app's Plugins page
+access. **Connect** refuses a personal account, and the Connections page and the app's page under Apps
 don't offer one: an administrator makes the app shared, connects the team account, and grants it to
 Bots. To change the client later, see
 [rotating the client](../configuration.md#rotating-a-composio-apps-own-client).
@@ -642,13 +643,14 @@ next step, drawn from the same state as the Bot's page:
 - the `show_app_access` tool, which every Bot holds and is told to call for an app it holds nothing
   for, switched off or not granted — **Request access**.
 
-The card asks `GET /api/plugins/for/:agentId/apps/:app` for the Bot that made the call when it is
+The card asks `GET /api/v2/organizations/{organizationId}/bots/{botId}/apps/{appId}` for the Bot that made the call when it is
 drawn, so a card scrolled back to later shows what is true now. The one case it takes the refusal's
 word over the live state is the lost account, which the server cannot see; a connection made after
 the refusal ends that. The card is drawn in the transcript, never folded into the "Used N tools" line.
 
-`GET /api/plugins/for/:agentId/apps` lists every app the Bot holds, including a grant whose app is
-gone; `GET /api/plugins/for/:agentId/apps/:app` answers for one app by key or by name, held or not.
+`GET /api/v2/organizations/{organizationId}/bots/{botId}/apps` lists every app the Bot holds,
+including a grant whose app is gone; `.../bots/{botId}/apps/{appId}` answers for one app by key or
+by name, held or not.
 Both answer only for a Bot the person may use. Connections still lists only enabled apps, and the
 directory is never listed to anybody but an administrator: an app nobody enabled appears only where
 a Bot needs it.
@@ -663,7 +665,7 @@ per person, app, Bot and kind, held by a unique index rather than a check, so tw
 both file one. A person can withdraw their own.
 
 Requests wait on the app's own page under `/admin/plugins`, and all of them at the top of the
-Plugins list, with a count on each app's row — an app nobody has switched on has no page of its own. They
+Apps list, with a count on each app's row — an app nobody has switched on has no page of its own. They
 show who asked and for which Bot — they asked — and nothing about anybody's connections.
 **Approve** does what was asked in the same press:
 

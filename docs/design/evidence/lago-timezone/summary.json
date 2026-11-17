@@ -1,0 +1,198 @@
+{
+  "status": "passed",
+  "community_timezone": "UTC",
+  "premium": false,
+  "method": "REST historical events and subscription; normal BillSubscriptionJob with explicit historical timestamp; no global clock change",
+  "beijing_periods_utc": [
+    [
+      "2024-01-30T16:00:00Z",
+      "2024-02-28T16:00:00Z"
+    ],
+    [
+      "2024-02-28T16:00:00Z",
+      "2024-03-30T16:00:00Z"
+    ]
+  ],
+  "first_before": {
+    "raw_ids": [
+      "at_start",
+      "step_at_boundary",
+      "step_before_boundary"
+    ],
+    "half_open_ids": [
+      "at_start",
+      "step_before_boundary"
+    ],
+    "sum_microcredits": "5",
+    "pages": [
+      {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 3
+      },
+      {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 3
+      }
+    ]
+  },
+  "second_before": {
+    "raw_ids": [
+      "at_march_end",
+      "before_march_end",
+      "leap_day",
+      "step_at_boundary"
+    ],
+    "half_open_ids": [
+      "before_march_end",
+      "leap_day",
+      "step_at_boundary"
+    ],
+    "sum_microcredits": "23",
+    "pages": [
+      {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      },
+      {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    ]
+  },
+  "first_after_late_event": {
+    "raw_ids": [
+      "at_start",
+      "late_february",
+      "step_at_boundary",
+      "step_before_boundary"
+    ],
+    "half_open_ids": [
+      "at_start",
+      "late_february",
+      "step_before_boundary"
+    ],
+    "sum_microcredits": "22",
+    "pages": [
+      {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      },
+      {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    ]
+  },
+  "second_after_late_event": {
+    "raw_ids": [
+      "at_march_end",
+      "before_march_end",
+      "leap_day",
+      "step_at_boundary"
+    ],
+    "half_open_ids": [
+      "before_march_end",
+      "leap_day",
+      "step_at_boundary"
+    ],
+    "sum_microcredits": "23",
+    "pages": [
+      {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      },
+      {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    ]
+  },
+  "duplicate_late_event_status": 422,
+  "finalized_invoice_before_and_after": {
+    "status": "finalized",
+    "total_amount_cents": 0,
+    "total_due_amount_cents": 0,
+    "fees": [
+      {
+        "code": "timezone_plan",
+        "units": "1.0",
+        "from_date": "2024-02-01T00:00:00+00:00",
+        "to_date": "2024-02-29T23:59:59+00:00",
+        "amount_cents": 0
+      },
+      {
+        "code": "timezone_microcredits",
+        "units": "15.0",
+        "from_date": "2024-02-01T00:00:00+00:00",
+        "to_date": "2024-02-29T23:59:59+00:00",
+        "amount_cents": 0
+      }
+    ]
+  },
+  "limits": [
+    "Pagination tested with quiescent fixtures; concurrent insertion requires overlapping rescan and ID deduplication.",
+    "Lago uses inclusive timestamp bounds; client explicitly removes upper bound for half-open windows.",
+    "Historical UTC invoice is not an OpenBot Beijing billing period.",
+    "Invoice non-mutation observed after three seconds; this does not prove all future jobs can never change it.",
+    "Fixtures use whole seconds; API subsecond timestamp fidelity is not tested."
+  ],
+  "utc_february_raw_after_late_event": {
+    "raw_ids": [
+      "late_february",
+      "leap_day",
+      "step_at_boundary",
+      "step_before_boundary"
+    ],
+    "half_open_ids": [
+      "late_february",
+      "leap_day",
+      "step_at_boundary",
+      "step_before_boundary"
+    ],
+    "sum_microcredits": "32",
+    "pages": [
+      {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      },
+      {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    ]
+  },
+  "image": "getlago/lago:v1.57.0",
+  "image_index_digest": "sha256:5673b34f7bd73427a4f1a6b4720cc0b4fa8c19e3cfac7b851e0013bb95cd761c",
+  "late_event_postprocess": "Observed successful Events::PostProcessJob for late event before final invoice read",
+  "cleanup": "Own disposable container, network and data volume removed"
+}
