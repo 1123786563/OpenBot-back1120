@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 SDK_EFFORTS = frozenset(get_args(EffortLevel))
 
 AG_UI_TOOL_PREFIX = "mcp__ag_ui__"
+# The header a billed run's model requests carry the server's correlation ID on. The gateway
+# checks a reservation by it before the request reaches a provider; see `billing-gateway.ts`.
+CORRELATION_HEADER = "x-openbot-correlation-id"
 # Every tool of the `ag_ui` server, in Claude Code's permission-rule syntax
 # (https://code.claude.com/docs/en/permissions: "`mcp__puppeteer__*` matches every tool from the
 # `puppeteer` server").
@@ -203,6 +206,43 @@ def run_model(forwarded_props):
         return None
     effort = choice.get("reasoningEffort")
     return model.strip(), effort if effort in SDK_EFFORTS else None
+
+
+# Claude Code's switch for headers appended to every request it sends
+# (code.claude.com/docs/en/env-vars: `ANTHROPIC_CUSTOM_HEADERS`, "Name: Value", one per line).
+CUSTOM_HEADERS_ENV = "ANTHROPIC_CUSTOM_HEADERS"
+
+
+def run_correlation(forwarded_props):
+    """The billing correlation ID the server gave this run, or `None` when it gave none.
+
+    The server sends `openbotCorrelationId` on a run whose model requests are billed per call, and
+    strips any a browser supplied, so the gateway's check is against this server's own ID and no
+    other's. A value of another shape is ignored: a request that cannot present the header is the
+    gateway's to refuse, and never this harness's to invent.
+    """
+    props = forwarded_props if isinstance(forwarded_props, dict) else {}
+    correlation = props.get("openbotCorrelationId")
+    if not isinstance(correlation, str) or not correlation.strip():
+        return None
+    return correlation.strip()
+
+
+def with_correlation_header(env, forwarded_props):
+    """`env` with the correlation header added, when this run carries an ID.
+
+    Headers Claude Code already carries are kept: ours is appended after them, so a deployment
+    that set its own `ANTHROPIC_CUSTOM_HEADERS` loses nothing.
+    """
+    correlation = run_correlation(forwarded_props)
+    if not correlation:
+        return env
+    header = f"{CORRELATION_HEADER}: {correlation}"
+    existing = (env or {}).get(CUSTOM_HEADERS_ENV, "").strip()
+    return {
+        **(env or {}),
+        CUSTOM_HEADERS_ENV: f"{existing}\n{header}" if existing else header,
+    }
 
 
 @dataclass
@@ -584,7 +624,10 @@ class OpenBotClaudeAgentAdapter(ClaudeAgentAdapter):
         if chosen:
             # After the upstream merge, so the server's choice wins over a forwarded `model`.
             options.model, options.effort = chosen
-        options.env = {**(options.env or {}), UNKNOWN_MODEL_WINDOW: "1"}
+        options.env = {
+            **with_correlation_header(options.env, input_data.forwarded_props if input_data else None),
+            UNKNOWN_MODEL_WINDOW: "1",
+        }
         options.max_buffer_size = MESSAGE_BUFFER_BYTES
         if not self._model_only and input_data:
             # The model endpoint gets its instructions in context. A full Bot gets its standing

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/maximhq/bifrost/transports/v2.5.1/transports/config.schema.json",
+  "version": 2,
+  "disable_onboarding": true,
+  "providers": {
+    "anthropic": {
+      "keys": [
+        {
+          "name": "openbot-controlled-fixture",
+          "value": "env.ANTHROPIC_API_KEY",
+          "models": ["claude-sonnet-4-5"],
+          "weight": 1,
+          "network_config": {
+            "base_url": "env.FIXTURE_BASE_URL"
+          }
+        }
+      ]
+    }
+  },
+  "plugins": [
+    {
+      "enabled": true,
+      "name": "openbot-billing-gate",
+      "path": "/app/plugins/openbot-billing-gate.so",
+      "config": {
+        "ledger_url": "env.OPENBOT_LEDGER_URL",
+        "ledger_token": "env.OPENBOT_LEDGER_TOKEN",
+        "refuse_status": 402,
+        "timeout_ms": 5000
+      }
+    }
+  ]
+}

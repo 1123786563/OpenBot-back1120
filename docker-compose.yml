@@ -571,6 +571,44 @@ services:
       # mount has to be the containing directory rather than the file mount point.
       - ./.langchain:/root/.langchain
 
+  # The gateway a billed run's model requests cross before any provider is asked for anything:
+  # maximhq/bifrost at one immutable release, carrying OpenBot's billing gate as a Go plugin
+  # (docker/bifrost/plugin). A request that presents no correlation ID the ledger holds a live
+  # reservation for is refused here, before the provider is contacted — the per-call check the
+  # harness cannot route around, whatever the SDK retries or resumes on its own.
+  #
+  # Off unless the `gateway` profile is on, so a deployment without a ledger runs exactly the
+  # stack above and nothing else. Turning it on is the three `.env` lines docker/bifrost/README.md
+  # records: the pinned image (never the floating tag — the digest is written there at execution),
+  # `ANTHROPIC_BASE_URL=http://bifrost:8080/anthropic` for the harness, and the ledger's address.
+  bifrost:
+    profiles: ["gateway"]
+    image: ${BIFROST_IMAGE:-maximhq/bifrost:v2.5.1}
+    pull_policy: missing
+    ports:
+      # Loopback only: this is this deployment's billing boundary, not a shared service.
+      - "127.0.0.1:${BIFROST_PORT:-8080}:8080"
+      - "[::1]:${BIFROST_PORT:-8080}:8080"
+    environment:
+      # The provider the gateway forwards to in the verification run: the controlled fixture, via
+      # the config below, and the one test credential, read from the environment as `env.…`
+      # references in the config rather than written into it.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      FIXTURE_BASE_URL: ${FIXTURE_BASE_URL:-}
+      # The OpenBot billing seam the gate confirms reservations on. Empty, the gate fails closed
+      # and every model request is refused — the ledger itself is ticket #66's delivery.
+      OPENBOT_LEDGER_URL: ${OPENBOT_LEDGER_URL:-}
+      OPENBOT_LEDGER_TOKEN: ${OPENBOT_LEDGER_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:${OPENBOT_HOST_GATEWAY:-host-gateway}"
+    volumes:
+      # The gateway's own configuration, read-only: the pinned release's config schema, with the
+      # fixture as the anthropic provider and the billing gate as the one plugin.
+      - ./docker/bifrost/config.json:/app/data/config.json:ro
+      # The billing gate, built per docker/bifrost/plugin/Makefile with the same Go toolchain as
+      # the release's image (a plugin built with any other toolchain is refused at load).
+      - ./docker/bifrost/plugin/build:/app/plugins:ro
+
   # The same Bot behavior on a framework, exposed as another AG-UI endpoint and registry row.
   agent-langgraph:
     build:

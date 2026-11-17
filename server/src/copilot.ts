@@ -61,6 +61,7 @@ import {
 import { attributeBotAnswers } from "./agents/bot-answers";
 import { frameworkOf } from "./agents/framework";
 import { takesModelChoice } from "./agents/harness-model";
+import { CORRELATION_PROP, correlationIdForRun } from "./billing-gateway";
 import {
   PlanModel,
   type PlanModelConfig,
@@ -2349,6 +2350,13 @@ function remoteAgentWithStandingRole(
     // The model is this deployment's decision, never the request's. Set below when it applies.
     delete (forwardedProps as Record<string, unknown>).openbotModel;
     /*
+     * Nor a correlation ID it carried in: one copied from another run would spend that run's
+     * reservation. This deployment's own is generated per run below, when per-call billing is on
+     * and the endpoint is the picked harness. See `billing-gateway.ts`.
+     */
+    delete (forwardedProps as Record<string, unknown>).openbotCorrelationId;
+    const correlationId = correlationIdForRun(agent.endpoint);
+    /*
      * The same guard a built-in Bot gets in `BuiltInAgentWithSaneHistory`, applied here because a
      * remote Bot never passes through it: this middleware is the last thing between the browser's
      * `input.messages` and the endpoint. A framework at the other end that converts with the same
@@ -2491,9 +2499,17 @@ function remoteAgentWithStandingRole(
                 ]
               : input.context,
           // Who the Bot is calling back as, so the audit row names it rather than "an agent".
-          forwardedProps: chosenModel
-            ? { ...forwardedProps, openbotModel: chosenModel }
-            : forwardedProps,
+          forwardedProps: {
+            ...forwardedProps,
+            ...(chosenModel ? { openbotModel: chosenModel } : {}),
+            /*
+             * The billing identity of this run's model requests, when this deployment checks a
+             * reservation per call: the harness makes it the `x-openbot-correlation-id` header of
+             * every request it sends, and the gateway refuses a request that presents none the
+             * ledger holds. Absent otherwise, so a deployment without a gateway is unchanged.
+             */
+            ...(correlationId ? { [CORRELATION_PROP]: correlationId } : {}),
+          },
         };
         if (answeredHere.length === 0) return next.run(prepared);
         return new HeadlessToolsMiddleware(
