@@ -24,7 +24,7 @@ function app(
   hono.route(
     "/",
     createRoutineRoutes(store as RoutineStore, requireUser, {
-      runner: { run: async (id) => void ran.push(id) },
+      runner: { run: async (id) => void ran.push(id), cancel: () => false },
       auditStore: { insert: async (entry) => void audits.push(entry) },
     }),
   );

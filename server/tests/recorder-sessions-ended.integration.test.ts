@@ -305,3 +305,77 @@ test("turning SSO-required on ends the Recorders of the people it signs out, bef
     )?.payload,
   ).toMatchObject({ reason: "signed_out", ending: "sso_required" });
 });
+
+test("an administrator ending somebody's sessions ends their Recorders first and leaves the person", async () => {
+  const chrome = await connect(leaving.id, "c".repeat(32));
+  await database.insert(sessions).values(signedInSession(leaving.id));
+  const response = await enterprise.request(
+    `/api/admin/enterprise/people/${leaving.id}/revoke-sessions`,
+    { method: "POST" },
+  );
+
+  expect(response.status).toBe(200);
+  expect(
+    await database
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.userId, leaving.id)),
+  ).toEqual([]);
+  const [ended] = await database
+    .select({ revokedAt: recorderConnections.revokedAt })
+    .from(recorderConnections)
+    .where(eq(recorderConnections.id, chrome.connection.id));
+  expect(ended?.revokedAt).not.toBeNull();
+  expect(
+    await database
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, leaving.id)),
+  ).toHaveLength(1);
+  expect(audits).toContainEqual(
+    expect.objectContaining({
+      eventType: "auth.sessions_revoked",
+      targetId: leaving.id,
+    }),
+  );
+});
+
+test("revoke-sessions keeps the sessions when a Recorder cannot be ended", async () => {
+  recorder = broken;
+  await connect(leaving.id, "d".repeat(32));
+  await database.insert(sessions).values(signedInSession(leaving.id));
+
+  const response = await enterprise.request(
+    `/api/admin/enterprise/people/${leaving.id}/revoke-sessions`,
+    { method: "POST" },
+  );
+
+  expect(response.status).toBe(503);
+  expect(
+    await database
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.userId, leaving.id)),
+  ).not.toEqual([]);
+});
+
+test("revoke-sessions is not a member's to call", async () => {
+  const asMember = new Hono<{ Variables: AppVariables }>();
+  asMember.route(
+    "/api/admin/enterprise",
+    createEnterpriseAdminRoutes(async (context, next) => {
+      context.set("actor", {
+        ...leaving,
+        name: "Member",
+        image: null,
+        role: "user",
+      });
+      await next();
+    }),
+  );
+  const response = await asMember.request(
+    `/api/admin/enterprise/people/${leaving.id}/revoke-sessions`,
+    { method: "POST" },
+  );
+  expect(response.status).toBe(403);
+});

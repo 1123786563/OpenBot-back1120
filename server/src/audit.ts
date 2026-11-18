@@ -549,6 +549,8 @@ export const auditEventTypes = [
   "session.signed_in",
   "session.refused",
   "person.admin_by_configuration",
+  /** First user initialization after role provisioning, before any session is issued. */
+  "t01.login_initialized",
   /*
    * A company's own identity provider, added or taken away.
    *
@@ -646,6 +648,8 @@ export const auditEventTypes = [
   "routines.dispatch_refused",
   /** A person pressed Run now on a routine: real work, outside its schedule. */
   "routines.run_requested",
+  /** An owner requested cancellation; the run ledger records actual completion. */
+  "routines.run_cancelled",
   /** An authenticated trigger (webhook, provider, email, Slack) queued a responsibility run. */
   "responsibility.triggered",
   /*

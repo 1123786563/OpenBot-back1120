@@ -60,6 +60,9 @@ function fakeStore(
     async listRuns() {
       throw new Error("not used by these tests");
     },
+    async findRun() {
+      return null;
+    },
     async reapAbandonedRuns() {
       throw new Error("not used by these tests");
     },
@@ -389,4 +392,39 @@ describe("DELETE /:id", () => {
     expect(response.status).toBe(401);
     expect(store.calls).toEqual([]);
   });
+});
+
+test("cancel refuses to claim a remote or lost run was stopped", async () => {
+  const store = fakeStore({
+    findRun: async () => ({ id: "run-1", status: null }),
+  });
+  let finished = false;
+  store.finishRun = async () => {
+    finished = true;
+  };
+  const routes = createRoutineRoutes(store, requireUser, {
+    runner: { run: async () => {}, cancel: () => false },
+  });
+  const response = await routes.request(
+    "http://openbot.test/routine-1/runs/run-1/cancel",
+    { method: "POST" },
+  );
+  expect(response.status).toBe(503);
+  expect(finished).toBe(false);
+  expect(store.calls).toContainEqual(["setEnabled", actor.id, "routine-1", false]);
+});
+
+
+test.each([
+  [null,404],
+  [{id:"run-1",status:"succeeded" as const},409],
+  [{id:"run-1",status:null},202],
+])("cancellation response reflects actual run eligibility %j",async (found,status)=>{
+ const store=fakeStore({findRun:async()=>found});
+ let aborted=false;
+ const routes=createRoutineRoutes(store,requireUser,{runner:{run:async()=>{},cancel:()=>{aborted=true;return true;}}});
+ const response=await routes.request("http://openbot.test/routine-1/runs/run-1/cancel",{method:"POST"});
+ expect(response.status).toBe(status);
+ expect(aborted).toBe(status===202);
+ expect(store.calls.some(x=>x[0]==="setEnabled")).toBe(status===202);
 });

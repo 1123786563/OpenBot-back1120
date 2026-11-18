@@ -1,0 +1,1604 @@
+{
+  "routineSideEffect": {
+    "passed": true,
+    "marker": "/workspace/computers/general-assistant/t01-cancel-1794938507684.log",
+    "routineEnabled": false,
+    "routineId": "routine_2418e900-ae3d-4704-99ce-a237ad2264b2",
+    "runId": "routine_run_46c3d92e-f9ba-4231-9f53-ab682c3f5640",
+    "containerObserved": {
+      "growthStartedAtLines": 5,
+      "lastGrowthMsAfterCancel": 0,
+      "finalLines": 5,
+      "finalLoopProcesses": 0,
+      "stoppedGrowingWithinMs": 3422,
+      "samples": [
+        {
+          "t": 1156,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 3422,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 5700,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 7963,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 10228,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 12485,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 14704,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 16928,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 19206,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 21450,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 23739,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 26011,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 28190,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 30385,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 32634,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 34884,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 37155,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 39460,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 41752,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 43935,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 46168,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 48442,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 50709,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 52943,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 55250,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 57505,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 59735,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 61992,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 64252,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 66508,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 68766,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 71020,
+          "lines": 5,
+          "procs": 0
+        },
+        {
+          "t": 73278,
+          "lines": 5,
+          "procs": 0
+        }
+      ]
+    },
+    "apiObserved": {
+      "runStatus": "cancelled",
+      "runError": "cancelled by an authorized request",
+      "totalRuns": 1
+    }
+  },
+  "oldControlReplay": {
+    "passed": true,
+    "container": "openbot-t01-computer-person-PBxoypVNafx6aE9VZxFufMS5qX2m3dvr",
+    "stopMs": 2146,
+    "replays": [
+      {
+        "stage": "after-stop",
+        "state": 3,
+        "threw": false
+      },
+      {
+        "stage": "after-restart",
+        "state": 3,
+        "threw": false
+      }
+    ],
+    "rejectedBefore": 401,
+    "rejectedAfter": 401,
+    "persistedContents": "before",
+    "samples": [
+      {
+        "t": 2317,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 4395,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 6500,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 8549,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 10625,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 12725,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 14794,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 16858,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 18978,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 21035,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 23100,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 25207,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 27283,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 29355,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 31489,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 33563,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 35664,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 37772,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 39842,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 41918,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 44048,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 46119,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 48201,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 50274,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 52374,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 54441,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 56511,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 58612,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 60705,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 62773,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 64855,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 110008,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 112082,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 114179,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 116255,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 118362,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 120459,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 122517,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 124559,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 126672,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 128710,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 130761,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 132833,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 134894,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 136969,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 139053,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 141115,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 143166,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 145226,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 147290,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 149359,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 151453,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 153510,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 155573,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 157639,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 159739,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 161808,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 163877,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 165993,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 168059,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 170134,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      },
+      {
+        "t": 172192,
+        "aRunning": false,
+        "aPid": 0,
+        "bRunning": true
+      }
+    ]
+  },
+  "routineAfterRestart": {
+    "passed": true,
+    "routineId": "routine_2418e900-ae3d-4704-99ce-a237ad2264b2",
+    "samples": [
+      {
+        "t": 88,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 2172,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 4269,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 6360,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 8468,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 10554,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 12627,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 14750,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 16830,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 18923,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 21092,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 23156,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 25229,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 27323,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 29403,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 31526,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 33607,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 35730,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 37786,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 39842,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 41915,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 43993,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 46062,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 48125,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 50238,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 52287,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 54344,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 56397,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 58457,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 60525,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      },
+      {
+        "t": 62619,
+        "lines": 5,
+        "process": "gone",
+        "enabled": false,
+        "runs": 1,
+        "status": "cancelled"
+      }
+    ]
+  },
+  "oidcFailuresBeforeAndAfterRestart": {
+    "passed": true,
+    "driver": "platform agentflow-browser browser_run_code_unsafe, verify/oidc-failures.js",
+    "results": [
+      {
+        "scenario": "malformed-client-idToken",
+        "status": 401,
+        "error": "INVALID_TOKEN",
+        "me": 401
+      },
+      {
+        "scenario": "unsigned-client-idToken",
+        "status": 401,
+        "error": "INVALID_TOKEN",
+        "me": 401
+      },
+      {
+        "scenario": "invalid-code-with-real-state",
+        "status": 302,
+        "error": "invalid_code",
+        "me": 401
+      }
+    ]
+  },
+  "freshLoginAfterRestart": {
+    "a": 200,
+    "b": 200,
+    "denied": 401,
+    "deniedPersistedUsers": 0,
+    "initializationAuditPerAllowedUser": 1
+  },
+  "checks": {
+    "bun": "1.4.3",
+    "focused": {
+      "pass": 63,
+      "fail": 0,
+      "files": 7,
+      "assertions": 277
+    },
+    "audit": {
+      "pass": 4,
+      "fail": 0,
+      "assertions": 664
+    },
+    "serverTypecheckExit": 0,
+    "fullSuite": {
+      "pass": 7990,
+      "skip": 21,
+      "fail": 16,
+      "errors": 2
+    },
+    "baselineFullSuite": {
+      "pass": 7976,
+      "skip": 21,
+      "fail": 16,
+      "errors": 2
+    },
+    "commonFailures": 15,
+    "independentArcadeFocusEach": {
+      "pass": 25,
+      "fail": 0
+    }
+  },
+  "finalSessions": {
+    "passed": true,
+    "results": [
+      {
+        "stateFile": "browser-a.json",
+        "status": 401
+      },
+      {
+        "stateFile": "control-replay-old-state.json",
+        "status": 401
+      },
+      {
+        "stateFile": "browser-a-current.json",
+        "status": 200
+      },
+      {
+        "stateFile": "browser-b.json",
+        "status": 200
+      },
+      {
+        "stateFile": "browser-b-fresh.json",
+        "status": 200
+      }
+    ]
+  },
+  "secretScan": {
+    "passed": true,
+    "privateValuesChecked": 14,
+    "artifactFilesChecked": 829,
+    "filesWithSecrets": []
+  },
+  "reviewP2Repair": {
+    "scope": "Dynamic observer identity and restart target; no production code changes in this repair",
+    "realObserverLogin": {
+      "email": "b-replay@t01.test",
+      "status": 200,
+      "distinctFromHistoricalB": true
+    },
+    "wrongExpectedIdentityExitNonzero": true,
+    "historicalBContainerRetained": true,
+    "controlReplay": {
+      "passed": true,
+      "container": "openbot-t01-computer-person-PBxoypVNafx6aE9VZxFufMS5qX2m3dvr",
+      "observer": {
+        "userId": "4rTRfZwUh3f4GvCXVFYDrFcx3l2u8LCy",
+        "email": "b-replay@t01.test",
+        "container": "openbot-t01-computer-person-4rTRfZwUh3f4GvCXVFYDrFcx3l2u8LCy",
+        "dockerId": "bc2164f36a331ab150f55fefcdc9b186eb5663e15d5aeeb33265e68ceec5827b"
+      },
+      "stopMs": 2226,
+      "replays": [
+        {
+          "stage": "after-stop",
+          "state": 3,
+          "threw": false
+        },
+        {
+          "stage": "after-restart",
+          "state": 3,
+          "threw": false
+        }
+      ],
+      "rejectedBefore": 401,
+      "rejectedAfter": 401,
+      "persistedContents": "before",
+      "samples": [
+        {
+          "t": 2430,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 4486,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 6530,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 8600,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 10645,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 12721,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 14811,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 16869,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 18928,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 21008,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 23066,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 25120,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 27202,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 29249,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 31304,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 33380,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 35433,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 37495,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 39579,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 41624,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 43666,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 45750,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 47803,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 49849,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 51930,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 53973,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 56018,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 58120,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 60162,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 62213,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 64250,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 80324,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 82378,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 84427,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 86481,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 88521,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 90564,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 92610,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 94655,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 96703,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 98781,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 100839,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 102893,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 104933,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 106985,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 109052,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 111092,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 113138,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 115187,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 117261,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 119311,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 121362,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 123425,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 125491,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 127598,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 129666,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 131752,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 133853,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 135917,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 137968,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 140044,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        },
+        {
+          "t": 142085,
+          "aRunning": false,
+          "aPid": 0,
+          "bRunning": true
+        }
+      ]
+    },
+    "routineAfterRestart": {
+      "passed": true,
+      "routineId": "routine_2418e900-ae3d-4704-99ce-a237ad2264b2",
+      "samples": [
+        {
+          "t": 122,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 2163,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 4215,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 6270,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 8346,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 10418,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 12501,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 14583,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 16651,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 18824,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 20902,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 22991,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 25045,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 27113,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 29160,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 31213,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 33280,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 35369,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 37452,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 39520,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 41629,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 43710,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 45771,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 47843,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 49912,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 51993,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 54033,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 56092,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 58151,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 60246,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        },
+        {
+          "t": 62309,
+          "lines": 5,
+          "process": "gone",
+          "enabled": false,
+          "runs": 1,
+          "status": "cancelled"
+        }
+      ]
+    },
+    "oidcFailuresAfterRestartPassed": true,
+    "freshALoginAfterRestart": 200,
+    "loginAndRevokedApiChecksPassed": true,
+    "fullSuiteRerun": false,
+    "secretScan": {
+      "passed": true,
+      "privateValuesChecked": 15,
+      "artifactFilesChecked": 830,
+      "filesWithSecrets": []
+    }
+  }
+}

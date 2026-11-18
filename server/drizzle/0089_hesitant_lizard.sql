@@ -1,0 +1,1 @@
+ALTER TYPE "public"."routine_run_status" ADD VALUE 'cancelled';

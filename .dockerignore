@@ -13,3 +13,8 @@ app/dist
 *.log
 .DS_Store
 assets/*.svg
+
+# T01 runtime config contains server-only keys; never send it to the build daemon.
+deploy/t01/.runtime
+deploy/t01/.env.t01
+deploy/t01/.env.worker.t01

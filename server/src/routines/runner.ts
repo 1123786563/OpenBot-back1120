@@ -29,7 +29,10 @@ import type { AgentActor } from "../agents/profile-types";
 import type { ChannelStore } from "../channels/routes";
 import type { RoutineStore } from "./store";
 
-export type RoutineRunner = { run(routineRunId: string): Promise<void> };
+export type RoutineRunner = {
+  run(routineRunId: string): Promise<void>;
+  cancel(routineRunId: string): boolean;
+};
 
 /**
  * How much of a failure's reason the channel notification carries.
@@ -65,7 +68,16 @@ export function createRoutineRunner(options: {
 }): RoutineRunner {
   const { routineStore, channelStore, runTurn } = options;
 
-  async function runOnce(routineRunId: string): Promise<void> {
+  // shortcut: cancellation is local to one API process; use durable signalling before running replicas.
+  const inFlight = new Map<
+    string,
+    { controller: AbortController; done: Promise<void> }
+  >();
+
+  async function runOnce(
+    routineRunId: string,
+    controller: AbortController,
+  ): Promise<void> {
     const context = await routineStore.runContext(routineRunId);
     /*
      * A deleted routine's queued run is nobody's problem. The routine is gone, its runs cascaded
@@ -168,8 +180,17 @@ export function createRoutineRunner(options: {
           agentId,
           threadId,
           instruction,
+          signal: controller.signal,
         }));
       } catch (error) {
+        if (controller.signal.aborted) {
+          await routineStore.finishRun(
+            routineRunId,
+            "cancelled",
+            "cancelled by an authorized request",
+          );
+          return;
+        }
         if (error instanceof HeadlessToolSuspension) {
           await routineStore.finishRun(
             routineRunId,
@@ -218,6 +239,15 @@ export function createRoutineRunner(options: {
         return;
       }
 
+      if (controller.signal.aborted) {
+        await routineStore.finishRun(
+          routineRunId,
+          "cancelled",
+          "cancelled by an authorized request",
+        );
+        return;
+      }
+
       /*
        * The reply, then the outcome. `say` cannot throw, and `finishRun` is finish-once, so neither
        * order can lose the run row — this one is the browser's order: what was said lands in the
@@ -230,24 +260,31 @@ export function createRoutineRunner(options: {
 
   return {
     async run(routineRunId) {
-      /*
-       * `run` never throws. Every outcome a routine can have — a gone channel, a refused model, a
-       * routine deleted underneath the firing — is recorded on the run row above rather than raised
-       * at whoever is draining the queue. This backstop is for the ones that are not outcomes at
-       * all, a store that cannot be reached being the honest example: said out loud, because the
-       * alternative is a firing that vanishes without a line anywhere.
-       */
-      try {
-        await runOnce(routineRunId);
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            type: "routine-run-crashed",
-            routineRunId,
-            reason: reasonOf(error),
-          }),
-        );
-      }
+      const existing = inFlight.get(routineRunId);
+      if (existing) return existing.done;
+      const controller = new AbortController();
+      const done = Promise.resolve()
+        .then(() => runOnce(routineRunId, controller))
+        .catch((error) => {
+          console.error(
+            JSON.stringify({
+              type: "routine-run-crashed",
+              routineRunId,
+              reason: reasonOf(error),
+            }),
+          );
+        })
+        .finally(() => {
+          inFlight.delete(routineRunId);
+        });
+      inFlight.set(routineRunId, { controller, done });
+      return done;
+    },
+    cancel(routineRunId) {
+      const run = inFlight.get(routineRunId);
+      if (!run) return false;
+      run.controller.abort();
+      return true;
     },
   };
 }

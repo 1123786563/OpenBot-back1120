@@ -5,6 +5,8 @@
  * on the audit trail with who made it. `GET /me` is the one read any signed-in person may make: the
  * capabilities that apply to them, so the app can hide what they may not use.
  */
+
+import { eq } from "drizzle-orm";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { recordAuditEvent } from "../audit";
@@ -19,7 +21,7 @@ import {
   DEFAULT_EGRESS_DESTINATIONS,
   parseEgressRules,
 } from "../computer/policy-network";
-import { mcpServers } from "../db/schema";
+import { mcpServers, sessions, users } from "../db/schema";
 import { parsePageLimit } from "../paging";
 import { otelConfigured } from "../telemetry/otel";
 import {
@@ -472,6 +474,50 @@ export function createEnterpriseAdminRoutes(
       },
     );
     return context.json(result);
+  });
+
+  // Keep the person, and end their Recorders before deleting sessions, as on SSO enforcement.
+  routes.post("/people/:userId/revoke-sessions", async (context) => {
+    const controls = enterpriseControls();
+    if (!controls) return unavailable(context);
+    const userId = context.req.param("userId");
+    const [user] = await controls.deps.database
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) return context.json({ error: "No such person." }, 404);
+
+    const recorders = controls.deps.recorders;
+    if (recorders && (await recorders.holders()).includes(userId)) {
+      try {
+        await recorders.signOut(userId, "admin_revoke_sessions");
+      } catch {
+        return context.json(
+          {
+            error:
+              "Their sessions were left as they were because a Recorder of theirs could not be ended. Try again.",
+          },
+          503,
+        );
+      }
+    }
+    const ended = await controls.deps.database
+      .delete(sessions)
+      .where(eq(sessions.userId, userId))
+      .returning({ id: sessions.id });
+    await recordAuditEvent(controls.deps.auditStore, {
+      eventType: "auth.sessions_revoked",
+      targetType: "person",
+      targetId: userId,
+      actorUserId: context.var.actor.id,
+      payload: {
+        reason: "admin_revoke_sessions",
+        ended: ended.length,
+        by: context.var.actor.email,
+      },
+    });
+    return context.json({ ended: ended.length });
   });
 
   routes.post("/computers/terminate-inactive", async (context) => {
