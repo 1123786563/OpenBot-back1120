@@ -1007,8 +1007,15 @@ services:
         # value. (This stack's Intelligence gateway is a REST-level mock; the runner protocol over
         # its WebSocket is not emulated, so a server-driven turn reliably ends at its deadline —
         # which is what puts a real run, mid-flight, inside a real database outage.)
+        # Its own channel: a headless turn runs one at a time per thread, and the first routine's
+        # turn is still inside its deadline when this run starts — sharing the thread would end
+        # this run with "thread busy" instead of the crash the window exists to produce.
+        code, crash_channel = http(app_url, "/api/channels", {"agentIds": [agent_id]})
+        require(code == 201 and crash_channel.get("channel", {}).get("id"),
+                "created the crash-window conversation")
         code, crash_routine = http(app_url, "/api/routines",
-                                   {"agentId": agent_id, "channelId": channel_id, "cron": cron,
+                                   {"agentId": agent_id, "channelId": crash_channel["channel"]["id"],
+                                    "cron": cron,
                                     "title": "verification crash window",
                                     "instruction": f"Summarise nothing. {markers['prompt']} {crash_trigger}"})
         require(code == 201 and crash_routine.get("routine", {}).get("id"),
