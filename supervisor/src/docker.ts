@@ -294,6 +294,8 @@ async function inspectOwned(names: ComputerNames): Promise<{
   token?: string;
   shortId?: string;
   packageCapabilities: boolean;
+  /** The log driver this container was born with, when the daemon reports one. See `logIsCurrent`. */
+  logConfig?: LogConfig;
   /** The id of each network it is attached to, by name. See `onLiveNetwork`. */
   networks: Record<string, string>;
 } | null> {
@@ -313,6 +315,9 @@ async function inspectOwned(names: ComputerNames): Promise<{
       // for the rest of its life. See `holdsCurrentToken`.
       token: tokenIn(info.Config?.Env),
       packageCapabilities: hasPackageCapabilities(info.HostConfig),
+      ...(info.HostConfig?.LogConfig?.Type
+        ? { logConfig: info.HostConfig.LogConfig }
+        : {}),
       networks: Object.fromEntries(
         Object.entries(info.NetworkSettings?.Networks ?? {}).map(
           ([name, endpoint]) => [name, endpoint?.NetworkID ?? ""],
@@ -441,6 +446,39 @@ function holdsCurrentToken(
   const wanted = tokenIn(environment);
   if (wanted === undefined) return true;
   return existingToken === wanted;
+}
+
+/**
+ * Whether the computer that exists forwards its logs the way this deployment now asks.
+ *
+ * A log driver is fixed when the container is created, exactly like its image and its package
+ * capabilities. `LogConfig` above made newly created computers forward to the collector, but a
+ * computer that already existed kept the driver it was born with: after a deployment turned log
+ * forwarding on, every computer that had been ensured once went on writing nothing to the
+ * collector, invisibly, for as long as nobody recreated it. Its new logs were simply never shipped,
+ * which is the one failure this ticket cannot ship — the console would show a working computer
+ * while the platform administrator's only view of it stayed empty.
+ *
+ * So the effective configuration is compared, whole: the driver type and every option, address
+ * included. Turning forwarding on replaces the computer; so does moving the collector's address.
+ * Leaving it off keeps whatever the container has, because a deployment that never asked for
+ * forwarding must not start recreating its computers over a driver it never set — the desktop and
+ * the CLI pass no address, and their computers were never meant to ship logs anywhere.
+ *
+ * Like the image and token checks, this is checked at ensure time rather than by a sweeper, so the
+ * swap happens when the computer is next asked for, in a maintenance window that an operator picks
+ * by when they restart the supervisor and touch each Bot.
+ */
+function logIsCurrent(
+  existing: LogConfig | undefined,
+  wanted: LogConfig | undefined,
+): boolean {
+  if (!wanted) return true;
+  if (!existing) return false;
+  return (
+    existing.Type === wanted.Type &&
+    JSON.stringify(existing.Config ?? {}) === JSON.stringify(wanted.Config)
+  );
 }
 
 /** Long enough for a cold start with a large image, short enough that a caller is not left hanging. */
@@ -638,8 +676,9 @@ export async function ensure(
 
     /*
      * An upgrade reaches a computer that already exists, by replacing it. This includes the
-     * package permissions: changing HostConfig in the supervisor does not update a container
-     * created with CapDrop ALL and no additions, even when its image has not changed.
+     * package permissions and the log driver (see `logIsCurrent`): changing HostConfig in the
+     * supervisor does not update a container created with CapDrop ALL and no additions, even when
+     * its image has not changed.
      *
      * Safe to do: the profile and the workspace are named volumes and are not removed here, so the
      * Bot keeps its logins and its files and comes back on the new image. That is the difference
@@ -658,6 +697,7 @@ export async function ensure(
       (!(await runsCurrentImage(existing.image, options.image)) ||
         !holdsCurrentToken(existing.token, options.environment) ||
         !existing.packageCapabilities ||
+        !logIsCurrent(existing.logConfig, options.logConfig) ||
         (existing.status !== "running" &&
           !(await onLiveNetwork(existing.networks, options.network))))
     ) {
