@@ -1096,10 +1096,11 @@ services:
                            "source_record": "server stderr line routine-run-crashed, read from the "
                                             "server container after the crash window",
                            "source_log_evidence": "crash-window-source-log.txt",
-                           "stored_under": ["routine-run-crashed", "routine-activity-unrecorded"],
+                           "stored_under": ["routine-run-crashed"],
                            "match": True,
                            "note": "run id compared value-by-value: run-now API response -> server "
-                                   "stderr source record -> openbot_runtime record"},
+                                   "stderr source record -> openbot_runtime record; the turn ends at "
+                                   "its deadline, so the crash event is the runtime record"},
                        "request_id_inventory": {
                            "emitting_sources": [],
                            "basis": "no first-phase service writes a requestId field to stdout or "
