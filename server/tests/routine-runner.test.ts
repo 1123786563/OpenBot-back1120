@@ -480,7 +480,12 @@ test("duplicate dispatch does not replace a live run's cancellation handle", asy
   const duplicate = runner.run(RUN_ID);
   await Bun.sleep(5);
   runner.cancel(RUN_ID);
-  await Promise.race([Promise.all([first, duplicate]), Bun.sleep(1000).then(() => {throw new Error("Both dispatches must settle");})]);
+  await Promise.race([
+    Promise.all([first, duplicate]),
+    Bun.sleep(1000).then(() => {
+      throw new Error("Both dispatches must settle");
+    }),
+  ]);
   expect(runner.cancel(RUN_ID)).toBe(false);
   expect(recorded.turns).toHaveLength(1);
   expect(recorded.finished.map((x) => x.status)).toEqual(["cancelled"]);
