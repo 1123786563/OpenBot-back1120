@@ -1,6 +1,6 @@
-import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
+import { ui } from "@/lib/i18n";
 
 /**
  * Where this person is in first-run onboarding.

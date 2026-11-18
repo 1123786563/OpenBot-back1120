@@ -112,6 +112,7 @@ import { identityRoutes } from "./identity/routes";
 import type { IdentityStore } from "./identity/store";
 import { createIntelligenceClient } from "./intelligence-client";
 import { createCapturePassOrigin } from "./intelligence-gateway-proxy";
+import { interfaceErrors } from "./interface-errors";
 import {
   type LearningModelEndpoint,
   mountLearningModelEndpoint,
@@ -194,7 +195,6 @@ import {
   type UserInstructionsStore,
 } from "./user-instructions";
 import type { UserPreferencesStore } from "./user-preferences";
-import { interfaceErrors } from "./interface-errors";
 import { userPreferencesRoutes } from "./user-preferences-routes";
 import { createVoiceProvider } from "./voice/provider";
 import { createVoiceRoutes } from "./voice/routes";
