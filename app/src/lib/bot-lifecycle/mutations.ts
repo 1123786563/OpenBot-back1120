@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "@/lib/channels/queries";
 import { client } from "@/lib/client";
@@ -54,7 +55,7 @@ export function resetBotMutationOptions(queryClient: QueryClient) {
       client(`${botPath(agentId)}/reset`, "deleted", {
         method: "POST",
         body: { confirm: true },
-        fallback: "Could not reset this Bot",
+        fallback: ui("Could not reset this Bot"),
       }),
     onSuccess: async () => {
       await invalidateLifecycle(queryClient);
@@ -70,7 +71,7 @@ export function stopHandoffMutationOptions(queryClient: QueryClient) {
       await client(`${botPath(variables.agentId)}/activity/handoffs/stop`, {
         method: "POST",
         body: { id: variables.id },
-        fallback: "Could not stop the delegated task",
+        fallback: ui("Could not stop the delegated task"),
       });
     },
     onSuccess: () => invalidateLifecycle(queryClient),
@@ -83,7 +84,7 @@ export function cancelFollowUpMutationOptions(queryClient: QueryClient) {
       await client(`${botPath(variables.agentId)}/follow-ups/cancel`, {
         method: "POST",
         body: { id: variables.id },
-        fallback: "Could not cancel the follow-up",
+        fallback: ui("Could not cancel the follow-up"),
       });
     },
     onSuccess: () => invalidateLifecycle(queryClient),
@@ -99,7 +100,7 @@ export function setUpdateRoutingMutationOptions(queryClient: QueryClient) {
       await client(`/api/bots/routing/${variables.kind}`, {
         method: "PUT",
         body: { transports: variables.transports },
-        fallback: "Could not save where updates go",
+        fallback: ui("Could not save where updates go"),
       });
     },
     onSuccess: () => invalidateLifecycle(queryClient),

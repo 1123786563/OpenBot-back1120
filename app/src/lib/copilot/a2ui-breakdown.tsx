@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { Slider } from "@base-ui/react/slider";
 import { useId, useState } from "react";
 import { z } from "zod";
@@ -75,7 +76,7 @@ function amountFormat(currency?: string, unit?: string) {
   const code = currency?.trim();
   if (code) {
     try {
-      const sample = new Intl.NumberFormat(undefined, {
+      const sample = new Intl.NumberFormat(getLocale(), {
         style: "currency",
         currency: code,
         currencyDisplay: "narrowSymbol",
@@ -87,7 +88,7 @@ function amountFormat(currency?: string, unit?: string) {
         parts.findIndex((p) => p.type === "integer");
       return {
         format: (value: number) =>
-          new Intl.NumberFormat(undefined, {
+          new Intl.NumberFormat(getLocale(), {
             style: "currency",
             currency: code,
             currencyDisplay: "narrowSymbol",
@@ -98,7 +99,7 @@ function amountFormat(currency?: string, unit?: string) {
         after,
       };
     } catch {
-      const plain = new Intl.NumberFormat(undefined, {
+      const plain = new Intl.NumberFormat(getLocale(), {
         maximumFractionDigits: 2,
       });
       return {
@@ -108,7 +109,9 @@ function amountFormat(currency?: string, unit?: string) {
       };
     }
   }
-  const plain = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+  const plain = new Intl.NumberFormat(getLocale(), {
+    maximumFractionDigits: 2,
+  });
   const suffix = unit?.trim();
   return {
     format: (value: number) =>
@@ -124,6 +127,7 @@ function amountFormat(currency?: string, unit?: string) {
  * while somebody drags another one.
  */
 function useScale(largest: number, max: number | undefined) {
+  useLocale();
   const [ceiling, setCeiling] = useState(0);
   if (largest > ceiling) setCeiling(niceCeil(largest * 2));
   const top = max !== undefined && max > 0 ? max : ceiling || 1;
@@ -174,6 +178,7 @@ export function A2UIBreakdown({
   totalLabel,
   max,
 }: Props) {
+  useLocale();
   const items = Array.isArray(given) ? given : [];
   const amounts = items.map(amountOf);
   const total = amounts.reduce((sum, amount) => sum + amount, 0);
@@ -199,7 +204,7 @@ export function A2UIBreakdown({
       <div className="flex flex-col gap-2.5">
         <div>
           <p className="text-xs font-medium text-muted-foreground">
-            {totalLabel?.trim() || "Total"}
+            {totalLabel?.trim() || ui("Total")}
           </p>
           <p
             aria-live="polite"

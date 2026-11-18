@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 export type LinkedNotice = { tone: "success" | "error"; text: string };
 
 /**
@@ -6,18 +7,20 @@ export type LinkedNotice = { tone: "success" | "error"; text: string };
  */
 export function linkedNotice(value: string | undefined): LinkedNotice | null {
   if (value === "github") {
-    return { tone: "success", text: "Your GitHub account is linked." };
+    return { tone: "success", text: ui("Your GitHub account is linked.") };
   }
   if (value === "failed") {
     return {
       tone: "error",
-      text: "Couldn't link your GitHub account. Try again.",
+      text: ui("Couldn't link your GitHub account. Try again."),
     };
   }
   if (value === "github-taken") {
     return {
       tone: "error",
-      text: "That GitHub account is linked to someone else in OpenBot. Sign in to GitHub with another account and try again, or ask an admin.",
+      text: ui(
+        "That GitHub account is linked to someone else in OpenBot. Sign in to GitHub with another account and try again, or ask an admin.",
+      ),
     };
   }
   return null;

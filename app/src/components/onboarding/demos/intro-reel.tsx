@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { DEMO_BEAT_MS } from "../demo-stage";
@@ -12,8 +13,11 @@ type Scene = { id: string; caption: string; draw: () => ReactNode };
 
 const ASK: Scene = {
   id: "welcome",
-  caption:
-    "Ask in plain words. A Bot does the work and tells you when it's done.",
+  get caption() {
+    return ui(
+      "Ask in plain words. A Bot does the work and tells you when it's done.",
+    );
+  },
   draw: () => <WelcomeDemo />,
 };
 /*
@@ -23,12 +27,16 @@ const ASK: Scene = {
  */
 const COMPUTER: Scene = {
   id: "computer",
-  caption: "Bots use a browser and files of their own, apart from yours.",
+  get caption() {
+    return ui("Bots use a browser and files of their own, apart from yours.");
+  },
   draw: () => <ComputerDemo />,
 };
 const TEAM: Scene = {
   id: "team",
-  caption: "Pick a Bot for the job, or make your own.",
+  get caption() {
+    return ui("Pick a Bot for the job, or make your own.");
+  },
   draw: () => <TeamDemo />,
 };
 
@@ -44,6 +52,8 @@ const TEAM: Scene = {
  * while the tab is hidden.
  */
 export function IntroReel({ computer = true }: { computer?: boolean }) {
+  useLocale();
+
   const scenes = computer ? [ASK, COMPUTER, TEAM] : [ASK, TEAM];
   const reduced = useReducedMotion() === true;
   const [at, setAt] = useState(0);

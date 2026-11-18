@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { ConnectPrompt } from "@openbot/shared/connect-prompt";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -48,6 +49,7 @@ export function AppAccessCard({
   prompt: ConnectPrompt;
   place?: CardPlace;
 }) {
+  useLocale();
   const declared = useDeclaredBotId();
   const agentId = prompt.agentId ?? declared;
   /*
@@ -67,6 +69,7 @@ function LiveAppAccessCard({
   place: CardPlace | undefined;
   prompt: ConnectPrompt;
 }) {
+  useLocale();
   const live = useQuery({
     ...botAppQueryOptions(agentId, prompt.serverId),
     /*
@@ -119,14 +122,20 @@ function LiveAppAccessCard({
               {access.state !== "ready"
                 ? refusedSentence(access, prompt, bot, edition)
                 : carried || offer
-                  ? `${name} is ready now.`
+                  ? ui("{{value0}} is ready now.", { value0: String(name) })
                   : prompt.reason !== "access"
-                    ? `${name} is ready now. Ask again and the Bot can use it.`
+                    ? ui(
+                        "{{value0}} is ready now. Ask again and the Bot can use it.",
+                        { value0: String(name) },
+                      )
                     : refusedSentence(access, prompt, bot, edition)}
             </p>
           ) : (
             <p className="text-muted-foreground text-sm" role="alert">
-              {name}'s status couldn't be loaded. Try again in a moment.
+              {uiNodes(
+                "{{slot0}}'s status couldn't be loaded. Try again in a moment.",
+                [name],
+              )}
             </p>
           )}
         </div>
@@ -138,7 +147,7 @@ function LiveAppAccessCard({
       ) : offer ? (
         <div className="flex justify-end">
           <Button onClick={offer} size="sm">
-            Continue
+            {ui("Continue")}
           </Button>
         </div>
       ) : null}
@@ -195,6 +204,9 @@ function refusedSentence(
     prompt.reason === "shared" &&
     !access.requestKind
   )
-    return `Your organisation's ${access.displayName} account needs reconnecting. Only an admin can reconnect it.`;
+    return ui(
+      "Your organisation's {{value0}} account needs reconnecting. Only an admin can reconnect it.",
+      { value0: String(access.displayName) },
+    );
   return appAccessSentence(access, bot, edition);
 }

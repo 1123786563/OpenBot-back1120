@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { DesktopAiConnection } from "./queries";
 
 /** One line of the AI model dialog: what it is, and this installation's answer. */
@@ -29,51 +30,53 @@ function signedIn(
     case "claude-plan":
       return {
         provider: "Anthropic",
-        signIn: "Claude plan",
-        said: "Signed in with your Claude plan.",
+        signIn: ui("Claude plan"),
+        said: ui("Signed in with your Claude plan."),
       };
     case "chat-gpt-plan":
       return {
         provider: "OpenAI",
-        signIn: "ChatGPT plan",
-        said: "Signed in with your ChatGPT plan.",
+        signIn: ui("ChatGPT plan"),
+        said: ui("Signed in with your ChatGPT plan."),
       };
     case "anthropic-api-key":
       return {
         provider: "Anthropic",
-        signIn: "API key",
-        said: "Uses your Anthropic API key.",
+        signIn: ui("API key"),
+        said: ui("Uses your Anthropic API key."),
       };
     case "open-ai-api-key":
       return {
         provider: "OpenAI",
-        signIn: "API key",
-        said: "Uses your OpenAI API key.",
+        signIn: ui("API key"),
+        said: ui("Uses your OpenAI API key."),
       };
     case "google-oauth":
       return {
-        provider: "Google Gemini",
-        signIn: "Google account",
-        said: "Signed in with your Google account.",
+        provider: ui("Google Gemini"),
+        signIn: ui("Google account"),
+        said: ui("Signed in with your Google account."),
       };
     case "xai-oauth":
       return {
         provider: "xAI",
-        signIn: "xAI account",
-        said: "Signed in with your xAI account.",
+        signIn: ui("xAI account"),
+        said: ui("Signed in with your xAI account."),
       };
     case "compatible-endpoint": {
       const preset = host ? PRESET_HOSTS[host] : undefined;
       if (preset)
         return {
           provider: preset,
-          signIn: "API key",
-          said: `Uses your ${preset} API key.`,
+          signIn: ui("API key"),
+          said: ui("Uses your {{provider}} API key.", { provider: preset }),
         };
       return {
         provider: "OpenAI-compatible",
-        signIn: host ?? "Your own address",
-        said: host ? `Connected to ${host}.` : "Connected to your own address.",
+        signIn: host ?? ui("Your own address"),
+        said: host
+          ? ui("Connected to {{host}}.", { host })
+          : ui("Connected to your own address."),
       };
     }
   }
@@ -89,20 +92,26 @@ export function describeAiConnection(
     connection.endpointHost,
   );
   const details: AiConnectionDetail[] = [
-    { label: "Provider", value: provider },
+    { label: ui("Provider"), value: provider },
     {
       label:
-        connection.kind === "compatible-endpoint" && signIn !== "API key"
-          ? "Address"
-          : "Sign-in",
+        connection.kind === "compatible-endpoint" &&
+        !PRESET_HOSTS[connection.endpointHost ?? ""]
+          ? ui("Address")
+          : ui("Sign-in"),
       value: signIn,
     },
   ];
   if (connection.model)
-    details.push({ label: "Model", value: connection.model });
+    details.push({ label: ui("Model"), value: connection.model });
   return {
     provider,
-    summary: connection.model ? `${said} Model: ${connection.model}` : said,
+    summary: connection.model
+      ? ui("{{value0}} Model: {{value1}}", {
+          value0: String(said),
+          value1: String(connection.model),
+        })
+      : said,
     details,
   };
 }

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -52,6 +53,11 @@ export type ActivityKind =
   | "follow_up";
 
 export type ActivityItem = {
+  titleAction?: import("@openbot/shared/tool-name").ApprovalDisplay;
+  titleDisplay?: import("@openbot/shared/system-display").SystemDisplay;
+  detailDisplay?: import("@openbot/shared/system-display").SystemDisplay;
+  detailZhCN?: string;
+  detailStarts?: import("@openbot/shared/system-display").ActivityStarts;
   id: string;
   kind: ActivityKind;
   title: string;
@@ -119,7 +125,7 @@ const attentionQuery = {
   queryFn: async (): Promise<AttentionBody> =>
     (
       await client("/api/bots/attention", {
-        fallback: "Could not load what your Bots need",
+        fallback: ui("Could not load what your Bots need"),
       })
     ).json(),
   // Questions, approvals and pings arrive from headless work nobody is watching, so this polls.
@@ -154,7 +160,7 @@ export function botLifecycleQueryOptions(agentId: string) {
     queryKey: botLifecycleKeys.lifecycle(agentId),
     queryFn: (): Promise<BotLifecycle> =>
       client(`${botPath(agentId)}/lifecycle`, "lifecycle", {
-        fallback: "Could not load this Bot's state",
+        fallback: ui("Could not load this Bot's state"),
       }),
   });
 }
@@ -164,7 +170,7 @@ export function botActivityQueryOptions(agentId: string) {
     queryKey: botLifecycleKeys.activity(agentId),
     queryFn: (): Promise<BotActivity> =>
       client(`${botPath(agentId)}/activity`, "activity", {
-        fallback: "Could not load this Bot's activity",
+        fallback: ui("Could not load this Bot's activity"),
       }),
     refetchInterval: 10_000,
   });
@@ -175,7 +181,7 @@ export function botResetPlanQueryOptions(agentId: string) {
     queryKey: botLifecycleKeys.resetPlan(agentId),
     queryFn: (): Promise<ResetPlan> =>
       client(`${botPath(agentId)}/reset`, "plan", {
-        fallback: "Could not count what a reset would delete",
+        fallback: ui("Could not count what a reset would delete"),
       }),
     // A notice about what will be deleted must be current, not cached.
     staleTime: 0,
@@ -187,7 +193,7 @@ export function updateRoutingQueryOptions() {
     queryKey: botLifecycleKeys.routing,
     queryFn: (): Promise<UpdateRouting> =>
       client("/api/bots/routing", "routing", {
-        fallback: "Could not load where your updates go",
+        fallback: ui("Could not load where your updates go"),
       }),
   });
 }

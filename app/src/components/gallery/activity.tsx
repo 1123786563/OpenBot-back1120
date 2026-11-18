@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import { auditEventWords } from "@openbot/shared/audit-words";
 import { useContext, useEffect, useState } from "react";
 import { z } from "zod";
@@ -72,6 +73,7 @@ export function ActivityReportCard({
   title,
   days,
 }: Partial<ActivityArgs>) {
+  useLocale();
   const botId = useActiveBotId();
   const conversation = useConversation();
   const [state, setState] = useState<State>({ status: "reading" });
@@ -116,26 +118,32 @@ export function ActivityReportCard({
    * are final there is nothing to read, and "Choosing" or "Reading" would stay on screen for good.
    */
   if (!functionName) {
-    if (!streaming) return <FailedCard reason={UNREADABLE} title={TITLE} />;
+    if (!streaming)
+      return <FailedCard reason={ui(UNREADABLE)} title={ui(TITLE)} />;
     return (
-      <GalleryFrame title="Report">
-        <p className="text-sm text-muted-foreground">Choosing a report…</p>
+      <GalleryFrame title={ui("Report")}>
+        <p className="text-sm text-muted-foreground">
+          {ui("Choosing a report…")}
+        </p>
       </GalleryFrame>
     );
   }
 
   if (state.status === "reading") {
     return (
-      <GalleryFrame caption="Reading from OpenBot" title={title ?? "Report"}>
-        <p className="text-sm text-muted-foreground">Reading…</p>
+      <GalleryFrame
+        caption={ui("Reading from OpenBot")}
+        title={title ?? ui("Report")}
+      >
+        <p className="text-sm text-muted-foreground">{ui("Reading…")}</p>
       </GalleryFrame>
     );
   }
 
   if (state.status === "refused") {
     return (
-      <GalleryFrame title={title ?? "Report"}>
-        <p className="text-sm text-destructive">Not shown</p>
+      <GalleryFrame title={title ?? ui("Report")}>
+        <p className="text-sm text-destructive">{ui("Not shown")}</p>
         <p className="mt-1 text-sm text-foreground/80">{state.reason}</p>
       </GalleryFrame>
     );
@@ -165,14 +173,17 @@ function ActivityChart({
   title?: string;
   ask?: (text: string) => void;
 }) {
+  useLocale();
   // Bots by the names people know them by: the trail counts them by id.
   const nameFor = useBotNames();
   const rows = data?.rows ?? [];
   if (rows.length === 0) {
     return (
-      <GalleryFrame title={title ?? "Bot activity"}>
+      <GalleryFrame title={title ?? ui("Bot activity")}>
         <p className="text-sm text-muted-foreground">
-          No Bot has done anything in the last {data?.days ?? 7} days.
+          {uiNodes("No Bot has done anything in the last {{slot0}}days.", [
+            data?.days ?? 7,
+          ])}
         </p>
       </GalleryFrame>
     );
@@ -194,12 +205,14 @@ function ActivityChart({
             size="sm"
             variant="outline"
           >
-            Ask about the busiest
+            {ui("Ask about the busiest")}
           </Button>
         ) : undefined
       }
-      caption={`Counted from OpenBot's audit trail, last ${data.days} days`}
-      title={title ?? "Bot activity"}
+      caption={ui("Counted from OpenBot's audit trail, last {{value0}} days", {
+        value0: String(data.days),
+      })}
+      title={title ?? ui("Bot activity")}
     >
       <ul className="flex flex-col gap-2">
         {rows.map((row, index) => (
@@ -236,13 +249,14 @@ function RefusalList({
   title?: string;
   ask?: (text: string) => void;
 }) {
+  useLocale();
   const nameFor = useBotNames();
   const rows = data?.rows ?? [];
   if (rows.length === 0) {
     return (
-      <GalleryFrame title={title ?? "Recent refusals"}>
+      <GalleryFrame title={title ?? ui("Recent refusals")}>
         <p className="text-sm text-muted-foreground">
-          OpenBot hasn't refused anything.
+          {ui("OpenBot hasn't refused anything.")}
         </p>
       </GalleryFrame>
     );
@@ -261,26 +275,28 @@ function RefusalList({
             size="sm"
             variant="outline"
           >
-            Explain the latest
+            {ui("Explain the latest")}
           </Button>
         ) : undefined
       }
-      caption="Read from OpenBot's audit trail"
-      title={title ?? "Recent refusals"}
+      caption={ui("Read from OpenBot's audit trail")}
+      title={title ?? ui("Recent refusals")}
     >
       <ul className="flex flex-col gap-2">
         {rows.map((row) => (
           <li className="text-sm" key={`${row.at}-${row.what}`}>
             <div className="flex items-baseline gap-2">
               {/* In words, as Activity says it: the trail stores `computer.action_refused`. */}
-              <span className="font-medium">{auditEventWords(row.what)}</span>
+              <span className="font-medium">
+                {auditEventWords(row.what, ui)}
+              </span>
               {row.bot ? (
                 <span className="text-xs text-muted-foreground">
                   {nameFor(row.bot)}
                 </span>
               ) : null}
               <span className="ml-auto text-xs text-muted-foreground">
-                {new Date(row.at).toLocaleString()}
+                {new Date(row.at).toLocaleString(getLocale())}
               </span>
             </div>
             {row.reason ? (
@@ -304,10 +320,14 @@ export const GALLERY: GalleryComponent[] = [
     name: "showActivityReport",
     title: TITLE,
     kind: "card",
-    summary:
-      "Shows what your Bots have been doing and what was refused, read from OpenBot's own records.",
-    description:
-      "Show what this deployment has actually been doing, read from its own records rather than from anything you know. Use for 'what have the Bots been up to' and 'what has been refused'. You choose the report and the period; the figures are read for you and you will not see them.",
+    get summary() {
+      return ui(
+        "Shows what your Bots have been doing and what was refused, read from OpenBot's own records.",
+      );
+    },
+    get description() {
+      return "Show what this deployment has actually been doing, read from its own records rather than from anything you know. Use for 'what have the Bots been up to' and 'what has been refused'. You choose the report and the period; the figures are read for you and you will not see them.";
+    },
     parameters: ActivityReportProps,
     Component: ActivityReportCard as GalleryComponent["Component"],
     confirmation:

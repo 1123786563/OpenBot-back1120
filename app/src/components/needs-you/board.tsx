@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronDown } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useState } from "react";
@@ -31,6 +33,7 @@ const FINDS_SHOWN = 3;
  * its check-ins watch. Given a Bot (its own page), there is one group of each.
  */
 export function NeedsYouBoard({ agentId }: { agentId?: string }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const settings = useQuery(proactiveSettingsQueryOptions());
   const waiting = useWaitingByBot(agentId);
@@ -52,9 +55,9 @@ export function NeedsYouBoard({ agentId }: { agentId?: string }) {
   if (blocked.size === 0 && found.size === 0) {
     const error = waiting.error ?? list.error;
     return error ? (
-      <PageSection title="Needs you">
+      <PageSection title={ui("Needs you")}>
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       </PageSection>
     ) : null;
@@ -81,11 +84,11 @@ export function NeedsYouBoard({ agentId }: { agentId?: string }) {
             .join(" · ")}
         </span>
       }
-      title="Needs you"
+      title={ui("Needs you")}
     >
       <div className="flex flex-col gap-5">
         {blocked.size ? (
-          <Half title="Waiting on you">
+          <Half title={ui("Waiting on you")}>
             {[...blocked].map(([botId, group]) => (
               <BotGroup
                 bot={bot(botId)}
@@ -103,7 +106,7 @@ export function NeedsYouBoard({ agentId }: { agentId?: string }) {
           </Half>
         ) : null}
         {found.size ? (
-          <Half title="From check-ins">
+          <Half title={ui("From check-ins")}>
             {[...found].map(([botId, items]) => {
               const watched = [
                 ...new Set(
@@ -135,6 +138,7 @@ export function NeedsYouBoard({ agentId }: { agentId?: string }) {
 }
 
 function Half({ title, children }: { title: string; children: ReactNode }) {
+  useLocale();
   return (
     <div className="flex flex-col gap-2">
       <h3 className="font-semibold text-muted-foreground text-xs">{title}</h3>
@@ -157,6 +161,7 @@ function BotGroup({
   note: string;
   children: ReactNode[];
 }) {
+  useLocale();
   const name = bot?.name ?? "Your Bot";
   return (
     <div
@@ -197,6 +202,7 @@ function FoundGroup({
   items: ReturnType<typeof useNeedsYou>["items"];
   settingOf: (id: string | null | undefined) => ProactiveSetting | undefined;
 }) {
+  useLocale();
   const [expanded, setExpanded] = useState(false);
   const folded = expanded ? 0 : Math.max(0, items.length - FINDS_SHOWN);
   const shown = folded ? items.slice(0, FINDS_SHOWN) : items;
@@ -217,7 +223,7 @@ function FoundGroup({
         onClick={() => setExpanded(true)}
         type="button"
       >
-        Show {folded} more
+        {ui("Show")} {folded} {ui("more")}
         <IconChevronDown className="size-4" />
       </button>,
     );
@@ -233,5 +239,6 @@ function FoundGroup({
  * Nothing is drawn when nothing waits.
  */
 export function BotNeedsYou({ agentId }: { agentId: string }) {
+  useLocale();
   return <NeedsYouBoard agentId={agentId} />;
 }

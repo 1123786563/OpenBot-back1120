@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
@@ -61,6 +62,7 @@ export const Route = createFileRoute("/_authed/_app/")({
 });
 
 function RouteComponent() {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
   const {
@@ -239,7 +241,10 @@ function RouteComponent() {
             // Said out loud: a message that silently reaches somebody you did not choose is the
             // kind of surprise that costs trust the first time it happens.
             <p className="mt-2 w-full max-w-2xl text-xs text-muted-foreground text-center">
-              OpenBot picks the right Bot. Type <code>@</code> to choose one.
+              {uiNodes(
+                "OpenBot picks the right Bot. Type {{slot0}}to choose one.",
+                [<code key="slot0">@</code>],
+              )}
             </p>
           ) : null}
           {error ? (
@@ -261,8 +266,9 @@ function RouteComponent() {
               className="mt-2 w-full max-w-2xl text-sm text-destructive"
               role="alert"
             >
-              Couldn't load your Bots, so there's no one to send this to. Reload
-              the page.
+              {ui(
+                "Couldn't load your Bots, so there's no one to send this to. Reload the page.",
+              )}
             </p>
           ) : null}
         </div>
@@ -275,7 +281,7 @@ function RouteComponent() {
         <div className="mt-10 w-full max-w-2xl">
           {loading || capabilities.isPending ? (
             <>
-              <h2 className="font-semibold text-base">Explore Bots</h2>
+              <h2 className="font-semibold text-base">{ui("Explore Bots")}</h2>
               <Skeleton className="mt-4 h-[140px]" />
             </>
           ) : explore?.length ? (
@@ -288,14 +294,14 @@ function RouteComponent() {
                   id="explore-agents-heading"
                   className="font-semibold text-base"
                 >
-                  Explore Bots
+                  {ui("Explore Bots")}
                 </h2>
                 {explore.length > EXPLORE_SHOWN ? (
                   <Link
                     className="text-muted-foreground text-sm hover:text-foreground"
                     to="/bots"
                   >
-                    All Bots
+                    {ui("All Bots")}
                   </Link>
                 ) : null}
               </div>
@@ -319,11 +325,11 @@ function RouteComponent() {
             // card there would say the opposite of what a populated composer beside it (still
             // working off that same, successfully loaded `agents`) proves.
             <>
-              <h2 className="font-semibold text-base">Explore Bots</h2>
+              <h2 className="font-semibold text-base">{ui("Explore Bots")}</h2>
               <Empty className="mt-4 h-[140px] border border-dashed border-destructive">
                 <EmptyHeader>
                   <EmptyTitle className="text-destructive">
-                    Couldn't load the Bots shared with you.
+                    {ui("Couldn't load the Bots shared with you.")}
                   </EmptyTitle>
                 </EmptyHeader>
               </Empty>
@@ -333,11 +339,11 @@ function RouteComponent() {
             // when it failed but `agents` is defined — a loaded, empty slice either way. Same
             // plain copy for both: an empty roster is a fact, not an error.
             <>
-              <h2 className="font-semibold text-base">Explore Bots</h2>
+              <h2 className="font-semibold text-base">{ui("Explore Bots")}</h2>
               <Empty className="mt-4 h-[140px] border border-dashed">
                 <EmptyHeader>
                   <EmptyTitle className="text-muted-foreground">
-                    Nobody has shared a Bot with you yet.
+                    {ui("Nobody has shared a Bot with you yet.")}
                   </EmptyTitle>
                 </EmptyHeader>
               </Empty>

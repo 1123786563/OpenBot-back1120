@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { describe, expect, test } from "bun:test";
 import type { CommandOption } from "./draft";
 import { slashCommandTrigger } from "./triggers";
@@ -6,7 +7,7 @@ const commands: CommandOption[] = [
   {
     id: "standup",
     name: "Standup notes",
-    description: "Turns yesterday's work into a standup update",
+    description: ui("Turns yesterday's work into a standup update"),
   },
   { id: "triage", name: "Triage the inbox" },
 ];

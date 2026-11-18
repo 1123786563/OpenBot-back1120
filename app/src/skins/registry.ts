@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { appConfig } from "@/lib/generated/application-config";
 import { opendots } from "./opendots";
 import { openduet } from "./openduet";
@@ -12,7 +13,9 @@ import type { Skin, SkinId } from "./types";
 const openbot: Skin = {
   id: "openbot",
   name: appConfig.brand.productName,
-  description: "The standard look, with your conversations in a sidebar.",
+  get description() {
+    return ui("The standard look, with your conversations in a sidebar.");
+  },
   botLook: "orb",
 };
 
@@ -25,5 +28,6 @@ export const SKINS: Record<SkinId, Skin> = {
 };
 
 export function useActiveSkin(): Skin {
+  useLocale();
   return SKINS[useSkinId()];
 }

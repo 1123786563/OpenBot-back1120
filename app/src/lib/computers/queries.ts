@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -89,7 +90,7 @@ export function computerStatusQueryOptions(botId: string) {
     queryKey: computerKeys.status(botId),
     queryFn: (): Promise<ComputerStatus> =>
       client(`/api/computers/${encodeURIComponent(botId)}/status`, {
-        fallback: "Couldn't check the computer.",
+        fallback: ui("Couldn't check the computer."),
       }).then((response) => response.json()),
   });
 }
@@ -109,7 +110,7 @@ export function computerFleetQueryOptions() {
     queryKey: computerKeys.fleet(),
     queryFn: async (): Promise<ComputerFleet> => {
       const response = await client(FLEET_PATH, {
-        fallback: "The computers could not be listed.",
+        fallback: ui("The computers could not be listed."),
       });
       return response.json();
     },
@@ -121,7 +122,7 @@ export function actionPolicyQueryOptions() {
     queryKey: computerKeys.policy(),
     queryFn: (): Promise<ActionPolicy> =>
       client("/api/computers/policy", "policy", {
-        fallback: "The boundary could not be read.",
+        fallback: ui("The boundary could not be read."),
       }),
   });
 }
@@ -169,7 +170,7 @@ export async function dryRunActionPolicy(
   return client("/api/computers/policy-dry-run", "report", {
     method: "POST",
     body: { policy: candidate },
-    fallback: "The rule could not be tested against history.",
+    fallback: ui("The rule could not be tested against history."),
   });
 }
 

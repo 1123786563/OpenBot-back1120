@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconAppsOff,
   IconArrowUpRight,
@@ -97,7 +98,7 @@ export function landedActionFrom(action: string | undefined): string | null {
 
 /** What the landing says about the action somebody has just come back from authorizing. */
 export function landedActionNotice(action: string): string {
-  return `You just authorized ${action}.`;
+  return ui("You just authorized {{value0}}.", { value0: String(action) });
 }
 
 /**
@@ -143,6 +144,7 @@ export const Route = createFileRoute("/_authed/_app/connections/$key")({
  * enabled, so they have a page of their own; every other key is an app.
  */
 function RouteComponent() {
+  useLocale();
   const { key } = Route.useParams();
   const { linked, action, connect } = Route.useSearch();
   const personal =
@@ -171,6 +173,7 @@ function RouteComponent() {
 }
 
 function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
+  useLocale();
   const { key } = useParams({
     from: "/_authed/_app/connections/$key",
   });
@@ -348,11 +351,11 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
    * whole of its state defaulted to "you have never connected this".
    */
   if (plugins.isPending || connections.isPending) {
-    return <PageShell title="Account">{null}</PageShell>;
+    return <PageShell title={ui("Account")}>{null}</PageShell>;
   }
 
   const back = {
-    label: "Connections",
+    label: ui("Connections"),
     linkProps: { to: "/connections" as const },
   };
 
@@ -376,8 +379,9 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
     return (
       <PageShell backButton={back} title={server?.title ?? key}>
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load this connection. Reload the page, or ask an admin if it
-          keeps happening.
+          {ui(
+            "Couldn't load this connection. Reload the page, or ask an admin if it keeps happening.",
+          )}
         </p>
       </PageShell>
     );
@@ -392,8 +396,9 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
     return (
       <PageShell backButton={back} title={key}>
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load this app. Reload the page, or ask an admin if it keeps
-          happening.
+          {ui(
+            "Couldn't load this app. Reload the page, or ask an admin if it keeps happening.",
+          )}
         </p>
       </PageShell>
     );
@@ -409,8 +414,11 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
   if (server?.provenance === "composio" && !plugins.data.composioConfigured) {
     return (
       <PageShell backButton={back} title={server.title}>
-        <PageEmpty icon={IconPlugOff} title="Not set up yet">
-          An admin has to turn on {server.title} before anyone can connect it.
+        <PageEmpty icon={IconPlugOff} title={ui("Not set up yet")}>
+          {uiNodes(
+            "An admin has to turn on {{slot0}}before anyone can connect it.",
+            [server.title],
+          )}
         </PageEmpty>
       </PageShell>
     );
@@ -450,9 +458,11 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
           <PageRows className="mt-0">
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Team account</ItemTitle>
+                <ItemTitle>{ui("Team account")}</ItemTitle>
                 <ItemDescription>
-                  Shared by your organisation. Bots act as the team account.
+                  {ui(
+                    "Shared by your organisation. Bots act as the team account.",
+                  )}
                 </ItemDescription>
               </ItemContent>
             </Item>
@@ -491,12 +501,14 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
     return (
       <PageShell
         backButton={back}
-        description="You don't connect this app yourself."
+        description={ui("You don't connect this app yourself.")}
         title={server.title}
       >
-        <PageEmpty icon={IconUsers} title="Shared account only">
-          An admin connects {server.title} once as a shared account and gives it
-          to Bots.
+        <PageEmpty icon={IconUsers} title={ui("Shared account only")}>
+          {uiNodes(
+            "An admin connects {{slot0}}once as a shared account and gives it to Bots.",
+            [server.title],
+          )}
         </PageEmpty>
       </PageShell>
     );
@@ -516,7 +528,7 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
     return (
       <PageShell
         backButton={back}
-        description="Bots use this as you, and see only what you can see."
+        description={ui("Bots use this as you, and see only what you can see.")}
         title={server.title}
       >
         {notice ? (
@@ -581,16 +593,18 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
     return (
       <PageShell
         backButton={back}
-        description="You don't connect this app yourself."
+        description={ui("You don't connect this app yourself.")}
         title={entry?.title ?? key}
       >
         <PageEmpty
           icon={entry ? IconUsers : IconAppsOff}
-          title={entry ? "Shared account" : "App not found"}
+          title={entry ? ui("Shared account") : ui("App not found")}
         >
           {entry
-            ? "Bots use one shared account for this app, the same for everybody."
-            : "OpenBot has no app by that name."}
+            ? ui(
+                "Bots use one shared account for this app, the same for everybody.",
+              )
+            : ui("OpenBot has no app by that name.")}
         </PageEmpty>
       </PageShell>
     );
@@ -615,13 +629,18 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
             <ItemContent>
               {/* Not "Connect your account": the row is also the connected state, and a title has to
                   read for both. */}
-              <ItemTitle>Your account</ItemTitle>
+              <ItemTitle>{ui("Your account")}</ItemTitle>
               <ItemDescription>
                 {!enabled
-                  ? "Not available yet. An admin has to turn this on first."
+                  ? ui("Not available yet. An admin has to turn this on first.")
                   : connection
-                    ? "Bots you allow use this as you, and see only what you can see."
-                    : `No Bot can use this as you. Connecting takes you to ${entry.vendor} to approve access.`}
+                    ? ui(
+                        "Bots you allow use this as you, and see only what you can see.",
+                      )
+                    : ui(
+                        "No Bot can use this as you. Connecting takes you to {{value0}} to approve access.",
+                        { value0: String(entry.vendor) },
+                      )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
@@ -636,12 +655,14 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
                   <DropdownMenuTrigger
                     render={
                       <Button size="sm" type="button" variant="outline">
-                        <span
-                          aria-hidden="true"
-                          className="size-1.5 rounded-full bg-emerald-500"
-                        />
-                        Connected
-                        <IconChevronDown />
+                        {uiNodes("{{slot0}}Connected{{slot1}}", [
+                          <span
+                            key="slot0"
+                            aria-hidden="true"
+                            className="size-1.5 rounded-full bg-emerald-500"
+                          />,
+                          <IconChevronDown key="slot1" />,
+                        ])}
                       </Button>
                     }
                   />
@@ -669,7 +690,7 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
                       className="whitespace-nowrap"
                       variant="destructive"
                     >
-                      Disconnect your {entry.title} account
+                      {ui("Disconnect your")} {entry.title} {ui("account")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -690,8 +711,9 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
                     type="button"
                     variant="outline"
                   >
-                    Connect
-                    <IconArrowUpRight />
+                    {uiNodes("Connect{{slot0}}", [
+                      <IconArrowUpRight key="slot0" />,
+                    ])}
                   </Button>
                 </>
               )}
@@ -702,26 +724,32 @@ function AppConnectionPage({ startConnect }: { startConnect: boolean }) {
 
       {connection ? (
         <PageSection
-          description={`Review the permissions recorded by ${entry.vendor}. They may include fewer permissions than OpenBot requested.`}
-          title="Access"
+          description={ui(
+            "Review the permissions recorded by {{value0}}. They may include fewer permissions than OpenBot requested.",
+            { value0: String(entry.vendor) },
+          )}
+          title={ui("Access")}
         >
           <PageRows>
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Allowed</ItemTitle>
+                <ItemTitle>{ui("Allowed")}</ItemTitle>
                 <ItemDescription className="line-clamp-none">
-                  {connection.scope || `${entry.vendor} didn't say.`}
+                  {connection.scope ||
+                    ui("{{value0}} didn't say.", {
+                      value0: String(entry.vendor),
+                    })}
                 </ItemDescription>
               </ItemContent>
             </Item>
             <Separator />
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Connected</ItemTitle>
+                <ItemTitle>{ui("Connected")}</ItemTitle>
               </ItemContent>
               <ItemActions>
                 <span className="text-muted-foreground text-xs">
-                  {new Date(connection.connectedAt).toLocaleString()}
+                  {new Date(connection.connectedAt).toLocaleString(getLocale())}
                 </span>
               </ItemActions>
             </Item>

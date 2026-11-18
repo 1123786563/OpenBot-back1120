@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -22,7 +23,7 @@ export function instructionsQueryOptions() {
     queryKey: settingsKeys.instructions(),
     queryFn: async (): Promise<string> =>
       client("/api/settings/instructions", "instructions", {
-        fallback: "Could not load your standing instructions",
+        fallback: ui("Could not load your standing instructions"),
       }),
   });
 }

@@ -273,7 +273,7 @@ describe("POST /api/computers/policy-translate", () => {
     );
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "OpenBot needs a model key to write a rule from a description. Add one on the Credentials page, or write the rule in CEL.",
     });
@@ -310,7 +310,7 @@ describe("POST /api/computers/policy-translate", () => {
       const { app } = appFor({});
       const response = await translate(app, text);
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
+      expect(await response.json()).toMatchObject({
         error: "Describe the rule in a sentence first.",
       });
       expect(mock.getRequests()).toHaveLength(0);

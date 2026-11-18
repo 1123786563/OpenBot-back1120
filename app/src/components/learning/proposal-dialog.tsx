@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   LearningEvidence,
   LearningProposalDetail,
@@ -22,10 +24,11 @@ import { skillTitle } from "@/lib/learning/display";
 
 /** What one Insight was learned from: the messages a conversation was cited for, or a recording. */
 function EvidenceList({ evidence }: { evidence: LearningEvidence[] | null }) {
+  useLocale();
   if (evidence === null)
     return (
       <p className="text-muted-foreground text-sm">
-        Couldn't load the evidence for this.
+        {ui("Couldn't load the evidence for this.")}
       </p>
     );
   return (
@@ -38,17 +41,17 @@ function EvidenceList({ evidence }: { evidence: LearningEvidence[] | null }) {
           {entry.kind === "conversation" ? (
             <>
               <p className="font-medium">
-                {entry.title ?? "A conversation"}
-                {entry.available ? "" : " (no longer available)"}
+                {entry.title ?? ui("A conversation")}
+                {entry.available ? "" : ui(" (no longer available)")}
               </p>
               {entry.messages.map((message) => (
                 <p className="text-pretty" key={message.id}>
                   <span className="text-muted-foreground">
                     {message.role === "user"
-                      ? "Person: "
+                      ? ui("Person: ")
                       : message.role === "assistant"
-                        ? "Bot: "
-                        : "Tool: "}
+                        ? ui("Bot: ")
+                        : ui("Tool: ")}
                   </span>
                   {message.content}
                 </p>
@@ -57,8 +60,8 @@ function EvidenceList({ evidence }: { evidence: LearningEvidence[] | null }) {
           ) : (
             <>
               <p className="font-medium">
-                {entry.title ?? "A recording"}
-                {entry.available ? "" : " (no longer available)"}
+                {entry.title ?? ui("A recording")}
+                {entry.available ? "" : ui(" (no longer available)")}
               </p>
               <p className="text-pretty">
                 {entry.events.join(", ") ||
@@ -100,6 +103,7 @@ export function ProposalDialog<TKey extends QueryKey>({
   publishedNote?: string;
   onClose: () => void;
 }) {
+  useLocale();
   const detail = useQuery(load);
   const proposal = detail.data;
   const status = decided ?? proposal?.status;
@@ -111,7 +115,7 @@ export function ProposalDialog<TKey extends QueryKey>({
           <DialogTitle>
             {proposal
               ? skillTitle(proposal.title, proposal.description)
-              : "Proposed skill"}
+              : ui("Proposed skill")}
           </DialogTitle>
           {proposal && (
             <DialogDescription>{proposal.description}</DialogDescription>
@@ -120,12 +124,12 @@ export function ProposalDialog<TKey extends QueryKey>({
         <DialogBody className="mt-4 gap-5 overflow-y-auto">
           {detail.isPending ? null : detail.error ? (
             <p role="alert" className="text-destructive text-sm">
-              {detail.error.message}
+              {<ErrorDetails error={detail.error} />}
             </p>
           ) : (
             <>
               <section className="grid gap-1.5">
-                <h3 className="font-medium text-sm">Why</h3>
+                <h3 className="font-medium text-sm">{ui("Why")}</h3>
                 <p className="text-pretty text-sm">{proposal?.reason}</p>
               </section>
               {proposal && (
@@ -138,7 +142,7 @@ export function ProposalDialog<TKey extends QueryKey>({
               )}
               {proposal && proposal.insights.length > 0 && (
                 <section className="grid gap-3">
-                  <h3 className="font-medium text-sm">Learned from</h3>
+                  <h3 className="font-medium text-sm">{ui("Learned from")}</h3>
                   {proposal.insights.map((insight) => (
                     <div className="grid gap-2" key={insight.id}>
                       <p className="text-pretty text-sm">{insight.statement}</p>
@@ -151,7 +155,7 @@ export function ProposalDialog<TKey extends QueryKey>({
           )}
           {error && (
             <p role="alert" className="text-destructive text-sm">
-              {error.message}
+              {<ErrorDetails error={error} />}
             </p>
           )}
         </DialogBody>
@@ -165,7 +169,7 @@ export function ProposalDialog<TKey extends QueryKey>({
                 type="button"
                 variant="outline"
               >
-                Reject
+                {ui("Reject")}
               </Button>
               <Button
                 disabled={deciding}
@@ -174,10 +178,10 @@ export function ProposalDialog<TKey extends QueryKey>({
                 type="button"
               >
                 {deciding
-                  ? "Saving…"
+                  ? ui("Saving…")
                   : removal
-                    ? "Approve removal"
-                    : "Approve and publish"}
+                    ? ui("Approve removal")
+                    : ui("Approve and publish")}
               </Button>
             </>
           ) : (
@@ -189,15 +193,17 @@ export function ProposalDialog<TKey extends QueryKey>({
                 >
                   {status === "approved"
                     ? removal
-                      ? "Removed. Bots stop using it from their next conversation."
+                      ? ui(
+                          "Removed. Bots stop using it from their next conversation.",
+                        )
                       : publishedNote
                     : removal
-                      ? "Rejected. The skill stays."
-                      : "Rejected. It won't be published."}
+                      ? ui("Rejected. The skill stays.")
+                      : ui("Rejected. It won't be published.")}
                 </span>
               )}
               <Button onClick={onClose} size="sm" type="button">
-                Done
+                {ui("Done")}
               </Button>
             </>
           )}

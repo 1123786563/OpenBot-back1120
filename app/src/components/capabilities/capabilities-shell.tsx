@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
@@ -18,8 +19,18 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
  * do my Bots know how to do, and what do they know about me?
  */
 const TABS = [
-  { label: "Skills", linkOptions: { to: "/capabilities/skills" } },
-  { label: "Memory", linkOptions: { to: "/capabilities/memory" } },
+  {
+    get label() {
+      return ui("Skills");
+    },
+    linkOptions: { to: "/capabilities/skills" },
+  },
+  {
+    get label() {
+      return ui("Memory");
+    },
+    linkOptions: { to: "/capabilities/memory" },
+  },
 ] as const satisfies readonly { label: string; linkOptions: LinkOptions }[];
 
 /**
@@ -28,9 +39,13 @@ const TABS = [
  * it.
  */
 export function CapabilitiesTabs() {
+  useLocale();
   const matchRoute = useMatchRoute();
   return (
-    <nav aria-label="Capabilities" className="mt-6 flex items-center gap-1">
+    <nav
+      aria-label={ui("Capabilities")}
+      className="mt-6 flex items-center gap-1"
+    >
       {TABS.map((tab) => (
         <Button
           key={tab.label}
@@ -58,6 +73,7 @@ export function CapabilitiesTabs() {
  * open.
  */
 export function CapabilitiesShell({ children }: { children: React.ReactNode }) {
+  useLocale();
   const matchRoute = useMatchRoute();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -72,7 +88,10 @@ export function CapabilitiesShell({ children }: { children: React.ReactNode }) {
       TABS[0];
     return (
       <PageShell
-        backButton={{ label: "Bots", linkProps: linkOptions({ to: "/bots" }) }}
+        backButton={{
+          label: ui("Bots"),
+          linkProps: linkOptions({ to: "/bots" }),
+        }}
         className="@container"
         title={tab.label}
       >
@@ -81,7 +100,7 @@ export function CapabilitiesShell({ children }: { children: React.ReactNode }) {
     );
   }
   return (
-    <PageShell className="@container" title="Capabilities">
+    <PageShell className="@container" title={ui("Capabilities")}>
       <CapabilitiesTabs />
       {children}
     </PageShell>

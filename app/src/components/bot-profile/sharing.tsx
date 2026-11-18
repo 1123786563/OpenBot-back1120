@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconLink,
@@ -67,6 +69,7 @@ const list = (value: string) =>
  * Bot is private to the person having it; its owner cannot read it.
  */
 export function SharingSections({ agent }: { agent: AgentProfile }) {
+  useLocale();
   const data = useQuery(teamBotsQueryOptions());
   const me = useQuery(currentUserQueryOptions()).data;
   const unpublish = useMutation(unpublishTeamBotMutationOptions(queryClient));
@@ -76,7 +79,7 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
   if (data.error) {
     return (
       <p className="mt-6 text-destructive text-sm" role="alert">
-        {data.error.message}
+        {<ErrorDetails error={data.error} />}
       </p>
     );
   }
@@ -85,10 +88,10 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
 
   return (
     <>
-      <PageSection title="Published">
+      <PageSection title={ui("Published")}>
         {unpublish.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            {unpublish.error.message}
+            {<ErrorDetails error={unpublish.error} />}
           </p>
         ) : null}
         {published ? (
@@ -100,13 +103,24 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
               <ItemContent>
                 <ItemTitle>
                   {published.audience === "team"
-                    ? "To the whole team"
-                    : `To ${[...(published.people ?? []), ...(published.groups ?? []).map((group) => `group ${group}`)].join(", ")}`}
+                    ? ui("To the whole team")
+                    : ui("To {{value0}}", {
+                        value0: String(
+                          [
+                            ...(published.people ?? []),
+                            ...(published.groups ?? []).map(
+                              (group) => `group ${group}`,
+                            ),
+                          ].join(", "),
+                        ),
+                      })}
                 </ItemTitle>
                 <ItemDescription>
                   {published.visibleToTeam
-                    ? "Each person's conversations with it are private."
-                    : "Teammates can't see it until it has a real name and a description."}
+                    ? ui("Each person's conversations with it are private.")
+                    : ui(
+                        "Teammates can't see it until it has a real name and a description.",
+                      )}
                 </ItemDescription>
               </ItemContent>
               {agent.mine ? (
@@ -117,7 +131,7 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
                     size="sm"
                     variant="outline"
                   >
-                    Unpublish
+                    {ui("Unpublish")}
                   </Button>
                 </ItemActions>
               ) : null}
@@ -128,9 +142,9 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
                 <IconLink />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Link</ItemTitle>
+                <ItemTitle>{ui("Link")}</ItemTitle>
                 <ItemDescription>
-                  Opens a private conversation with it.
+                  {ui("Opens a private conversation with it.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -143,7 +157,7 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
                   size="sm"
                   variant="outline"
                 >
-                  {copied ? "Copied" : "Copy link"}
+                  {copied ? ui("Copied") : ui("Copy link")}
                 </Button>
               </ItemActions>
             </Item>
@@ -153,22 +167,24 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
             icon={IconShare}
             title={
               agent.visibility === "public"
-                ? "Not published to the team"
-                : "Not published"
+                ? ui("Not published to the team")
+                : ui("Not published")
             }
           >
             {agent.visibility === "public"
-              ? "It's public, so everyone on OpenBot can already use it."
+              ? ui("It's public, so everyone on OpenBot can already use it.")
               : agent.mine
-                ? "Only you can use it."
+                ? ui("Only you can use it.")
                 : null}
           </PageEmpty>
         )}
       </PageSection>
       {agent.mine && (published || publishable) ? (
         <PageSection
-          description="Publishing doesn't change its visibility. You can unpublish at any time."
-          title={published ? "Who it is published to" : "Publish"}
+          description={ui(
+            "Publishing doesn't change its visibility. You can unpublish at any time.",
+          )}
+          title={published ? ui("Who it is published to") : ui("Publish")}
         >
           {/* More than one value — an audience, then people and groups — so a summary row and a
               dialog rather than a form on the page. */}
@@ -183,7 +199,7 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
                 <IconUsersGroup />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Audience</ItemTitle>
+                <ItemTitle>{ui("Audience")}</ItemTitle>
                 <ItemDescription>{audienceSummary(published)}</ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -202,8 +218,10 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
       ) : null}
       {me?.role === "admin" && published ? (
         <PageSection
-          description="Pins this Bot at the top of every group member's Bots list. Use * for the whole team."
-          title="Assign to groups"
+          description={ui(
+            "Pins this Bot at the top of every group member's Bots list. Use * for the whole team.",
+          )}
+          title={ui("Assign to groups")}
         >
           <Assignments bot={published} />
         </PageSection>
@@ -214,13 +232,13 @@ export function SharingSections({ agent }: { agent: AgentProfile }) {
 
 /** The current answer on the Audience row: who it is published to, as a count. */
 function audienceSummary(current: TeamBot | undefined): string {
-  if (!current) return "Not published";
-  if (current.audience === "team") return "The whole team";
+  if (!current) return ui("Not published");
+  if (current.audience === "team") return ui("The whole team");
   const parts = [
     countLabel(current.people?.length ?? 0, "person", "people", ""),
     countLabel(current.groups?.length ?? 0, "group", "groups", ""),
   ].filter(Boolean);
-  return parts.length ? parts.join(", ") : "Specific people or groups";
+  return parts.length ? parts.join(", ") : ui("Specific people or groups");
 }
 
 const AUDIENCES = {
@@ -241,6 +259,7 @@ function PublishDialog({
   current?: TeamBot;
   onClose: () => void;
 }) {
+  useLocale();
   const formId = useId();
   const publish = useMutation(publishTeamBotMutationOptions(queryClient));
   const [audience, setAudience] = useState<"team" | "people">(
@@ -253,11 +272,12 @@ function PublishDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {current ? "Who it is published to" : "Publish"}
+            {current ? ui("Who it is published to") : ui("Publish")}
           </DialogTitle>
           <DialogDescription>
-            Publishing doesn't change its visibility. You can unpublish at any
-            time.
+            {ui(
+              "Publishing doesn't change its visibility. You can unpublish at any time.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
@@ -281,7 +301,7 @@ function PublishDialog({
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor={`${formId}-audience`}>
-                  Published to
+                  {ui("Published to")}
                 </FieldLabel>
                 <Select
                   items={AUDIENCES}
@@ -310,21 +330,23 @@ function PublishDialog({
                 <>
                   <Field>
                     <FieldLabel htmlFor={`${formId}-people`}>
-                      People, by email
+                      {ui("People, by email")}
                     </FieldLabel>
                     <Input
                       id={`${formId}-people`}
                       onChange={(event) => setEmails(event.target.value)}
-                      placeholder="Comma separated"
+                      placeholder={ui("Comma separated")}
                       value={emails}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor={`${formId}-groups`}>Groups</FieldLabel>
+                    <FieldLabel htmlFor={`${formId}-groups`}>
+                      {ui("Groups")}
+                    </FieldLabel>
                     <Input
                       id={`${formId}-groups`}
                       onChange={(event) => setGroups(event.target.value)}
-                      placeholder="Comma separated"
+                      placeholder={ui("Comma separated")}
                       value={groups}
                     />
                   </Field>
@@ -335,13 +357,13 @@ function PublishDialog({
           </form>
           {publish.error ? (
             <p className="mt-4 text-destructive text-sm" role="alert">
-              {publish.error.message}
+              {<ErrorDetails error={publish.error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={publish.isPending}
@@ -349,7 +371,7 @@ function PublishDialog({
             size="sm"
             type="submit"
           >
-            {current ? "Update" : "Publish to team"}
+            {current ? ui("Update") : ui("Publish to team")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -362,6 +384,7 @@ function PublishDialog({
  * opens a dialog to add one.
  */
 function Assignments({ bot }: { bot: TeamBot }) {
+  useLocale();
   const remove = useMutation(assignTeamBotMutationOptions(queryClient));
   const [assigning, setAssigning] = useState(false);
   const assigned = bot.assignments ?? [];
@@ -369,11 +392,14 @@ function Assignments({ bot }: { bot: TeamBot }) {
     <>
       {remove.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {remove.error.message}
+          {<ErrorDetails error={remove.error} />}
         </p>
       ) : null}
       {assigned.length === 0 ? (
-        <PageEmpty icon={IconUsersGroup} title="Not assigned to any group" />
+        <PageEmpty
+          icon={IconUsersGroup}
+          title={ui("Not assigned to any group")}
+        />
       ) : null}
       <PageRows>
         {assigned.map((name) => (
@@ -383,11 +409,11 @@ function Assignments({ bot }: { bot: TeamBot }) {
                 <IconUsers />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>{name === "*" ? "Whole team" : name}</ItemTitle>
+                <ItemTitle>{name === "*" ? ui("Whole team") : name}</ItemTitle>
               </ItemContent>
               <ItemActions>
                 <Button
-                  aria-label={`Remove ${name}`}
+                  aria-label={ui("Remove {{value0}}", { value0: String(name) })}
                   disabled={remove.isPending}
                   onClick={() =>
                     remove.mutate({ botId: bot.id, group: name, remove: true })
@@ -395,7 +421,7 @@ function Assignments({ bot }: { bot: TeamBot }) {
                   size="sm"
                   variant="outline"
                 >
-                  Remove
+                  {ui("Remove")}
                 </Button>
               </ItemActions>
             </Item>
@@ -410,7 +436,7 @@ function Assignments({ bot }: { bot: TeamBot }) {
             <IconPlus />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Assign to a group</ItemTitle>
+            <ItemTitle>{ui("Assign to a group")}</ItemTitle>
           </ItemContent>
           <ItemActions>
             <IconChevronRight className="size-4 text-muted-foreground" />
@@ -426,6 +452,7 @@ function Assignments({ bot }: { bot: TeamBot }) {
 
 /** One group to pin this Bot for, or * for the whole team. */
 function AssignDialog({ bot, onClose }: { bot: TeamBot; onClose: () => void }) {
+  useLocale();
   const formId = useId();
   const assign = useMutation(assignTeamBotMutationOptions(queryClient));
   const [group, setGroup] = useState("");
@@ -433,9 +460,11 @@ function AssignDialog({ bot, onClose }: { bot: TeamBot; onClose: () => void }) {
     <Dialog onOpenChange={(next) => !next && onClose()} open>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Assign {bot.name} to a group</DialogTitle>
+          <DialogTitle>
+            {uiNodes("Assign {{slot0}}to a group", [bot.name])}
+          </DialogTitle>
           <DialogDescription>
-            It's pinned at the top of every member's Bots list.
+            {ui("It's pinned at the top of every member's Bots list.")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4">
@@ -447,24 +476,26 @@ function AssignDialog({ bot, onClose }: { bot: TeamBot; onClose: () => void }) {
             }}
           >
             <Field>
-              <FieldLabel htmlFor={`${formId}-group`}>Group, or *</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-group`}>
+                {ui("Group, or *")}
+              </FieldLabel>
               <Input
                 id={`${formId}-group`}
                 onChange={(event) => setGroup(event.target.value)}
-                placeholder="* for the whole team"
+                placeholder={ui("* for the whole team")}
                 value={group}
               />
             </Field>
           </form>
           {assign.error ? (
             <p className="mt-4 text-destructive text-sm" role="alert">
-              {assign.error.message}
+              {<ErrorDetails error={assign.error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={!group.trim() || assign.isPending}
@@ -472,7 +503,7 @@ function AssignDialog({ bot, onClose }: { bot: TeamBot; onClose: () => void }) {
             size="sm"
             type="submit"
           >
-            Assign
+            {ui("Assign")}{" "}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBellRinging,
   IconBrandGithub,
@@ -61,13 +63,27 @@ import {
 import { queryClient } from "@/query-client";
 
 export const KIND_LABEL: Record<TriggerKind, string> = {
-  webhook: "Webhook",
-  github: "GitHub",
-  linear: "Linear",
-  sentry: "Sentry",
-  pagerduty: "PagerDuty",
-  email: "Email",
-  slack: "Slack",
+  get webhook() {
+    return ui("Webhook");
+  },
+  get github() {
+    return ui("GitHub");
+  },
+  get linear() {
+    return ui("Linear");
+  },
+  get sentry() {
+    return ui("Sentry");
+  },
+  get pagerduty() {
+    return ui("PagerDuty");
+  },
+  get email() {
+    return ui("Email");
+  },
+  get slack() {
+    return ui("Slack");
+  },
 };
 const KIND_ICON: Record<TriggerKind, typeof IconWebhook> = {
   webhook: IconWebhook,
@@ -112,6 +128,7 @@ const list = (value: string) =>
     .filter(Boolean);
 
 function CopyButton({ value, label }: { value: string; label: string }) {
+  useLocale();
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -124,13 +141,14 @@ function CopyButton({ value, label }: { value: string; label: string }) {
         setTimeout(() => setCopied(false), 1500);
       }}
     >
-      {copied ? "Copied" : label}
+      {copied ? ui("Copied") : label}
     </Button>
   );
 }
 
 /** A value somebody copies into another product: a URL, an address, a key. */
 function Copyable({ children }: { children: string }) {
+  useLocale();
   return (
     <code className="break-all rounded bg-background px-2 py-1 text-xs">
       {children}
@@ -151,7 +169,11 @@ function describeFilter(config: TriggerConfig) {
           : config.mode === "phrase"
             ? `on messages containing ${config.phrases.map((phrase) => `"${phrase}"`).join(" or ")}`
             : `on reactions${config.reactions.length ? ` :${config.reactions.join(": :")}:` : ""}`;
-    return `${what} ${where} (workspace ${config.teamId})`;
+    return ui("{{value0}} {{value1}} (workspace {{value2}})", {
+      value0: String(what),
+      value1: String(where),
+      value2: String(config.teamId),
+    });
   }
   const parts = [
     config.filter.eventTypes.length
@@ -175,6 +197,7 @@ function describeFilter(config: TriggerConfig) {
  * the list refetching after the write that produced it.
  */
 export function Triggers({ goal }: { goal: ResponsibilityRecord }) {
+  useLocale();
   const triggers = useQuery(triggersQueryOptions(goal.id));
   const [adding, setAdding] = useState(false);
   const [freshSecret, setFreshSecret] = useState<{
@@ -184,30 +207,33 @@ export function Triggers({ goal }: { goal: ResponsibilityRecord }) {
   return (
     <section className="grid gap-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-medium text-sm">Triggers</h3>
+        <h3 className="font-medium text-sm">{ui("Triggers")}</h3>
         <Button
           size="sm"
           variant="outline"
           type="button"
           onClick={() => setAdding(true)}
         >
-          <IconPlus />
-          Add trigger
+          {uiNodes("{{slot0}}Add trigger", [<IconPlus key="slot0" />])}
         </Button>
       </div>
       {goal.status !== "active" && (
         <p className="text-muted-foreground text-xs">
-          This goal is {goal.status}. Its triggers won't start it.
+          {uiNodes("This goal is {{slot0}}. Its triggers won't start it.", [
+            goal.status,
+          ])}
         </p>
       )}
       {triggers.error && (
         <p role="alert" className="text-destructive text-sm">
-          {triggers.error.message}
+          {<ErrorDetails error={triggers.error} />}
         </p>
       )}
       {triggers.data?.length === 0 && (
         <p className="text-muted-foreground text-xs">
-          No triggers. It runs when you press Run now, or on the events above.
+          {ui(
+            "No triggers. It runs when you press Run now, or on the events above.",
+          )}
         </p>
       )}
       {triggers.data?.length ? (
@@ -262,6 +288,7 @@ function TriggerRow({
   /** A write that produced a new key; the triggers list itself refetches from the write. */
   onChanged: (secret: string | null) => void;
 }) {
+  useLocale();
   const [secret, setSecret] = useState<string | null>(freshSecret);
   const [pasted, setPasted] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -296,7 +323,7 @@ function TriggerRow({
         <ItemTitle>{KIND_LABEL[trigger.kind]}</ItemTitle>
         <ItemDescription className="line-clamp-none">
           {describeFilter(trigger.config)}
-          {trigger.enabled ? "" : " · Paused"}
+          {trigger.enabled ? "" : ui(" · Paused")}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
@@ -308,14 +335,14 @@ function TriggerRow({
               disabled={remove.isPending}
               onClick={() => remove.mutate(trigger)}
             >
-              Remove for good
+              {ui("Remove for good")}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setConfirmRemove(false)}
             >
-              Keep
+              {ui("Keep")}
             </Button>
           </>
         ) : (
@@ -325,10 +352,12 @@ function TriggerRow({
               variant="ghost"
               onClick={() => setConfirmRemove(true)}
             >
-              Remove
+              {ui("Remove")}
             </Button>
             <Switch
-              aria-label={`Run on this ${KIND_LABEL[trigger.kind]} trigger`}
+              aria-label={ui("Run on this {{value0}} trigger", {
+                value0: String(KIND_LABEL[trigger.kind]),
+              })}
               checked={trigger.enabled}
               disabled={toggle.isPending}
               onCheckedChange={() =>
@@ -344,34 +373,35 @@ function TriggerRow({
         </p>
         {url && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs">POST to</span>
+            <span className="text-xs">{ui("POST to")}</span>
             <Copyable>{url}</Copyable>
-            <CopyButton value={url} label="Copy URL" />
+            <CopyButton value={url} label={ui("Copy URL")} />
           </div>
         )}
         {trigger.kind === "email" &&
           (trigger.address ? (
             <div className="flex flex-wrap items-center gap-2">
               <Copyable>{trigger.address}</Copyable>
-              <CopyButton value={trigger.address} label="Copy address" />
+              <CopyButton value={trigger.address} label={ui("Copy address")} />
             </div>
           ) : (
             <p className="text-amber-600 text-xs dark:text-amber-500">
-              Email isn't set up on OpenBot yet, so this address can't receive
-              mail. An admin has to turn it on.
+              {ui(
+                "Email isn't set up on OpenBot yet, so this address can't receive mail. An admin has to turn it on.",
+              )}
             </p>
           ))}
         {generated && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs">Key</span>
+            <span className="text-xs">{ui("Key")}</span>
             {shown ? (
               <>
                 <Copyable>{shown}</Copyable>
-                <CopyButton value={shown} label="Copy key" />
+                <CopyButton value={shown} label={ui("Copy key")} />
                 {trigger.kind === "webhook" && (
                   <CopyButton
                     value={`Authorization: Bearer ${shown}`}
-                    label="Copy header"
+                    label={ui("Copy header")}
                   />
                 )}
               </>
@@ -384,7 +414,7 @@ function TriggerRow({
                   reveal.mutate(trigger.id, { onSuccess: setSecret })
                 }
               >
-                Show key
+                {ui("Show key")}
               </Button>
             )}
             <Button
@@ -393,12 +423,14 @@ function TriggerRow({
               disabled={rotate.isPending}
               onClick={rotateSecret}
             >
-              Replace key
+              {ui("Replace key")}
             </Button>
           </div>
         )}
         {trigger.kind === "webhook" && shown && (
-          <Copyable>{`Authorization: Bearer ${shown}`}</Copyable>
+          <Copyable>
+            {ui("Authorization: Bearer {{value0}}", { value0: String(shown) })}
+          </Copyable>
         )}
         {VENDOR_SECRET.has(trigger.kind) && (
           <form
@@ -416,25 +448,25 @@ function TriggerRow({
               }
             >
               {trigger.hasSecret
-                ? "Signing secret saved"
-                : "Waiting for the signing secret"}
+                ? ui("Signing secret saved")
+                : ui("Waiting for the signing secret")}
             </span>
             <div className="flex items-center gap-2">
               <Input
-                aria-label="Signing secret"
+                aria-label={ui("Signing secret")}
                 type="password"
                 autoComplete="new-password"
                 placeholder={
                   trigger.hasSecret
-                    ? "Paste a new secret to replace it"
-                    : "Paste the signing secret"
+                    ? ui("Paste a new secret to replace it")
+                    : ui("Paste the signing secret")
                 }
                 value={pasted}
                 onChange={(event) => setPasted(event.target.value)}
                 required
               />
               <Button size="sm" type="submit" disabled={rotate.isPending}>
-                Save secret
+                {ui("Save secret")}
               </Button>
             </div>
           </form>
@@ -471,6 +503,7 @@ function NewTriggerDialog({
     secret: string | null;
   }) => void;
 }) {
+  useLocale();
   const id = useId();
   const [kind, setKind] = useState<TriggerKind>("webhook");
   const [eventTypes, setEventTypes] = useState("");
@@ -529,9 +562,9 @@ function NewTriggerDialog({
           would otherwise render a nested dialog with no backdrop at all. */}
       <DialogContent overlayClassName="bg-black/20 supports-backdrop-filter:backdrop-blur-sm">
         <DialogHeader>
-          <DialogTitle>Add trigger</DialogTitle>
+          <DialogTitle>{ui("Add trigger")}</DialogTitle>
           <DialogDescription>
-            Something outside OpenBot that starts work on this goal.
+            {ui("Something outside OpenBot that starts work on this goal.")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
@@ -555,7 +588,7 @@ function NewTriggerDialog({
           >
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor={`${id}-kind`}>Trigger</FieldLabel>
+                <FieldLabel htmlFor={`${id}-kind`}>{ui("Trigger")}</FieldLabel>
                 <Select
                   items={KIND_LABEL}
                   onValueChange={(value) => {
@@ -580,18 +613,20 @@ function NewTriggerDialog({
                 <FieldGroup className="sm:grid sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor={`${id}-team`}>
-                      Slack team ID
+                      {ui("Slack team ID")}
                     </FieldLabel>
                     <Input
                       id={`${id}-team`}
                       required
-                      placeholder="T0123ABCD"
+                      placeholder={ui("T0123ABCD")}
                       value={teamId}
                       onChange={(event) => setTeamId(event.target.value)}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor={`${id}-mode`}>Fire on</FieldLabel>
+                    <FieldLabel htmlFor={`${id}-mode`}>
+                      {ui("Fire on")}
+                    </FieldLabel>
                     <Select
                       items={SLACK_MODE}
                       onValueChange={(value) => {
@@ -616,7 +651,7 @@ function NewTriggerDialog({
                   {mode === "phrase" && (
                     <Field>
                       <FieldLabel htmlFor={`${id}-phrases`}>
-                        Phrases (comma separated)
+                        {ui("Phrases (comma separated)")}
                       </FieldLabel>
                       <Input
                         id={`${id}-phrases`}
@@ -629,11 +664,11 @@ function NewTriggerDialog({
                   {mode === "reaction" && (
                     <Field>
                       <FieldLabel htmlFor={`${id}-reactions`}>
-                        Reactions (blank: any)
+                        {ui("Reactions (blank: any)")}
                       </FieldLabel>
                       <Input
                         id={`${id}-reactions`}
-                        placeholder="eyes, rotating_light"
+                        placeholder={ui("eyes, rotating_light")}
                         value={reactions}
                         onChange={(event) => setReactions(event.target.value)}
                       />
@@ -641,11 +676,11 @@ function NewTriggerDialog({
                   )}
                   <Field>
                     <FieldLabel htmlFor={`${id}-channels`}>
-                      Channel IDs (blank: all the Bot is in)
+                      {ui("Channel IDs (blank: all the Bot is in)")}
                     </FieldLabel>
                     <Input
                       id={`${id}-channels`}
-                      placeholder="C0123ABCD"
+                      placeholder={ui("C0123ABCD")}
                       value={channels}
                       onChange={(event) => setChannels(event.target.value)}
                     />
@@ -654,7 +689,9 @@ function NewTriggerDialog({
               ) : (
                 <FieldGroup className="sm:grid sm:grid-cols-2">
                   <Field className="sm:col-span-2">
-                    <FieldLabel htmlFor={`${id}-types`}>Event types</FieldLabel>
+                    <FieldLabel htmlFor={`${id}-types`}>
+                      {ui("Event types")}
+                    </FieldLabel>
                     <Input
                       id={`${id}-types`}
                       placeholder={placeholder[kind]}
@@ -664,20 +701,22 @@ function NewTriggerDialog({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`${id}-path`}>
-                      Only when field
+                      {ui("Only when field")}
                     </FieldLabel>
                     <Input
                       id={`${id}-path`}
-                      placeholder="data.team.key"
+                      placeholder={ui("data.team.key")}
                       value={fieldPath}
                       onChange={(event) => setFieldPath(event.target.value)}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor={`${id}-equals`}>equals</FieldLabel>
+                    <FieldLabel htmlFor={`${id}-equals`}>
+                      {ui("equals")}
+                    </FieldLabel>
                     <Input
                       id={`${id}-equals`}
-                      placeholder="ENG"
+                      placeholder={ui("ENG")}
                       value={fieldEquals}
                       onChange={(event) => setFieldEquals(event.target.value)}
                     />
@@ -685,11 +724,11 @@ function NewTriggerDialog({
                   {kind === "github" && (
                     <Field className="sm:col-span-2">
                       <FieldLabel htmlFor={`${id}-repo`}>
-                        Repository (optional)
+                        {ui("Repository (optional)")}
                       </FieldLabel>
                       <Input
                         id={`${id}-repo`}
-                        placeholder="owner/name"
+                        placeholder={ui("owner/name")}
                         value={repository}
                         onChange={(event) => setRepository(event.target.value)}
                       />
@@ -698,7 +737,7 @@ function NewTriggerDialog({
                   {kind === "email" && (
                     <Field className="sm:col-span-2">
                       <FieldLabel htmlFor={`${id}-senders`}>
-                        Allowed senders (blank: anyone)
+                        {ui("Allowed senders (blank: anyone)")}
                       </FieldLabel>
                       <Input
                         id={`${id}-senders`}
@@ -711,7 +750,7 @@ function NewTriggerDialog({
                   {VENDOR_SECRET.has(kind) && (
                     <Field className="sm:col-span-2">
                       <FieldLabel htmlFor={`${id}-secret`}>
-                        Signing secret (can be added later)
+                        {ui("Signing secret (can be added later)")}
                       </FieldLabel>
                       <Input
                         id={`${id}-secret`}
@@ -729,13 +768,13 @@ function NewTriggerDialog({
           <SharedAppNotice botId={botId} reason="trigger" />
           {create.error && (
             <p role="alert" className="text-destructive text-sm">
-              {create.error.message}
+              {<ErrorDetails error={create.error} />}
             </p>
           )}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={create.isPending}
@@ -743,7 +782,11 @@ function NewTriggerDialog({
             size="sm"
             type="submit"
           >
-            {create.isPending ? "Adding…" : `Add ${KIND_LABEL[kind]} trigger`}
+            {create.isPending
+              ? ui("Adding…")
+              : ui("Add {{value0}} trigger", {
+                  value0: String(KIND_LABEL[kind]),
+                })}
           </Button>
         </DialogFooter>
       </DialogContent>

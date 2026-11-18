@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   EMPTY_WHAT_IF_ACTION,
   missingFrom,
@@ -65,6 +66,7 @@ function actionFrom(raw: string | undefined): WhatIfAction | null {
  * Under What happened in Admin, beside Audit, whose rows answer the same question about the past.
  */
 function WhatIfPage() {
+  useLocale();
   const search = Route.useSearch();
   const vocabulary = useQuery(whatIfVocabularyQueryOptions());
   const [text, setText] = useState("");
@@ -126,8 +128,10 @@ function WhatIfPage() {
 
   return (
     <PageShell
-      description="Ask what OpenBot would do if a Bot took an action. Every control answers in the order OpenBot checks them, and you see which one decides."
-      title="What would happen"
+      description={ui(
+        "Ask what OpenBot would do if a Bot took an action. Every control answers in the order OpenBot checks them, and you see which one decides.",
+      )}
+      title={ui("What would happen")}
     >
       <form
         className="flex flex-col gap-2"
@@ -142,7 +146,7 @@ function WhatIfPage() {
             <IconSparkles />
           </InputGroupAddon>
           <InputGroupInput
-            aria-label="Ask what would happen"
+            aria-label={ui("Ask what would happen")}
             maxLength={QUESTION_LIMIT}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => {
@@ -150,7 +154,9 @@ function WhatIfPage() {
               if (event.key === "Enter" && isComposing(event))
                 event.preventDefault();
             }}
-            placeholder="Could the Sales Bot send email from Gmail when a routine runs it?"
+            placeholder={ui(
+              "Could the Sales Bot send email from Gmail when a routine runs it?",
+            )}
             value={text}
           />
           <InputGroupAddon align="inline-end">
@@ -160,7 +166,7 @@ function WhatIfPage() {
               type="submit"
               variant="default"
             >
-              {asking ? "Reading…" : "Ask"}
+              {asking ? ui("Reading…") : ui("Ask")}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -185,10 +191,12 @@ function WhatIfPage() {
       <PageSection
         description={
           asked
-            ? "This is how OpenBot read your question. Change anything it got wrong, then check it."
-            : "Ask a question above, or set the action yourself."
+            ? ui(
+                "This is how OpenBot read your question. Change anything it got wrong, then check it.",
+              )
+            : ui("Ask a question above, or set the action yourself.")
         }
-        title="The action"
+        title={ui("The action")}
       >
         <PageCard
           className="mt-4"
@@ -198,13 +206,15 @@ function WhatIfPage() {
               onClick={() => void check()}
               type="button"
             >
-              {checking ? "Checking…" : "Check"}
+              {checking ? ui("Checking…") : ui("Check")}
             </Button>
           }
         >
           {vocabulary.isError ? (
             <p className="text-destructive text-sm" role="alert">
-              Couldn't load this OpenBot's Bots and apps. Reload the page.
+              {ui(
+                "Couldn't load this OpenBot's Bots and apps. Reload the page.",
+              )}
             </p>
           ) : (
             <ActionChips
@@ -231,8 +241,8 @@ function WhatIfPage() {
 
       {checked ? (
         <PageSection
-          description="Each control, in the order OpenBot checks them."
-          title="What happens"
+          description={ui("Each control, in the order OpenBot checks them.")}
+          title={ui("What happens")}
         >
           <WhatIfResultView result={checked.result} />
         </PageSection>

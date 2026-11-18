@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import {
   IconAlertTriangle,
@@ -77,6 +79,7 @@ function isOwnBrowser(computer: ComputerProfile): boolean {
  * person can sign a Bot out of everything.
  */
 export function ComputersPage({ children }: { children?: ReactNode } = {}) {
+  useLocale();
   const paths = useManagePaths();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -154,11 +157,11 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
    */
   const titleOf = (computer: ComputerProfile): string => {
     if (isOwnBrowser(computer)) {
-      if (personal) return "Your OpenBot browser";
+      if (personal) return ui("Your OpenBot browser");
       const owner = computer.person?.name ?? computer.person?.email;
       return owner
-        ? `${owner}'s OpenBot browser`
-        : "A person's OpenBot browser";
+        ? ui("{{value0}}'s OpenBot browser", { value0: String(owner) })
+        : ui("A person's OpenBot browser");
     }
     // One person, so a row is one of their Bots.
     if (personal) return computer.botId ? nameFor(computer.botId) : "Computer";
@@ -167,48 +170,58 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
     if (computer.kind === "person") {
       return computer.botId
         ? `${person} · ${nameFor(computer.botId)}`
-        : `${person}'s computer`;
+        : ui("{{value0}}'s computer", { value0: String(person) });
     }
     return computer.botId ? nameFor(computer.botId) : computer.computer;
   };
 
   /** What a row carries, said once before its state. */
   const scopeOf = (computer: ComputerProfile): string => {
-    if (isOwnBrowser(computer)) return "Their own browser for Teach a Bot";
+    if (isOwnBrowser(computer)) return ui("Their own browser for Teach a Bot");
     if (computer.kind === "person") {
       return computer.botId
-        ? "This person's profile and folder for this Bot"
-        : "Runs every Bot this person uses";
+        ? ui("This person's profile and folder for this Bot")
+        : ui("Runs every Bot this person uses");
     }
     return isolation === "shared"
-      ? "This Bot's profile from before each person had their own"
-      : "Isolated: a computer of its own, shared by everyone who uses it";
+      ? ui("This Bot's profile from before each person had their own")
+      : ui("Isolated: a computer of its own, shared by everyone who uses it");
   };
 
   /** Whether its browser runs, and when it starts again. */
   const stateOf = (computer: ComputerProfile): string => {
     const since = computer.running
-      ? `Browser running since ${new Date(computer.startedAt ?? "").toLocaleTimeString()}`
+      ? `Browser running since ${new Date(computer.startedAt ?? "").toLocaleTimeString(getLocale())}`
       : "No browser running";
     if (!isOwnBrowser(computer))
       return computer.running
         ? since
-        : `${since}. It starts when the Bot next needs it.`;
+        : ui("{{value0}}. It starts when the Bot next needs it.", {
+            value0: String(since),
+          });
     // In the team edition the row already says it is that person's browser for Teach a Bot.
     if (!personal) return since;
     return computer.running
-      ? `${since}. You record in it with Teach a Bot.`
-      : `${since}. It opens when you record with Teach a Bot.`;
+      ? ui("{{value0}}. You record in it with Teach a Bot.", {
+          value0: String(since),
+        })
+      : ui("{{value0}}. It opens when you record with Teach a Bot.", {
+          value0: String(since),
+        });
   };
 
   return (
     <PageShell
       description={
         personal
-          ? "Your Bots share one computer. Each Bot keeps its own browser profile there, which keeps it signed in. A command one Bot runs can still read another Bot's files."
-          : "Each person's computer, and each isolated Bot's. Every Bot keeps its own browser profile on it, which keeps that Bot signed in. Resetting a computer signs every Bot on it out of everything."
+          ? ui(
+              "Your Bots share one computer. Each Bot keeps its own browser profile there, which keeps it signed in. A command one Bot runs can still read another Bot's files.",
+            )
+          : ui(
+              "Each person's computer, and each isolated Bot's. Every Bot keeps its own browser profile on it, which keeps that Bot signed in. Resetting a computer signs every Bot on it out of everything.",
+            )
       }
-      title={personal ? "Computer" : "Computers"}
+      title={personal ? ui("Computer") : ui("Computers")}
     >
       {problem ? (
         <p
@@ -221,21 +234,21 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
 
       {personal ? null : isolation === "shared" ? (
         <p className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-          <span className="font-medium">
-            Every person's Bots run on one computer.
-          </span>{" "}
-          Each person keeps their own browser profile and folder for each Bot,
-          so logins aren't shared. A command one Bot runs can still read
-          another's files. Set <code>COMPUTER_SUPERVISOR_URL</code> to give each
-          person a computer of their own.
+          {uiNodes(
+            "{{slot0}} Each person keeps their own browser profile and folder for each Bot, so logins aren't shared. A command one Bot runs can still read another's files. Set {{slot1}}to give each person a computer of their own.",
+            [
+              <span key="slot0" className="font-medium">
+                {ui("Every person's Bots run on one computer.")}
+              </span>,
+              <code key="slot1">{"COMPUTER_SUPERVISOR_URL"}</code>,
+            ],
+          )}
         </p>
       ) : isolation === "per-person" ? (
         <p className="mt-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground text-sm">
-          Each person has their own computer, and every Bot they use runs on it,
-          public Bots made by other people included. Each Bot keeps its own
-          browser profile and folder there, but a command one Bot runs can reach
-          anything else on that person's computer. An isolated Bot has a
-          computer of its own.
+          {ui(
+            "Each person has their own computer, and every Bot they use runs on it, public Bots made by other people included. Each Bot keeps its own browser profile and folder there, but a command one Bot runs can reach anything else on that person's computer. An isolated Bot has a computer of its own.",
+          )}
         </p>
       ) : null}
 
@@ -267,7 +280,9 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
 
       <PageSection
         title={
-          personal ? "Your Bots' browsers" : "Computers in this deployment"
+          personal
+            ? ui("Your Bots' browsers")
+            : ui("Computers in this deployment")
         }
       >
         {setState.error ? (
@@ -275,19 +290,22 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
             className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm"
             role="alert"
           >
-            {setState.error.message}
+            {<ErrorDetails error={setState.error} />}
           </p>
         ) : null}
         {computers === null && problem ? (
-          <PageEmpty icon={IconAlertTriangle} title="Couldn't load the list" />
+          <PageEmpty
+            icon={IconAlertTriangle}
+            title={ui("Couldn't load the list")}
+          />
         ) : computers === null ? null : computers.length === 0 ? (
           <PageEmpty
             icon={IconDeviceDesktop}
-            title={personal ? "No browsers yet" : "No computers yet"}
+            title={personal ? ui("No browsers yet") : ui("No computers yet")}
           >
             {personal
-              ? "One starts the first time a Bot opens a page."
-              : "One shows up the first time a Bot opens a page."}
+              ? ui("One starts the first time a Bot opens a page.")
+              : ui("One shows up the first time a Bot opens a page.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -305,12 +323,14 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
                         ? null
                         : ` · ${
                             computer.egress === undefined
-                              ? "Egress not reported"
+                              ? ui("Egress not reported")
                               : computer.egress === null
-                                ? "Leaves directly"
+                                ? ui("Leaves directly")
                                 : `Leaves through ${computer.egress}`
                           }`}
-                      {computer.updateAvailable ? " · Update available" : ""}
+                      {computer.updateAvailable
+                        ? ui(" · Update available")
+                        : ""}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -321,7 +341,7 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
                         size="sm"
                         variant="outline"
                       >
-                        Update computer
+                        {ui("Update computer")}
                       </Button>
                     ) : null}
                     <Button
@@ -330,7 +350,9 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
                       size="sm"
                       variant="outline"
                     >
-                      {busy === rowId(computer) ? "Working…" : "Stop browser"}
+                      {busy === rowId(computer)
+                        ? ui("Working…")
+                        : ui("Stop browser")}
                     </Button>
                     {personal && isOwnBrowser(computer) ? (
                       <Button
@@ -341,7 +363,7 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
                         size="sm"
                         variant="outline"
                       >
-                        Clear browser data
+                        {ui("Clear browser data")}
                       </Button>
                     ) : (
                       <Button
@@ -350,7 +372,7 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
                         size="sm"
                         variant="outline"
                       >
-                        Reset
+                        {ui("Reset")}
                       </Button>
                     )}
                   </ItemActions>
@@ -379,17 +401,28 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
             <DialogTitle>
               {personal
                 ? confirming?.botId
-                  ? `Reset ${nameFor(confirming.botId)}'s browser?`
-                  : "Reset the computer?"
-                : `Reset ${confirming ? titleOf(confirming) : ""}?`}
+                  ? ui("Reset {{value0}}'s browser?", {
+                      value0: String(nameFor(confirming.botId)),
+                    })
+                  : ui("Reset the computer?")
+                : ui("Reset {{value0}}?", {
+                    value0: String(confirming ? titleOf(confirming) : ""),
+                  })}
             </DialogTitle>
             <DialogDescription>
-              {confirming?.kind === "person" && !confirming.botId
-                ? "Every Bot's profile on this person's computer is deleted. Each is signed out of every service and starts clean."
-                : confirming && isOwnBrowser(confirming)
-                  ? "Its profile is deleted. The person is signed out of every site they signed in to in it."
-                  : "Its profile is deleted. The Bot is signed out of every service and starts clean."}{" "}
-              You can't undo this.
+              {uiNodes("{{slot0}} You can't undo this.", [
+                confirming?.kind === "person" && !confirming.botId
+                  ? ui(
+                      "Every Bot's profile on this person's computer is deleted. Each is signed out of every service and starts clean.",
+                    )
+                  : confirming && isOwnBrowser(confirming)
+                    ? ui(
+                        "Its profile is deleted. The person is signed out of every site they signed in to in it.",
+                      )
+                    : ui(
+                        "Its profile is deleted. The Bot is signed out of every service and starts clean.",
+                      ),
+              ])}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -398,7 +431,7 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
               size="sm"
               variant="ghost"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={confirming !== null && busy === rowId(confirming)}
@@ -409,8 +442,8 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
               variant="destructive"
             >
               {confirming !== null && busy === rowId(confirming)
-                ? "Resetting…"
-                : "Reset it"}
+                ? ui("Resetting…")
+                : ui("Reset it")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -431,12 +464,14 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Update {confirmingUpdate ? titleOf(confirmingUpdate) : ""}?
+              {ui("Update")} {confirmingUpdate ? titleOf(confirmingUpdate) : ""}
+              ?
             </DialogTitle>
             <DialogDescription>
-              It moves to the computer image {paths.deploymentName} now runs.
-              Its files and sign-ins are kept. If it's running, it restarts and
-              stops what it's doing.
+              {uiNodes(
+                "It moves to the computer image {{slot0}}now runs. Its files and sign-ins are kept. If it's running, it restarts and stops what it's doing.",
+                [paths.deploymentName],
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -445,7 +480,7 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
               size="sm"
               variant="ghost"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={
@@ -457,8 +492,8 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
               size="sm"
             >
               {confirmingUpdate !== null && busy === rowId(confirmingUpdate)
-                ? "Updating…"
-                : "Update it"}
+                ? ui("Updating…")
+                : ui("Update it")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -466,16 +501,21 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
 
       {personal ? (
         <p className="mt-4 text-muted-foreground text-sm">
-          <strong>Stop browser</strong> closes a browser and keeps its sign-ins.
-          It starts again the next time it's needed. <strong>Reset</strong>{" "}
-          deletes a Bot's browser profile and signs it out of everything.{" "}
+          <strong>{ui("Stop browser")}</strong>{" "}
+          {ui(
+            "closes a browser and keeps its sign-ins. It starts again the next time it's needed.",
+          )}{" "}
+          <strong>{ui("Reset")}</strong>{" "}
+          {ui(
+            "deletes a Bot's browser profile and signs it out of everything.",
+          )}{" "}
           {computers?.some(isOwnBrowser) ? (
             <>
-              <strong>Clear browser data</strong> does the same for your OpenBot
-              browser.{" "}
+              <strong>{ui("Clear browser data")}</strong>{" "}
+              {ui("does the same for your OpenBot browser.")}{" "}
             </>
           ) : null}
-          Each shows in{" "}
+          {ui("Each shows in")}{" "}
           <Link className="underline" {...paths.audit()}>
             {paths.auditLabel}
           </Link>
@@ -483,12 +523,18 @@ export function ComputersPage({ children }: { children?: ReactNode } = {}) {
         </p>
       ) : (
         <p className="mt-4 text-muted-foreground text-sm">
-          <strong>Stop</strong> closes the computer's browsers and keeps their
-          logins. It starts again the next time a Bot needs it.{" "}
-          <strong>Reset</strong> deletes the profiles and signs every Bot on it
-          out of everything. <strong>Update computer</strong> shows when a
-          computer runs an older image. It moves the computer to the new one and
-          keeps its files and sign-ins. All three show in{" "}
+          <strong>{ui("Stop")}</strong>{" "}
+          {ui(
+            "closes the computer's browsers and keeps their logins. It starts again the next time a Bot needs it.",
+          )}{" "}
+          <strong>{ui("Reset")}</strong>{" "}
+          {ui(
+            "deletes the profiles and signs every Bot on it out of everything.",
+          )}{" "}
+          <strong>{ui("Update computer")}</strong>{" "}
+          {ui(
+            "shows when a computer runs an older image. It moves the computer to the new one and keeps its files and sign-ins. All three show in",
+          )}{" "}
           <Link className="underline" {...paths.audit()}>
             {paths.auditLabel}
           </Link>
@@ -540,6 +586,7 @@ function HostFoldersSection({
   revokingGrantId,
   stopping,
 }: HostFoldersSectionProps) {
+  useLocale();
   const paths = useManagePaths();
   const botIds = Array.from(
     new Set([
@@ -552,8 +599,10 @@ function HostFoldersSection({
 
   return (
     <PageSection
-      description="Choose folders a Bot can read on this computer. The desktop app asks before each edit or command. Access ends when you stop OpenBot."
-      title="Folders on this computer"
+      description={ui(
+        "Choose folders a Bot can read on this computer. The desktop app asks before each edit or command. Access ends when you stop OpenBot.",
+      )}
+      title={ui("Folders on this computer")}
     >
       {problem ? (
         <p
@@ -566,19 +615,21 @@ function HostFoldersSection({
 
       {desktop && !connected && !loading ? (
         <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-          The desktop app is offline. Open it to approve folders or run
-          commands.
+          {ui(
+            "The desktop app is offline. Open it to approve folders or run commands.",
+          )}
         </p>
       ) : null}
 
       {loading ? null : !desktop ? (
-        <PageEmpty icon={IconDeviceDesktop} title="Needs OpenBot Desktop">
-          This OpenBot isn't running in the desktop app. Use OpenBot Desktop to
-          let Bots read folders on this computer.
+        <PageEmpty icon={IconDeviceDesktop} title={ui("Needs OpenBot Desktop")}>
+          {ui(
+            "This OpenBot isn't running in the desktop app. Use OpenBot Desktop to let Bots read folders on this computer.",
+          )}
         </PageEmpty>
       ) : botIds.length === 0 ? (
-        <PageEmpty icon={IconBolt} title="No Bots yet">
-          Create one, then choose its folders.
+        <PageEmpty icon={IconBolt} title={ui("No Bots yet")}>
+          {ui("Create one, then choose its folders.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -606,7 +657,9 @@ function HostFoldersSection({
                     size="sm"
                     variant="outline"
                   >
-                    {requestingBotId === botId ? "Waiting…" : "Choose folder"}
+                    {requestingBotId === botId
+                      ? ui("Waiting…")
+                      : ui("Choose folder")}
                   </Button>
                 </ItemActions>
               </Item>
@@ -619,8 +672,9 @@ function HostFoldersSection({
       {desktop ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-muted-foreground text-sm">
           <p>
-            Folders are read-only. When a Bot needs to write, the desktop app
-            asks you first.
+            {ui(
+              "Folders are read-only. When a Bot needs to write, the desktop app asks you first.",
+            )}
           </p>
           <div className="flex items-center gap-3">
             <Button
@@ -629,10 +683,10 @@ function HostFoldersSection({
               size="sm"
               variant="outline"
             >
-              {stopping ? "Stopping…" : "Stop folder access"}
+              {stopping ? ui("Stopping…") : ui("Stop folder access")}
             </Button>
             <Link className="underline" {...paths.audit()}>
-              Open {paths.auditLabel}
+              {ui("Open")} {paths.auditLabel}
             </Link>
           </div>
         </div>
@@ -656,6 +710,7 @@ function FolderGrantList({
   personal: boolean;
   revokingGrantId: string | null;
 }) {
+  useLocale();
   const botGrants = grants.filter(
     (grant) => grant.botId === botId && !grant.revoked,
   );
@@ -674,8 +729,10 @@ function FolderGrantList({
             <p className="truncate font-medium text-sm">{grant.displayName}</p>
             <p className="text-muted-foreground text-xs">
               {personal
-                ? "Read-only"
-                : `Approved by ${ownerLabel(grant)} · Read-only`}
+                ? ui("Read-only")
+                : ui("Approved by {{value0}} · Read-only", {
+                    value0: String(ownerLabel(grant)),
+                  })}
             </p>
           </div>
           <Button
@@ -684,7 +741,7 @@ function FolderGrantList({
             size="sm"
             variant="ghost"
           >
-            {revokingGrantId === grant.id ? "Revoking…" : "Revoke"}
+            {revokingGrantId === grant.id ? ui("Revoking…") : ui("Revoke")}
           </Button>
         </div>
       ))}
@@ -714,7 +771,7 @@ function summaryFor(
     parts.push(`${active} read-only ${active === 1 ? "folder" : "folders"}`);
   if (waiting > 0)
     parts.push(`${waiting} pending ${waiting === 1 ? "request" : "requests"}`);
-  return parts.length > 0 ? parts.join(" · ") : "No folders approved.";
+  return parts.length > 0 ? parts.join(" · ") : ui("No folders approved.");
 }
 
 /** The Bot id Stop folder access is addressed to: every Bot at once. */
@@ -738,30 +795,43 @@ function pendingSentence(
 ): string {
   switch (request.kind) {
     case "list_files":
-      return "Listing files.";
+      return ui("Listing files.");
     case "read_file":
-      return "Reading a file.";
+      return ui("Reading a file.");
     case "cancel":
     case "stop":
-      return "Stopping folder work.";
+      return ui("Stopping folder work.");
   }
   if (personal) {
     switch (request.kind) {
       case "write_file":
-        return "A file change is waiting for you. OpenBot Desktop is asking you in a window.";
+        return ui(
+          "A file change is waiting for you. OpenBot Desktop is asking you in a window.",
+        );
       case "run_command":
-        return "A command is waiting for you or still running. OpenBot Desktop asks you in a window.";
+        return ui(
+          "A command is waiting for you or still running. OpenBot Desktop asks you in a window.",
+        );
       default:
-        return "Folder access is waiting for you. OpenBot Desktop is asking you in a window.";
+        return ui(
+          "Folder access is waiting for you. OpenBot Desktop is asking you in a window.",
+        );
     }
   }
   const owner = ownerLabel(request);
   switch (request.kind) {
     case "write_file":
-      return `File change waiting for approval from ${owner}, or to finish.`;
+      return ui(
+        "File change waiting for approval from {{value0}}, or to finish.",
+        { value0: String(owner) },
+      );
     case "run_command":
-      return `Command waiting for approval from ${owner}, or to finish.`;
+      return ui("Command waiting for approval from {{value0}}, or to finish.", {
+        value0: String(owner),
+      });
     default:
-      return `Folder access waiting for approval from ${owner}.`;
+      return ui("Folder access waiting for approval from {{value0}}.", {
+        value0: String(owner),
+      });
   }
 }

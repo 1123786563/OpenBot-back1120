@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowUp,
   IconLoader2,
@@ -25,6 +26,7 @@ export function DictationButton({
   /** Live dictation began: the caret goes to the box, so Enter stops it there. */
   onStarted?: () => void;
 }) {
+  useLocale();
   if (!dictation.available) return null;
   if (dictation.mode === "live")
     return (
@@ -36,12 +38,14 @@ export function DictationButton({
     );
   return (
     <Button
-      aria-label="Dictate a message"
+      aria-label={ui("Dictate a message")}
       data-slot="composer-dictate"
       title={
         dictation.supported
-          ? "Dictate a message"
-          : "Dictation needs a supported browser and a secure (HTTPS) connection"
+          ? ui("Dictate a message")
+          : ui(
+              "Dictation needs a supported browser and a secure (HTTPS) connection",
+            )
       }
       className="size-8 shrink-0 self-end rounded-full"
       disabled={disabled || !dictation.supported || dictation.busy}
@@ -69,13 +73,14 @@ function LiveDictationButton({
   disabled: boolean;
   onStarted?: () => void;
 }) {
+  useLocale();
   const { session, state, active } = dictation.live;
   if (!active)
     return (
       <Button
-        aria-label="Dictate a message"
+        aria-label={ui("Dictate a message")}
         data-slot="composer-dictate"
-        title="Dictate a message"
+        title={ui("Dictate a message")}
         className="size-8 shrink-0 self-end rounded-full"
         disabled={disabled}
         onClick={() => {
@@ -92,10 +97,10 @@ function LiveDictationButton({
   const stopping = state.phase === "stopping";
   return (
     <Button
-      aria-label={stopping ? "Finishing dictation" : "Stop dictation"}
+      aria-label={stopping ? ui("Finishing dictation") : ui("Stop dictation")}
       data-slot="composer-dictate-stop"
       data-state={state.phase}
-      title="Stop dictation"
+      title={ui("Stop dictation")}
       className="relative size-8 shrink-0 self-end rounded-full bg-muted text-foreground hover:bg-muted"
       disabled={stopping}
       onClick={session.stop}
@@ -127,18 +132,23 @@ function LiveDictationButton({
 
 /** What live dictation says above the box: that it is listening, waiting on the system, or a problem. */
 export function LiveDictationNotice({ dictation }: { dictation: Dictation }) {
+  useLocale();
   const { state, session } = dictation.live;
   if (dictation.mode !== "live") return null;
   if (state.phase === "listening" || state.phase === "stopping")
     return (
       <span className="sr-only" role="status">
-        {state.phase === "listening" ? "Listening" : "Finishing dictation"}
+        {state.phase === "listening"
+          ? ui("Listening")
+          : ui("Finishing dictation")}
       </span>
     );
   if (state.phase === "preparing")
     return (
       <p className="pb-2 text-sm text-muted-foreground" role="status">
-        Waiting for permission to use the microphone and speech recognition.
+        {ui(
+          "Waiting for permission to use the microphone and speech recognition.",
+        )}
       </p>
     );
   if (state.phase !== "error") return null;
@@ -152,7 +162,7 @@ export function LiveDictationNotice({ dictation }: { dictation: Dictation }) {
         {state.error}
       </p>
       <Button
-        aria-label="Dismiss"
+        aria-label={ui("Dismiss")}
         className="shrink-0"
         onClick={session.release}
         size="icon-xs"
@@ -177,6 +187,7 @@ export function DictationSurface({
   children: ReactNode;
   className?: string;
 }) {
+  useLocale();
   return (
     <div className={cn("min-w-0", className)}>
       <div className="relative min-w-0">
@@ -217,6 +228,7 @@ function RecordingControls({
   dictation: Dictation;
   canSend: boolean;
 }) {
+  useLocale();
   const { state, session } = dictation;
   const reduceMotion = useReducedMotion();
   const cancel = useRef<HTMLButtonElement>(null);
@@ -240,9 +252,9 @@ function RecordingControls({
     >
       <Button
         ref={cancel}
-        aria-label="Cancel dictation"
+        aria-label={ui("Cancel dictation")}
         data-slot="composer-dictate-cancel"
-        title="Cancel dictation"
+        title={ui("Cancel dictation")}
         size="icon"
         type="button"
         variant="ghost"
@@ -268,12 +280,12 @@ function RecordingControls({
           </p>
         ) : state.phase === "requesting" ? (
           <p className="text-sm text-muted-foreground" role="status">
-            Waiting for microphone permission…
+            {ui("Waiting for microphone permission…")}
           </p>
         ) : (
           <div className="flex min-w-0 items-center gap-3">
             <span className="sr-only" role="status">
-              {transcribing ? "Transcribing…" : "Listening"}
+              {transcribing ? ui("Transcribing…") : ui("Listening")}
             </span>
             <LiveWaveform
               stream={state.stream}
@@ -283,7 +295,7 @@ function RecordingControls({
             />
             <span
               role="timer"
-              aria-label="Recording duration"
+              aria-label={ui("Recording duration")}
               className="shrink-0 text-xs text-muted-foreground tabular-nums"
             >
               {time}
@@ -307,14 +319,14 @@ function RecordingControls({
               void (state.canRetry ? session.retry() : session.start())
             }
           >
-            {state.canRetry ? "Retry" : "Record again"}
+            {state.canRetry ? ui("Retry") : ui("Record again")}
           </Button>
         ) : (
           <div className="flex shrink-0 items-center gap-2">
             <Button
-              aria-label="Stop and transcribe"
+              aria-label={ui("Stop and transcribe")}
               data-slot="composer-dictate-stop"
-              title="Stop and add to draft"
+              title={ui("Stop and add to draft")}
               disabled={!recording}
               size="icon"
               type="button"
@@ -325,8 +337,8 @@ function RecordingControls({
               <IconPlayerStopFilled className="size-3.5" />
             </Button>
             <Button
-              aria-label="Transcribe and send"
-              title="Transcribe and send"
+              aria-label={ui("Transcribe and send")}
+              title={ui("Transcribe and send")}
               disabled={!recording || !canSend}
               size="icon"
               type="button"

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconKey,
   IconLock,
@@ -56,6 +58,7 @@ export function SignInForm({
   /** Drawn in the chat's sign-in dialog rather than on the page of its own. */
   inDialog?: boolean;
 }) {
+  useLocale();
   const request = useQuery({
     ...signInRequestQueryOptions(requestId),
     // Polled so a takeover finishing elsewhere, or the request expiring, shows here.
@@ -87,7 +90,7 @@ export function SignInForm({
   if (request.error)
     return (
       <p className="text-destructive text-sm" role="alert">
-        {request.error.message}
+        {<ErrorDetails error={request.error} />}
       </p>
     );
   const data = request.data;
@@ -110,10 +113,10 @@ export function SignInForm({
     return (
       <PageSection
         className={section}
-        title={data.status === "signed_in" ? "Signed in" : "Closed"}
+        title={data.status === "signed_in" ? ui("Signed in") : ui("Closed")}
       >
         <p className="text-muted-foreground text-sm">
-          {data.outcome ?? "This sign-in has ended."}
+          {data.outcome ?? ui("This sign-in has ended.")}
         </p>
       </PageSection>
     );
@@ -122,8 +125,10 @@ export function SignInForm({
     return (
       <PageSection
         className={section}
-        title="Enter the verification code"
-        description="The site sent a verification code. Enter it to finish signing in."
+        title={ui("Enter the verification code")}
+        description={ui(
+          "The site sent a verification code. Enter it to finish signing in.",
+        )}
       >
         <form
           className="mt-4 flex flex-col gap-3"
@@ -140,8 +145,9 @@ export function SignInForm({
           }}
         >
           <label className="flex flex-col gap-1 text-sm" htmlFor={`${id}-code`}>
-            Verification code
+            {ui("Verification code")}
             <Input
+              key="slot0"
               id={`${id}-code`}
               autoComplete="one-time-code"
               inputMode="numeric"
@@ -165,7 +171,7 @@ export function SignInForm({
               disabled={busy}
               onClick={() => cancel.mutate(requestId)}
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               size="sm"
@@ -174,12 +180,13 @@ export function SignInForm({
               disabled={busy}
               onClick={() => takeOver.mutate(requestId)}
             >
-              <IconPointer />
-              Take over to finish
+              {uiNodes("{{slot0}}Take over to finish", [
+                <IconPointer key="slot0" />,
+              ])}
             </Button>
             <Button size="sm" type="submit" disabled={busy || !code.trim()}>
               <IconShieldCheck />
-              {submitCode.isPending ? "Checking…" : "Finish signing in"}
+              {submitCode.isPending ? ui("Checking…") : ui("Finish signing in")}
             </Button>
           </div>
         </form>
@@ -190,8 +197,10 @@ export function SignInForm({
     return (
       <PageSection
         className={section}
-        title="Sign in by hand"
-        description="Open the Bot's browser and sign in yourself. Then choose I've signed in and the Bot carries on."
+        title={ui("Sign in by hand")}
+        description={ui(
+          "Open the Bot's browser and sign in yourself. Then choose I've signed in and the Bot carries on.",
+        )}
       >
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button
@@ -200,7 +209,7 @@ export function SignInForm({
             disabled={busy}
             onClick={() => cancel.mutate(requestId)}
           >
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             size="sm"
@@ -209,14 +218,14 @@ export function SignInForm({
               <Link to="/bot" search={{ agent: data.botId, watch: true }} />
             }
           >
-            Open the Bot's browser
+            {ui("Open the Bot's browser")}
           </Button>
           <Button
             size="sm"
             disabled={busy}
             onClick={() => finish.mutate(requestId)}
           >
-            {finish.isPending ? "Finishing…" : "I've signed in"}
+            {finish.isPending ? ui("Finishing…") : ui("I've signed in")}
           </Button>
         </div>
         {failure ? (
@@ -237,8 +246,11 @@ export function SignInForm({
       {data.savedLogins.length > 0 ? (
         <PageSection
           className={section}
-          title="Use a saved login"
-          description={`Pick one to use it for this sign-in to ${data.origin}.`}
+          title={ui("Use a saved login")}
+          description={ui(
+            "Pick one to use it for this sign-in to {{value0}}.",
+            { value0: String(data.origin) },
+          )}
         >
           <PageRows>
             {data.savedLogins.map((login, index) => (
@@ -263,7 +275,7 @@ export function SignInForm({
                         })
                       }
                     >
-                      Confirm and sign in
+                      {ui("Confirm and sign in")}
                     </Button>
                   </ItemActions>
                 </Item>
@@ -274,8 +286,10 @@ export function SignInForm({
       ) : null}
       <PageSection
         className={section}
-        title="Enter your login"
-        description="This goes straight into the Bot's browser. The Bot only learns whether it worked."
+        title={ui("Enter your login")}
+        description={ui(
+          "This goes straight into the Bot's browser. The Bot only learns whether it worked.",
+        )}
       >
         <form
           className="mt-4 flex flex-col gap-3"
@@ -303,8 +317,9 @@ export function SignInForm({
             className="flex flex-col gap-1 text-sm"
             htmlFor={`${id}-username`}
           >
-            Username or email
+            {ui("Username or email")}
             <Input
+              key="slot0"
               id={`${id}-username`}
               autoComplete="username"
               name="username"
@@ -316,8 +331,9 @@ export function SignInForm({
             className="flex flex-col gap-1 text-sm"
             htmlFor={`${id}-password`}
           >
-            Password
+            {ui("Password")}
             <Input
+              key="slot0"
               id={`${id}-password`}
               autoComplete="current-password"
               name="password"
@@ -333,11 +349,12 @@ export function SignInForm({
               htmlFor={`${id}-save`}
             >
               <Checkbox
+                key="slot0"
                 id={`${id}-save`}
                 checked={save}
                 onCheckedChange={(checked) => setSave(checked === true)}
               />
-              Save to Passwords
+              {ui("Save to Passwords")}
             </label>
           ) : null}
           {failure ? (
@@ -353,7 +370,7 @@ export function SignInForm({
               disabled={busy}
               onClick={() => cancel.mutate(requestId)}
             >
-              Decline
+              {ui("Decline")}
             </Button>
             <Button
               size="sm"
@@ -362,12 +379,13 @@ export function SignInForm({
               disabled={busy}
               onClick={() => takeOver.mutate(requestId)}
             >
-              <IconPointer />
-              Take over to sign in
+              {uiNodes("{{slot0}}Take over to sign in", [
+                <IconPointer key="slot0" />,
+              ])}
             </Button>
             <Button size="sm" type="submit" disabled={busy || !password}>
               <IconLock />
-              {submit.isPending ? "Signing in…" : "Sign in"}
+              {submit.isPending ? ui("Signing in…") : ui("Sign in")}
             </Button>
           </div>
         </form>

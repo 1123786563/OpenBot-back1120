@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconCheck,
   IconCode,
@@ -60,7 +61,9 @@ export const Route = createFileRoute("/_authed/admin/boundaries_/new")({
 });
 
 const BACK = {
-  label: "Boundaries",
+  get label() {
+    return ui("Boundaries");
+  },
   linkProps: { to: "/admin/boundaries" as const },
 };
 
@@ -81,6 +84,7 @@ type Start = RuleTemplate | "describe" | "custom";
  * never press.
  */
 function NewRulePage() {
+  useLocale();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const stored = useQuery(actionPolicyQueryOptions());
@@ -213,10 +217,12 @@ function NewRulePage() {
   return (
     <PageShell
       backButton={BACK}
-      description="Define an action that no Bot may take. This boundary applies to every Bot’s next action."
-      title="Add rule"
+      description={ui(
+        "Define an action that no Bot may take. This boundary applies to every Bot’s next action.",
+      )}
+      title={ui("Add rule")}
     >
-      <PageSection title="Start from">
+      <PageSection title={ui("Start from")}>
         <PageRows>
           {options.map((option, index) => {
             const custom = option.value === "custom";
@@ -249,17 +255,19 @@ function NewRulePage() {
                       {template
                         ? template.name
                         : describe
-                          ? "Describe it in words"
-                          : "Write your own"}
+                          ? ui("Describe it in words")
+                          : ui("Write your own")}
                     </ItemTitle>
                     <ItemDescription>
                       {template
                         ? taken
-                          ? "Already one of your rules."
+                          ? ui("Already one of your rules.")
                           : template.description
                         : describe
-                          ? "Say what no Bot may do, and your model writes the rule."
-                          : "Describe the action yourself, in CEL."}
+                          ? ui(
+                              "Say what no Bot may do, and your model writes the rule.",
+                            )
+                          : ui("Describe the action yourself, in CEL.")}
                     </ItemDescription>
                   </ItemContent>
                   {selected ? (
@@ -276,7 +284,7 @@ function NewRulePage() {
       </PageSection>
 
       {chosen ? (
-        <PageSection title="The rule">
+        <PageSection title={ui("The rule")}>
           <form
             className="mt-4"
             noValidate
@@ -300,13 +308,13 @@ function NewRulePage() {
                     )}
                     variant="outline"
                   >
-                    Cancel
+                    {ui("Cancel")}
                   </Button>
                   <Button
                     disabled={!ready || savePolicy.isPending}
                     type="submit"
                   >
-                    {savePolicy.isPending ? "Adding…" : "Add rule"}
+                    {savePolicy.isPending ? ui("Adding…") : ui("Add rule")}
                   </Button>
                 </>
               }
@@ -316,21 +324,21 @@ function NewRulePage() {
                   <DescribeRule onWritten={takeWritten} />
                 ) : null}
                 <Field>
-                  <FieldLabel htmlFor="rule-name">Name</FieldLabel>
+                  <FieldLabel htmlFor="rule-name">{ui("Name")}</FieldLabel>
                   <Input
                     id="rule-name"
                     maxLength={80}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="Never delete files"
+                    placeholder={ui("Never delete files")}
                     value={name}
                   />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="rule-description">
-                    What it stops
+                    {ui("What it stops")}
                   </FieldLabel>
                   <FieldDescription>
-                    One sentence, shown under the name in the list.
+                    {ui("One sentence, shown under the name in the list.")}
                   </FieldDescription>
                   <Input
                     id="rule-description"
@@ -340,10 +348,13 @@ function NewRulePage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="rule-expression">Rule</FieldLabel>
+                  <FieldLabel htmlFor="rule-expression">
+                    {ui("Rule")}
+                  </FieldLabel>
                   <FieldDescription>
-                    Written in CEL. OpenBot checks the rule before it's added,
-                    so a typo can't stop every action.
+                    {ui(
+                      "Written in CEL. OpenBot checks the rule before it's added, so a typo can't stop every action.",
+                    )}
                   </FieldDescription>
                   <Textarea
                     autoCapitalize="off"
@@ -351,13 +362,15 @@ function NewRulePage() {
                     className="min-h-20 font-mono text-xs"
                     id="rule-expression"
                     onChange={(event) => setRule(event.target.value)}
-                    placeholder='tool.name == "computer_click" && contains(element.name, "delete")'
+                    placeholder={ui(
+                      'tool.name == "computer_click" && contains(element.name, "delete")',
+                    )}
                     spellCheck={false}
                     value={rule}
                   />
                   {duplicate ? (
                     <p className="text-destructive text-sm">
-                      This rule is already in place.
+                      {ui("This rule is already in place.")}
                     </p>
                   ) : null}
                   {chosen !== "custom" && chosen !== "describe" ? (
@@ -397,10 +410,11 @@ function NewRulePage() {
  * paragraph of attribute names read by everybody to find out what the screen was for.
  */
 function RuleReference() {
+  useLocale();
   return (
     <details className="text-sm">
       <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-        What a rule can check
+        {ui("What a rule can check")}
       </summary>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
         {RULE_ATTRIBUTES.map((attribute) => (
@@ -413,11 +427,13 @@ function RuleReference() {
         ))}
       </dl>
       <p className="mt-3 text-muted-foreground">
-        A rule that names something an action doesn't have, such as{" "}
-        <code className="font-mono text-xs">key</code> on a click, counts as a
-        match. Name the tool first so the rest is only checked where it applies:{" "}
+        {ui("A rule that names something an action doesn't have, such as")}{" "}
+        <code className="font-mono text-xs">{"key"}</code>{" "}
+        {ui(
+          "on a click, counts as a match. Name the tool first so the rest is only checked where it applies:",
+        )}{" "}
         <code className="font-mono text-xs">
-          tool.name == "computer_key" && key == "Enter"
+          {'tool.name == "computer_key" && key == "Enter"'}
         </code>
         .
       </p>

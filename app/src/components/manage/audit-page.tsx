@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconAlertTriangle,
   IconBan,
@@ -63,24 +64,38 @@ import { cn } from "@/lib/utils";
  * answered.
  */
 const FILTERS = [
-  { label: "Everything", icon: IconList, search: "" },
   {
-    label: "Computer actions",
+    get label() {
+      return ui("Everything");
+    },
+    icon: IconList,
+    search: "",
+  },
+  {
+    get label() {
+      return ui("Computer actions");
+    },
     icon: IconDeviceDesktop,
     search: eventTypeFilter(COMPUTER_ACTION_EVENT_TYPES),
   },
   {
-    label: "Blocked",
+    get label() {
+      return ui("Blocked");
+    },
     icon: IconBan,
     search: eventTypeFilter(REFUSED_EVENT_TYPES),
   },
   {
-    label: "Did not happen",
+    get label() {
+      return ui("Did not happen");
+    },
     icon: IconAlertTriangle,
     search: eventTypeFilter(DID_NOT_HAPPEN_EVENT_TYPES),
   },
   {
-    label: "Nobody watching",
+    get label() {
+      return ui("Nobody watching");
+    },
     icon: IconEyeOff,
     search: "?initiatorKind=routine,handoff,responsibility,memory",
   },
@@ -170,6 +185,7 @@ export function AuditPage({
   description?: string;
   onClearBot?: () => void;
 } = {}) {
+  useLocale();
   const paths = useManagePaths();
   const [view, setView] = useState<string>(FILTERS[0].search);
   /*
@@ -240,7 +256,7 @@ export function AuditPage({
     setExportCapped(null);
     try {
       const response = await client(auditExportUrl(search), {
-        fallback: "Couldn't export these events. Try again.",
+        fallback: ui("Couldn't export these events. Try again."),
       });
       // A file that stopped early must say so, or it reads as the whole trail.
       const capped = Number(response.headers.get("x-audit-export-truncated"));
@@ -307,7 +323,7 @@ export function AuditPage({
           {events.isPending ? null : events.isError &&
             !events.isFetchNextPageError ? (
             <p className="px-4 text-destructive text-sm" role="alert">
-              Couldn't load these events. Reload the page.
+              {ui("Couldn't load these events. Reload the page.")}
             </p>
           ) : (
             <AuditTable
@@ -318,7 +334,7 @@ export function AuditPage({
                   <div className="flex flex-col items-center gap-2 py-3">
                     {events.isFetchNextPageError ? (
                       <p className="text-destructive text-sm" role="alert">
-                        Couldn't load older events. Try again.
+                        {ui("Couldn't load older events. Try again.")}
                       </p>
                     ) : null}
                     <Button
@@ -328,8 +344,8 @@ export function AuditPage({
                       variant="outline"
                     >
                       {events.isFetchingNextPage
-                        ? "Loading…"
-                        : "Show older events"}
+                        ? ui("Loading…")
+                        : ui("Show older events")}
                     </Button>
                   </div>
                 ) : null
@@ -346,9 +362,11 @@ export function AuditPage({
                    * group: the pressed one is filled, the rest sit flat inside the same outline.
                    */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-muted-foreground text-xs">View</span>
+                    <span className="text-muted-foreground text-xs">
+                      {ui("View")}
+                    </span>
                     <fieldset
-                      aria-label="View"
+                      aria-label={ui("View")}
                       className="inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5"
                     >
                       {FILTERS.map((filter) => {
@@ -379,10 +397,10 @@ export function AuditPage({
                     <div className="relative w-64">
                       <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                       <Input
-                        aria-label="Search events"
+                        aria-label={ui("Search events")}
                         className="h-8 pl-8"
                         onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Search events…"
+                        placeholder={ui("Search events…")}
                         type="search"
                         value={query}
                       />
@@ -390,13 +408,17 @@ export function AuditPage({
                     {/* Beside the other filters, on the row that wraps: it narrows what is asked for. */}
                     {bot && !ask ? (
                       <Button
-                        aria-label={`Show every Bot, not only ${nameFor(bot)}`}
+                        aria-label={ui("Show every Bot, not only {{value0}}", {
+                          value0: String(nameFor(bot)),
+                        })}
                         onClick={onClearBot}
                         size="sm"
                         variant="outline"
                       >
-                        Only {nameFor(bot)}
-                        <IconX />
+                        {uiNodes("Only {{slot0}}{{slot1}}", [
+                          nameFor(bot),
+                          <IconX key="slot1" />,
+                        ])}
                       </Button>
                     ) : null}
                     {/*
@@ -427,8 +449,9 @@ export function AuditPage({
                         size="sm"
                         variant="outline"
                       >
-                        <IconRefresh />
-                        Refresh
+                        {uiNodes("{{slot0}}Refresh", [
+                          <IconRefresh key="slot0" />,
+                        ])}
                       </Button>
                       <Button
                         disabled={exporting}
@@ -437,7 +460,7 @@ export function AuditPage({
                         variant="outline"
                       >
                         <IconDownload />
-                        {exporting ? "Exporting…" : "Export CSV"}
+                        {exporting ? ui("Exporting…") : ui("Export CSV")}
                       </Button>
                     </div>
                   </div>
@@ -448,14 +471,15 @@ export function AuditPage({
                   ) : null}
                   {exportCapped ? (
                     <p className="text-muted-foreground text-sm" role="status">
-                      The file has the newest {exportCapped.toLocaleString()}{" "}
-                      events, not all of them. Narrow the filter or dates to
-                      export the rest.
+                      {uiNodes(
+                        "The file has the newest {{slot0}} events, not all of them. Narrow the filter or dates to export the rest.",
+                        [exportCapped.toLocaleString(getLocale())],
+                      )}
                     </p>
                   ) : null}
                   {rows.length === 0 ? (
-                    <PageEmpty icon={IconSearch} title="No matches">
-                      No events match this filter yet.
+                    <PageEmpty icon={IconSearch} title={ui("No matches")}>
+                      {ui("No events match this filter yet.")}
                     </PageEmpty>
                   ) : null}
                 </div>

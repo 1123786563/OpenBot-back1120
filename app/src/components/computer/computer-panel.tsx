@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconDeviceDesktop, IconTerminal2 } from "@tabler/icons-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +34,7 @@ export function ComputerViewPanel({
   agentId: string;
   name?: string;
 }) {
+  useLocale();
   const following = useSyncExternalStore(
     subscribeToViews,
     () => followedView(agentId),
@@ -67,7 +69,7 @@ export function ComputerViewPanel({
     control?.holder === "human" && !control.transitioning && !someoneElse;
 
   return (
-    <section aria-label="Computer sidebar" className="p-4">
+    <section aria-label={ui("Computer sidebar")} className="p-4">
       <Tabs
         onValueChange={(next) =>
           setPicked({ agentId, view: next as PanelView })
@@ -75,14 +77,14 @@ export function ComputerViewPanel({
         value={view}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList aria-label="Computer view">
+          <TabsList aria-label={ui("Computer view")}>
             <TabsTrigger value="screen">
               <IconDeviceDesktop data-icon="inline-start" />
-              Screen
+              {ui("Screen")}
             </TabsTrigger>
             <TabsTrigger value="terminal">
               <IconTerminal2 data-icon="inline-start" />
-              Terminal
+              {ui("Terminal")}
             </TabsTrigger>
           </TabsList>
           {youHaveIt ? (
@@ -90,7 +92,7 @@ export function ComputerViewPanel({
               className="rounded-full bg-amber-500/15 px-2.5 py-1 font-medium text-amber-800 text-xs dark:text-amber-300"
               role="status"
             >
-              You have control
+              {ui("You have control")}
             </span>
           ) : null}
         </div>
@@ -102,7 +104,7 @@ export function ComputerViewPanel({
         </TabsContent>
       </Tabs>
       <div className="mt-8">
-        <h3 className="mb-2 font-medium text-sm">Activity</h3>
+        <h3 className="mb-2 font-medium text-sm">{ui("Activity")}</h3>
         <ActivityLog computerId={agentId} />
       </div>
     </section>

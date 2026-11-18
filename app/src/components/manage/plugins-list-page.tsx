@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconApps,
   IconBrandGoogleDrive,
@@ -79,6 +80,7 @@ function VendorMark({
   logo?: string | null;
   name: string;
 }) {
+  useLocale();
   const Brand = MARKS[id];
   if (Brand) return <Brand className="size-4" />;
   return <PluginLogo logo={logo} name={name} />;
@@ -107,12 +109,12 @@ function summaryFor(
   auth: CatalogueItem["auth"] | undefined,
   youConnected: boolean,
 ): string {
-  if (auth === "user-oauth" && !youConnected) return "Not connected";
-  if (server.tools.length === 0) return "No tools yet";
+  if (auth === "user-oauth" && !youConnected) return ui("Not connected");
+  if (server.tools.length === 0) return ui("No tools yet");
 
   const bots = new Set(server.tools.flatMap((tool) => tool.grantedTo)).size;
   const tools = `${server.tools.length} ${server.tools.length === 1 ? "tool" : "tools"}`;
-  if (bots === 0) return `${tools} · no Bots`;
+  if (bots === 0) return ui("{{value0}} · no Bots", { value0: String(tools) });
   return `${tools} · ${bots} ${bots === 1 ? "Bot" : "Bots"}`;
 }
 
@@ -125,6 +127,7 @@ export function PluginsListPage({
 }: {
   children?: React.ReactNode;
 } = {}) {
+  useLocale();
   const paths = useManagePaths();
   const plugins = useQuery(pluginsPageQueryOptions());
   const connections = useQuery(connectionsQueryOptions());
@@ -161,13 +164,15 @@ export function PluginsListPage({
 
   return (
     <PageShell
-      description="Connect services for your company, then choose which Bots can use each service’s tools."
-      title="Plugins"
+      description={ui(
+        "Connect services for your company, then choose which Bots can use each service’s tools.",
+      )}
+      title={ui("Plugins")}
     >
       {/* Pending, error, empty, rows — pending first, so no sentence asserts anything mid-fetch. */}
       {plugins.isPending ? null : plugins.error ? (
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load plugins. Reload the page.
+          {ui("Couldn't load plugins. Reload the page.")}
         </p>
       ) : (
         <>
@@ -178,12 +183,14 @@ export function PluginsListPage({
           <AccessRequestsSection />
 
           <PageSection
-            description="Added for everybody. Open one to set it up and choose which Bots get its tools."
-            title="Connected"
+            description={ui(
+              "Added for everybody. Open one to set it up and choose which Bots get its tools.",
+            )}
+            title={ui("Connected")}
           >
             {plugins.data?.servers.length === 0 ? (
-              <PageEmpty icon={IconPlug} title="Nothing connected yet">
-                Pick one from the list below.
+              <PageEmpty icon={IconPlug} title={ui("Nothing connected yet")}>
+                {ui("Pick one from the list below.")}
               </PageEmpty>
             ) : (
               <PageRows>
@@ -250,12 +257,14 @@ export function PluginsListPage({
           </PageSection>
 
           <PageSection
-            description="Reviewed, first-party servers. Open one to add it."
-            title="Explore plugins"
+            description={ui(
+              "Reviewed, first-party servers. Open one to add it.",
+            )}
+            title={ui("Explore plugins")}
           >
             {explore.length === 0 ? (
-              <PageEmpty icon={IconCircleCheck} title="All connected">
-                Every plugin in the catalogue is connected.
+              <PageEmpty icon={IconCircleCheck} title={ui("All connected")}>
+                {ui("Every plugin in the catalogue is connected.")}
               </PageEmpty>
             ) : (
               <PageRows>
@@ -279,7 +288,7 @@ export function PluginsListPage({
                             count={requestCounts?.byApp[entry.key] ?? 0}
                           />
                           <span className="text-muted-foreground text-xs">
-                            Not added
+                            {ui("Not added")}
                           </span>
                           <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
                         </ItemActions>
@@ -294,7 +303,7 @@ export function PluginsListPage({
 
           <PageSection
             description={moreAppsSectionDescription(provider)}
-            title="More apps"
+            title={ui("More apps")}
           >
             <PageRows>
               {/*
@@ -353,10 +362,11 @@ export function PluginsListPage({
  * row that reads as something to do. Nothing at zero: a count of nothing on every row is noise.
  */
 function PendingRequests({ count }: { count: number }) {
+  useLocale();
   if (count === 0) return null;
   return (
     <span className="font-medium text-foreground text-xs tabular-nums">
-      {count} {count === 1 ? "request" : "requests"}
+      {count} {count === 1 ? ui("request") : ui("requests")}
     </span>
   );
 }

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   LearningProposal,
   LearningRunSummary,
@@ -39,11 +41,15 @@ import { queryClient } from "@/query-client";
 function operationLabel(proposal: LearningProposal): string {
   switch (proposal.operation) {
     case "add":
-      return "New skill";
+      return ui("New skill");
     case "update":
-      return `Update to ${skillTitle(proposal.title, proposal.description)}`;
+      return ui("Update to {{value0}}", {
+        value0: String(skillTitle(proposal.title, proposal.description)),
+      });
     case "remove":
-      return `Remove ${skillTitle(proposal.title, proposal.description)}`;
+      return ui("Remove {{value0}}", {
+        value0: String(skillTitle(proposal.title, proposal.description)),
+      });
   }
 }
 
@@ -80,6 +86,7 @@ function learningInProgress(
 
 /** Why Learn now couldn't start Learning for one group. */
 function GroupError({ state }: { state: StartState | undefined }) {
+  useLocale();
   if (!state || state.pending || !state.error) return null;
   return (
     <p className="mt-4 text-destructive text-sm" role="alert">
@@ -93,6 +100,7 @@ function GroupError({ state }: { state: StartState | undefined }) {
  * a row opens a dialog with Approve and Reject; where admins do, the same dialog is read-only.
  */
 export function LearningReview() {
+  useLocale();
   const review = useQuery(personalReviewQueryOptions());
   const decide = useMutation(
     reviewPersonalProposalMutationOptions(queryClient),
@@ -167,7 +175,7 @@ export function LearningReview() {
   if (review.error) {
     return (
       <p className="mt-6 text-destructive text-sm" role="alert">
-        {review.error.message}
+        {<ErrorDetails error={review.error} />}
       </p>
     );
   }
@@ -214,16 +222,17 @@ export function LearningReview() {
   const showList = autoApproveOn !== true || anyWaiting;
   // The heading says something waits only when a skill does: not while Learning runs, and not with nothing left to approve.
   const heading = !anyWaiting
-    ? { title: "New skills", description: undefined }
+    ? { title: ui("New skills"), description: undefined }
     : canReview
       ? {
-          title: "Waiting for your review",
-          description: "Approve a skill to publish it to your Bots.",
+          title: ui("Waiting for your review"),
+          description: ui("Approve a skill to publish it to your Bots."),
         }
       : {
-          title: "Waiting for an admin",
-          description:
+          title: ui("Waiting for an admin"),
+          description: ui(
             "An admin reviews these. You can read what Learning proposes here.",
+          ),
         };
   const learnNowFor = async (group: {
     label: string;
@@ -262,14 +271,16 @@ export function LearningReview() {
         <PageRows>
           <Item size="sm">
             <ItemContent>
-              <ItemTitle>Approve new skills automatically</ItemTitle>
+              <ItemTitle>{ui("Approve new skills automatically")}</ItemTitle>
               <ItemDescription>
-                New skills go to your Bots without waiting for your review.
+                {ui(
+                  "New skills go to your Bots without waiting for your review.",
+                )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Approve new skills automatically"
+                aria-label={ui("Approve new skills automatically")}
                 checked={autoApproveOn}
                 disabled={saveAutoApprove.isPending}
                 onCheckedChange={(checked) => saveAutoApprove.mutate(checked)}
@@ -295,7 +306,7 @@ export function LearningReview() {
                           ]
                             .filter(Boolean)
                             .join(" ")
-                        : "No run yet."}
+                        : ui("No run yet.")}
                     </ItemDescription>
                   )}
                 </ItemContent>
@@ -312,8 +323,8 @@ export function LearningReview() {
                       variant="outline"
                     >
                       {learningInProgress(group, starting[group.label])
-                        ? "Learning in progress…"
-                        : "Learn now"}
+                        ? ui("Learning in progress…")
+                        : ui("Learn now")}
                     </Button>
                   </ItemActions>
                 )}
@@ -353,28 +364,41 @@ export function LearningReview() {
           </Fragment>
         ))}
       {showList && !anyWaiting && !unreadable && !unavailable && (
-        <PageEmpty icon={IconSparkles} title="Nothing to review">
+        <PageEmpty icon={IconSparkles} title={ui("Nothing to review")}>
           {autoApprove !== null
-            ? "New proposals show up here after Learning analyses your recordings and conversations."
-            : "New proposals show up here after Learning analyses your recordings."}
+            ? ui(
+                "New proposals show up here after Learning analyses your recordings and conversations.",
+              )
+            : ui(
+                "New proposals show up here after Learning analyses your recordings.",
+              )}
         </PageEmpty>
       )}
       {saveAutoApprove.error && (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {saveAutoApprove.error.message}
+          {<ErrorDetails error={saveAutoApprove.error} />}
         </p>
       )}
       {unavailable && (
         <p className="mt-4 text-muted-foreground text-sm">
           {sources.every((source) => source.unavailable)
-            ? "Learning isn't available in the backend, so nothing is proposed here."
-            : `Learning isn't available for ${[
-                ...new Set(
-                  sources
-                    .filter((source) => source.unavailable)
-                    .map((source) => source.label),
-                ),
-              ].join(", ")}, so nothing is proposed there.`}
+            ? ui(
+                "Learning isn't available in the backend, so nothing is proposed here.",
+              )
+            : ui(
+                "Learning isn't available for {{value0}}, so nothing is proposed there.",
+                {
+                  value0: String(
+                    [
+                      ...new Set(
+                        sources
+                          .filter((source) => source.unavailable)
+                          .map((source) => source.label),
+                      ),
+                    ].join(", "),
+                  ),
+                },
+              )}
         </p>
       )}
       {unreadable && (
@@ -382,8 +406,10 @@ export function LearningReview() {
           {sources
             .filter((source) => !source.unavailable)
             .every((source) => source.proposals === null)
-            ? "Couldn't read your proposed skills. Reload the page."
-            : "Couldn't read some of your proposed skills. Reload the page."}
+            ? ui("Couldn't read your proposed skills. Reload the page.")
+            : ui(
+                "Couldn't read some of your proposed skills. Reload the page.",
+              )}
         </p>
       )}
       {open && (
@@ -406,7 +432,9 @@ export function LearningReview() {
                   })
               : undefined
           }
-          publishedNote="Published. Your Bots use it from their next conversation."
+          publishedNote={ui(
+            "Published. Your Bots use it from their next conversation.",
+          )}
         />
       )}
     </PageSection>

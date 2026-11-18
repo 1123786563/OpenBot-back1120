@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { queryClient } from "./query-client";
 import { router } from "./router";
+import { LanguageProvider } from "./lib/i18n/provider";
 import "@copilotkit/react-core/v2/styles.css";
 import "./styles.css";
 
@@ -16,7 +17,9 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} context={{ queryClient }} />
+      <LanguageProvider>
+        <RouterProvider router={router} context={{ queryClient }} />
+      </LanguageProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

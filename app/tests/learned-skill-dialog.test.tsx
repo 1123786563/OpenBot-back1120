@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -96,7 +97,7 @@ test("the personal source fetches the skill and renders its SKILL.md", async () 
 test("a 404 shows the server's message", async () => {
   const view = draw("gone");
   await waitFor(() =>
-    expect(view.getByRole("alert").textContent).toBe(
+    expect(readErrorDetails(view.getByRole("alert"))).toBe(
       "That skill is no longer there.",
     ),
   );

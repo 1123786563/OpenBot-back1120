@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { BotResponsibilities } from "@/components/responsibilities/responsibilities";
 import { RoutinesList } from "@/components/routines/routines-list";
 import { cn } from "@/lib/utils";
@@ -11,16 +12,17 @@ import { NoBot } from "./activity";
  * Both lists are OpenBot's own, with every switch, Run now, history and Delete they offer.
  */
 export function GoalsScreen() {
+  useLocale();
   const { bot } = useMuse();
   if (!bot) {
     return (
-      <MuseScreen title="Goals">
+      <MuseScreen title={ui("Goals")}>
         <NoBot />
       </MuseScreen>
     );
   }
   return (
-    <MuseScreen title="Goals">
+    <MuseScreen title={ui("Goals")}>
       <section>
         <div className="flex items-center gap-2.5">
           <StatusDot tone="green" />
@@ -30,7 +32,7 @@ export function GoalsScreen() {
               "text-[var(--openmuse-green-text)]",
             )}
           >
-            Routines
+            {ui("Routines")}
           </h2>
         </div>
         <RoutinesList agentId={bot.id} embedded />

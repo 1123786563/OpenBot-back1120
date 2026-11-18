@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type BrowserApiState,
   type BrowserNarrationRequest,
@@ -38,7 +39,7 @@ async function openBrowser(): Promise<
   return (
     await client(browserApiPaths.open, {
       method: "POST",
-      fallback: "Couldn't open your browser. Try again.",
+      fallback: ui("Couldn't open your browser. Try again."),
     })
   ).json();
 }
@@ -64,7 +65,7 @@ async function startBrowserRecording(
           ? { narrate: variables.narrate }
           : {}),
       },
-      fallback: "Couldn't start recording. Try again.",
+      fallback: ui("Couldn't start recording. Try again."),
     })
   ).json();
 }
@@ -78,8 +79,12 @@ export function startBrowserRecordingMutationOptions(queryClient: QueryClient) {
 }
 
 const REAL_BROWSER_NAMES: Record<RealBrowser, string> = {
-  chrome: "Google Chrome",
-  msedge: "Microsoft Edge",
+  get chrome() {
+    return ui("Google Chrome");
+  },
+  get msedge() {
+    return ui("Microsoft Edge");
+  },
 };
 
 /**
@@ -88,7 +93,10 @@ const REAL_BROWSER_NAMES: Record<RealBrowser, string> = {
  * that browser.
  */
 export function storeOpenedSentence(browser: RealBrowser): string {
-  return `The OpenBot Recorder's page is open in ${REAL_BROWSER_NAMES[browser]}. Add it there to record in your own browser.`;
+  return ui(
+    "The OpenBot Recorder's page is open in {{value0}}. Add it there to record in your own browser.",
+    { value0: String(REAL_BROWSER_NAMES[browser]) },
+  );
 }
 
 /** What the person is told when Start recording found their own everyday browser rather than the one OpenBot opens:
@@ -131,7 +139,7 @@ export function stopBrowserRecordingMutationOptions(queryClient: QueryClient) {
         await client(browserApiPaths.recording, {
           method: "POST",
           body: { action: "stop" },
-          fallback: "Couldn't stop recording. Try again.",
+          fallback: ui("Couldn't stop recording. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBrowser(queryClient),
@@ -146,7 +154,7 @@ export function browserTabsMutationOptions(queryClient: QueryClient) {
         await client(browserApiPaths.tabs, {
           method: "POST",
           body: request,
-          fallback: "Couldn't change the tabs. Try again.",
+          fallback: ui("Couldn't change the tabs. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBrowser(queryClient),
@@ -163,7 +171,7 @@ export function navigateBrowserMutationOptions(queryClient: QueryClient) {
         await client(browserApiPaths.navigate, {
           method: "POST",
           body: request,
-          fallback: "Couldn't open that page. Try again.",
+          fallback: ui("Couldn't open that page. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBrowser(queryClient),
@@ -180,7 +188,7 @@ export function clearBrowserMutationOptions(queryClient: QueryClient) {
       (
         await client(browserApiPaths.clear, {
           method: "POST",
-          fallback: "Couldn't clear your browser. Try again.",
+          fallback: ui("Couldn't clear your browser. Try again."),
         })
       ).json(),
     // Settings > Computer lists the browser too, with whether it runs.

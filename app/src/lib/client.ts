@@ -12,6 +12,13 @@
  * guessed the envelope would be a client that had to be argued with.
  */
 
+import {
+  errorCodeForStatus,
+  errorResponse,
+  interfaceErrorCode,
+} from "@openbot/shared/interface-errors";
+import { ApiError } from "@/lib/i18n/errors";
+
 export type ClientOptions = {
   /** Absent means GET. */
   method?: string;
@@ -89,11 +96,30 @@ export async function client<T>(
      * The server's message is the useful one: it names the field or the permission that failed. The
      * fallback is only for the cases where it sent none, or sent something that is not JSON.
      */
-    const message = await response
-      .json()
-      .then((body: { error?: string }) => body.error)
-      .catch(() => undefined);
-    throw new Error(message ?? options.fallback ?? "That request failed.");
+    const rawBody = await response.text();
+    let envelope: unknown;
+    try {
+      envelope = JSON.parse(rawBody);
+    } catch {
+      envelope = null;
+    }
+    const parsed = errorResponse.safeParse(envelope);
+    const code = interfaceErrorCode.safeParse(
+      parsed.success ? parsed.data.code : undefined,
+    );
+    const fallback = options.fallback ?? response.statusText;
+    const raw = parsed.success ? parsed.data.error : undefined;
+    const message =
+      typeof raw === "string"
+        ? raw
+        : raw === undefined
+          ? fallback
+          : (JSON.stringify(raw) ?? fallback);
+    throw new ApiError(
+      code.success ? code.data : errorCodeForStatus(response.status),
+      raw === undefined ? rawBody || fallback : message,
+      message,
+    );
   }
 
   if (key === undefined) return response;

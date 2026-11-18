@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBrandSlack,
   IconBrandTeams,
@@ -96,17 +98,23 @@ const TRANSPORT: Record<
   slack: {
     link: "Link Slack",
     icon: IconBrandSlack,
-    summary: "Continue a conversation from Slack.",
+    get summary() {
+      return ui("Continue a conversation from Slack.");
+    },
   },
   teams: {
     link: "Link Microsoft Teams",
     icon: IconBrandTeams,
-    summary: "Continue a conversation from Microsoft Teams.",
+    get summary() {
+      return ui("Continue a conversation from Microsoft Teams.");
+    },
   },
   sms: {
     link: "Connect a phone",
     icon: IconDeviceMobileMessage,
-    summary: "Continue a conversation by text message.",
+    get summary() {
+      return ui("Continue a conversation by text message.");
+    },
   },
 };
 
@@ -119,6 +127,7 @@ const TRANSPORT: Record<
  * a phone number — and the answer is a code to send back.
  */
 export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
+  useLocale();
   const reach = useQuery(deliveryQueryOptions());
   // People read Bots by name; the id is what the list used to show.
   const botName = useBotNames();
@@ -155,40 +164,43 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
     (transport === "sms" && challengeId !== "");
   const summary = (transport: Transport) => {
     if (transport === "sms" && challengeId) {
-      return "A verification code is on its way. Enter it to finish.";
+      return ui("A verification code is on its way. Enter it to finish.");
     }
     if (heldLink(transport)) {
-      return "Your link code is ready to send. Open this to see it again.";
+      return ui("Your link code is ready to send. Open this to see it again.");
     }
     if (open(transport)) return TRANSPORT[transport].summary;
     return transport === "sms"
-      ? "Text messages aren't set up yet. An admin has to turn them on first."
-      : "Not set up yet. An admin has to turn on Slack and Teams first.";
+      ? ui(
+          "Text messages aren't set up yet. An admin has to turn them on first.",
+        )
+      : ui("Not set up yet. An admin has to turn on Slack and Teams first.");
   };
 
   return (
     <>
       {fixedBot === undefined ? (
         <p className="mt-6 text-muted-foreground text-sm">
-          Your devices, recent deliveries, and where each kind of update goes
-          are in{" "}
+          {ui(
+            "Your devices, recent deliveries, and where each kind of update goes are in",
+          )}{" "}
           <Link
             className="underline underline-offset-4"
             to="/settings/notifications"
           >
-            Settings → Notifications
+            {ui("Settings → Notifications")}
           </Link>
           .
         </p>
       ) : null}
-      <PageSection title="Connected destinations">
+      <PageSection title={ui("Connected destinations")}>
         {listError ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            {listError.message}
+            {<ErrorDetails error={listError} />}
           </p>
         ) : null}
         {reach.isPending || !destinations ? null : destinations.length === 0 ? (
-          <PageEmpty icon={IconSend} title="No destinations connected" />
+          <PageEmpty icon={IconSend} title={ui("No destinations connected")} />
         ) : (
           <PageRows>
             {destinations.map((binding, index) => {
@@ -203,15 +215,15 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
                     <ItemContent>
                       <ItemTitle>
                         {binding.transport === "slack"
-                          ? "Slack"
+                          ? ui("Slack")
                           : binding.transport === "teams"
-                            ? "Microsoft Teams"
+                            ? ui("Microsoft Teams")
                             : binding.address}
                       </ItemTitle>
                       <ItemDescription>
                         {botName(binding.agentId)}
                         {binding.optedOutAt
-                          ? " · You texted STOP. Text START to resume."
+                          ? ui(" · You texted STOP. Text START to resume.")
                           : null}
                       </ItemDescription>
                     </ItemContent>
@@ -222,7 +234,7 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
                         size="sm"
                         variant="outline"
                       >
-                        Disconnect
+                        {ui("Disconnect")}
                       </Button>
                     </ItemActions>
                   </Item>
@@ -233,8 +245,10 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
         )}
       </PageSection>
       <PageSection
-        description="In a Slack or Teams channel that others can read, the Bot replies to you in a direct message."
-        title="Connect a conversation"
+        description={ui(
+          "In a Slack or Teams channel that others can read, the Bot replies to you in a direct message.",
+        )}
+        title={ui("Connect a conversation")}
       >
         {reach.data ? (
           <PageRows>
@@ -320,6 +334,7 @@ function ConnectDialog({
   onLinked: (link: HeldLink) => void;
   onClose: () => void;
 }) {
+  useLocale();
   const formId = useId();
   const channels = useInfiniteQuery(channelListQueryOptions());
   // Reopened with a link message still held, the dialog shows the conversation it links.
@@ -363,14 +378,15 @@ function ConnectDialog({
         <DialogHeader>
           <DialogTitle>{TRANSPORT[transport].link}</DialogTitle>
           <DialogDescription>
-            Each account or phone number works with one conversation at a time.
-            Linking it here moves it from the one it's linked to now.
+            {ui(
+              "Each account or phone number works with one conversation at a time. Linking it here moves it from the one it's linked to now.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 grid gap-4 overflow-y-auto">
           <Field>
             <FieldLabel htmlFor={`${formId}-conversation`}>
-              Conversation
+              {ui("Conversation")}
             </FieldLabel>
             <Select
               items={Object.fromEntries(
@@ -386,7 +402,7 @@ function ConnectDialog({
               value={channelId || null}
             >
               <SelectTrigger className="w-full" id={`${formId}-conversation`}>
-                <SelectValue placeholder="Choose a conversation" />
+                <SelectValue placeholder={ui("Choose a conversation")} />
               </SelectTrigger>
               <SelectContent>
                 {conversations.map((channel) => (
@@ -399,7 +415,7 @@ function ConnectDialog({
           </Field>
           {fixedBot === undefined ? (
             <Field>
-              <FieldLabel htmlFor={`${formId}-bot`}>Bot</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-bot`}>{ui("Bot")}</FieldLabel>
               <Select
                 items={Object.fromEntries(
                   (selected?.agentIds ?? []).map((id) => [id, botName(id)]),
@@ -410,7 +426,7 @@ function ConnectDialog({
                 value={pickedBot || null}
               >
                 <SelectTrigger className="w-full" id={`${formId}-bot`}>
-                  <SelectValue placeholder="Choose a Bot" />
+                  <SelectValue placeholder={ui("Choose a Bot")} />
                 </SelectTrigger>
                 <SelectContent>
                   {selected?.agentIds.map((id) => (
@@ -429,7 +445,7 @@ function ConnectDialog({
               size="sm"
               variant="outline"
             >
-              Load more conversations
+              {ui("Load more conversations")}
             </Button>
           ) : null}
           {transport === "sms" ? (
@@ -445,7 +461,7 @@ function ConnectDialog({
               >
                 <Field>
                   <FieldLabel htmlFor={`${formId}-phone`}>
-                    Phone number
+                    {ui("Phone number")}
                   </FieldLabel>
                   <div className="flex items-center gap-2">
                     <Input
@@ -463,7 +479,7 @@ function ConnectDialog({
                       type="submit"
                       variant={challengeId ? "outline" : "default"}
                     >
-                      Send verification code
+                      {ui("Send verification code")}
                     </Button>
                   </div>
                 </Field>
@@ -486,7 +502,7 @@ function ConnectDialog({
                 >
                   <Field>
                     <FieldLabel htmlFor={`${formId}-code`}>
-                      Verification code
+                      {ui("Verification code")}
                     </FieldLabel>
                     <div className="flex items-center gap-2">
                       <Input
@@ -501,7 +517,7 @@ function ConnectDialog({
                         size="sm"
                         type="submit"
                       >
-                        Confirm phone
+                        {ui("Confirm phone")}
                       </Button>
                     </div>
                   </Field>
@@ -512,10 +528,15 @@ function ConnectDialog({
             <Item size="sm" variant="muted">
               <ItemContent>
                 <ItemDescription className="line-clamp-none">
-                  Send this message to the OpenBot app in a direct message in{" "}
-                  {linked.platform === "teams" ? "Microsoft Teams" : "Slack"}{" "}
-                  within {Math.ceil((linked.expiresAt - Date.now()) / 60_000)}{" "}
-                  minutes. It links that account to this conversation and Bot.
+                  {uiNodes(
+                    "Send this message to the OpenBot app in a direct message in {{slot0}} within {{slot1}} minutes. It links that account to this conversation and Bot.",
+                    [
+                      linked.platform === "teams"
+                        ? ui("Microsoft Teams")
+                        : ui("Slack"),
+                      Math.ceil((linked.expiresAt - Date.now()) / 60_000),
+                    ],
+                  )}
                 </ItemDescription>
                 <ItemTitle className="break-all font-mono">
                   {linked.command}
@@ -530,20 +551,20 @@ function ConnectDialog({
                   size="sm"
                   variant="outline"
                 >
-                  {copied ? "Copied" : "Copy"}
+                  {copied ? ui("Copied") : ui("Copy")}
                 </Button>
               </ItemActions>
             </Item>
           ) : null}
           {error ? (
             <p className="text-destructive text-sm" role="alert">
-              {error.message}
+              {<ErrorDetails error={error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" variant="outline">
-            Close
+            {ui("Close")}
           </Button>
           {/* A phone's two steps each submit their own field, beside it. */}
           {transport === "sms" ? null : (

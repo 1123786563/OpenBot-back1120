@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   DOESNT_UPDATE_ITSELF,
   type UpdateReadiness,
@@ -80,17 +81,22 @@ const READINESS: Record<IntelligenceReadiness, string> = {
  * the local Intelligence stack. In a browser there is nothing here to read.
  */
 function ComputerPage() {
+  useLocale();
   const inDesktop = desktopShell() !== null;
   return (
     <PageShell
-      description="See what OpenBot runs on this computer and how much memory it uses. Restart a part when it gets stuck."
-      title="This computer"
+      description={ui(
+        "See what OpenBot runs on this computer and how much memory it uses. Restart a part when it gets stuck.",
+      )}
+      title={ui("This computer")}
     >
       {inDesktop ? (
         <ComputerSections />
       ) : (
         <PageSection>
-          <PageEmpty>This page is only in the OpenBot desktop app.</PageEmpty>
+          <PageEmpty>
+            {ui("This page is only in the OpenBot desktop app.")}
+          </PageEmpty>
         </PageSection>
       )}
     </PageShell>
@@ -98,6 +104,7 @@ function ComputerPage() {
 }
 
 function ComputerSections() {
+  useLocale();
   // The quick read draws the page at once; the measured one fills the memory figures in after.
   const listed = useQuery(desktopStatusQueryOptions({ memory: false }));
   const measured = useQuery(desktopStatusQueryOptions({ memory: true }));
@@ -111,7 +118,7 @@ function ComputerSections() {
   if (!data)
     return (
       <p className="text-destructive text-sm" role="alert">
-        Could not read what OpenBot runs on this computer.
+        {ui("Could not read what OpenBot runs on this computer.")}
       </p>
     );
   const isMeasured = measured.data !== undefined;
@@ -138,12 +145,13 @@ function OpenBotSection({
   measured: boolean;
   status: DesktopStatus;
 }) {
+  useLocale();
   const restart = useMutation(restartOpenBotMutationOptions(queryClient));
   const stop = useMutation(stopOpenBotMutationOptions());
   const memory = totalMemory([...status.processes, ...status.containers]);
   const busy = restart.isPending || stop.isPending;
   return (
-    <PageSection title="App">
+    <PageSection title={ui("App")}>
       <PageRows>
         <Item size="sm">
           <RowMark>
@@ -151,26 +159,28 @@ function OpenBotSection({
           </RowMark>
           <ItemContent>
             <ItemTitle>
-              {status.openbotRunning ? "Running" : "Stopped"}
+              {status.openbotRunning ? ui("Running") : ui("Stopped")}
             </ItemTitle>
             <ItemDescription>
               {restart.isPending
-                ? "Restarting…"
+                ? ui("Restarting…")
                 : stop.isPending
-                  ? "Stopping…"
+                  ? ui("Stopping…")
                   : [
                       // Nothing until the containers are measured: a total of the processes alone
                       // would be a smaller number that then jumps.
                       !status.openbotRunning
-                        ? "Not using memory while stopped."
+                        ? ui("Not using memory while stopped.")
                         : !measured
                           ? null
                           : memory !== null
                             ? `${formatBytes(memory)} in use`
-                            : "Memory could not be measured.",
+                            : ui("Memory could not be measured."),
                       // Restart is the desktop app's supervisor bringing its own processes back.
                       status.openbotRunning && !status.openbotHeld
-                        ? "Started before the desktop app last opened; Stop it and start again to restart."
+                        ? ui(
+                            "Started before the desktop app last opened; Stop it and start again to restart.",
+                          )
                         : null,
                     ]
                       .filter(Boolean)
@@ -186,7 +196,7 @@ function OpenBotSection({
                   size="sm"
                   variant="outline"
                 >
-                  Restart
+                  {ui("Restart")}
                 </Button>
               )}
               <Button
@@ -195,7 +205,7 @@ function OpenBotSection({
                 size="sm"
                 variant="outline"
               >
-                Stop
+                {ui("Stop")}
               </Button>
             </ItemActions>
           )}
@@ -227,14 +237,17 @@ function IntelligenceSection({
   readiness: IntelligenceReadiness | undefined;
   status: DesktopStatus;
 }) {
+  useLocale();
   const intelligence = useMutation(intelligenceMutationOptions(queryClient));
   const running =
     status.intelligenceContainers.length > 0 && readiness !== "stopped";
   const memory = totalMemory(status.intelligenceContainers);
   return (
     <PageSection
-      description="These keep your Bots' conversations and skills. OpenBot needs them while it runs."
-      title="OpenBot's services"
+      description={ui(
+        "These keep your Bots' conversations and skills. OpenBot needs them while it runs.",
+      )}
+      title={ui("OpenBot's services")}
     >
       <PageRows>
         <Item size="sm">
@@ -243,22 +256,24 @@ function IntelligenceSection({
           </RowMark>
           <ItemContent>
             <ItemTitle>
-              {running ? READINESS[readiness ?? "unknown"] : "Stopped"}
+              {running ? READINESS[readiness ?? "unknown"] : ui("Stopped")}
             </ItemTitle>
             <ItemDescription>
               {intelligence.isPending
                 ? intelligence.variables === "start"
-                  ? "Starting…"
-                  : "Stopping…"
+                  ? ui("Starting…")
+                  : ui("Stopping…")
                 : intelligence.error
                   ? intelligence.error.message
                   : !running
-                    ? "Not using memory while stopped."
+                    ? ui("Not using memory while stopped.")
                     : !measured
                       ? null
                       : memory !== null
-                        ? `${formatBytes(memory)} in use`
-                        : "Memory could not be measured."}
+                        ? ui("{{value0}} in use", {
+                            value0: String(formatBytes(memory)),
+                          })
+                        : ui("Memory could not be measured.")}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
@@ -273,7 +288,7 @@ function IntelligenceSection({
                   size="sm"
                   variant="outline"
                 >
-                  Restart
+                  {ui("Restart")}
                 </Button>
                 <Button
                   disabled={intelligence.isPending}
@@ -281,7 +296,7 @@ function IntelligenceSection({
                   size="sm"
                   variant="outline"
                 >
-                  Stop
+                  {ui("Stop")}
                 </Button>
               </>
             ) : (
@@ -291,7 +306,7 @@ function IntelligenceSection({
                 size="sm"
                 variant="outline"
               >
-                Start
+                {ui("Start")}
               </Button>
             )}
           </ItemActions>
@@ -314,6 +329,7 @@ function MachineSection({
   readiness: IntelligenceReadiness | undefined;
   status: DesktopStatus;
 }) {
+  useLocale();
   const [copied, setCopied] = React.useState(false);
   return (
     <PageSection
@@ -327,10 +343,10 @@ function MachineSection({
           size="sm"
           variant="outline"
         >
-          {copied ? "Copied" : "Copy diagnostics"}
+          {copied ? ui("Copied") : ui("Copy diagnostics")}
         </Button>
       }
-      title="Details"
+      title={ui("Details")}
     >
       <PageRows>
         <Item size="sm">
@@ -339,17 +355,18 @@ function MachineSection({
           </RowMark>
           <ItemContent>
             {/* Docker or Podman, said as setup says it. Which one is in Copy diagnostics. */}
-            <ItemTitle>Software OpenBot runs on</ItemTitle>
+            <ItemTitle>{ui("Software OpenBot runs on")}</ItemTitle>
             {!status.engine && (
               <ItemDescription className="line-clamp-none">
-                OpenBot needs this to run. If you use Docker Desktop, open it
-                and wait for it to start.
+                {ui(
+                  "OpenBot needs this to run. If you use Docker Desktop, open it and wait for it to start.",
+                )}
               </ItemDescription>
             )}
           </ItemContent>
           <ItemActions>
             <span className="text-muted-foreground text-sm">
-              {status.engine ? "Running" : "Not running"}
+              {status.engine ? ui("Running") : ui("Not running")}
             </span>
           </ItemActions>
         </Item>
@@ -359,7 +376,7 @@ function MachineSection({
             <IconFolder className="size-4" />
           </RowMark>
           <ItemContent>
-            <ItemTitle>Installed in</ItemTitle>
+            <ItemTitle>{ui("Installed in")}</ItemTitle>
             <ItemDescription className="line-clamp-none break-all">
               {status.root}
             </ItemDescription>
@@ -383,6 +400,7 @@ function MachineSection({
  * they ask for help. The desktop app opens its own folder; nothing here names a path to open.
  */
 function LogsRow({ folder }: { folder: string }) {
+  useLocale();
   const open = useMutation(openLogFolderMutationOptions());
   return (
     <Item size="sm">
@@ -390,10 +408,11 @@ function LogsRow({ folder }: { folder: string }) {
         <IconFileText className="size-4" />
       </RowMark>
       <ItemContent>
-        <ItemTitle>Logs</ItemTitle>
+        <ItemTitle>{ui("Logs")}</ItemTitle>
         <ItemDescription className="line-clamp-none">
-          Logs stay on this computer and leave out your keys and messages. Share
-          them when you ask for help.
+          {ui(
+            "Logs stay on this computer and leave out your keys and messages. Share them when you ask for help.",
+          )}
         </ItemDescription>
         <ItemDescription className="line-clamp-none break-all">
           {folder}
@@ -403,7 +422,7 @@ function LogsRow({ folder }: { folder: string }) {
             className="line-clamp-none text-destructive"
             role="alert"
           >
-            Couldn't open the log folder. Find it at the path above.
+            {ui("Couldn't open the log folder. Find it at the path above.")}
           </ItemDescription>
         )}
       </ItemContent>
@@ -414,7 +433,7 @@ function LogsRow({ folder }: { folder: string }) {
           size="sm"
           variant="outline"
         >
-          Open log folder
+          {ui("Open log folder")}
         </Button>
       </ItemActions>
     </Item>
@@ -433,6 +452,7 @@ function LogsRow({ folder }: { folder: string }) {
  * while this version keeps running, then ready to install in a few minutes.
  */
 function VersionRow({ status }: { status: DesktopStatus }) {
+  useLocale();
   const check = useMutation(checkAppUpdateMutationOptions(queryClient));
   const install = useMutation(installAppUpdateMutationOptions(queryClient));
   // The download's progress, asked twice a second from the click on, as the banner asks once it
@@ -460,10 +480,10 @@ function VersionRow({ status }: { status: DesktopStatus }) {
       </RowMark>
       <ItemContent>
         {/* The build it was made from is for support, in Copy diagnostics. */}
-        <ItemTitle>Version {status.version}</ItemTitle>
+        <ItemTitle>{uiNodes("Version {{slot0}}", [status.version])}</ItemTitle>
         {!updatesItself && (
           <ItemDescription className="line-clamp-none text-foreground">
-            {DOESNT_UPDATE_ITSELF}
+            {ui(DOESNT_UPDATE_ITSELF)}
           </ItemDescription>
         )}
         {found && !check.isPending && (
@@ -487,7 +507,9 @@ function VersionRow({ status }: { status: DesktopStatus }) {
             className="line-clamp-none text-destructive"
             role="alert"
           >
-            Couldn't install the update: {reason(install.error)}
+            {uiNodes("Couldn't install the update: {{slot0}}", [
+              reason(install.error),
+            ])}
           </ItemDescription>
         )}
       </ItemContent>
@@ -499,7 +521,7 @@ function VersionRow({ status }: { status: DesktopStatus }) {
               onClick={() => install.mutate()}
               size="sm"
             >
-              {installing ? describe(progress) : "Update and restart"}
+              {installing ? describe(progress) : ui("Update and restart")}
             </Button>
           ) : (
             <Button
@@ -508,7 +530,7 @@ function VersionRow({ status }: { status: DesktopStatus }) {
               size="sm"
               variant="outline"
             >
-              {check.isPending ? "Checking…" : "Check for updates"}
+              {check.isPending ? ui("Checking…") : ui("Check for updates")}
             </Button>
           )}
         </ItemActions>
@@ -529,11 +551,16 @@ function checked(
     case "available":
       return updateOffered(found.version, ready ?? found.ready);
     case "upToDate":
-      return `OpenBot ${found.current} is up to date.`;
+      return ui("OpenBot {{value0}} is up to date.", {
+        value0: String(found.current),
+      });
     case "installing":
-      return `OpenBot is downloading ${found.version} and restarts when it's done.`;
+      return ui(
+        "OpenBot is downloading {{value0}} and restarts when it's done.",
+        { value0: String(found.version) },
+      );
     case "notOffered":
-      return DOESNT_UPDATE_ITSELF;
+      return ui(DOESNT_UPDATE_ITSELF);
   }
 }
 
@@ -554,6 +581,7 @@ function PartRows({
   group: PartGroup;
   separatorFirst?: boolean;
 }) {
+  useLocale();
   return parts.map((part, index) => (
     <React.Fragment key={part.name}>
       {(separatorFirst || index > 0) && <Separator />}
@@ -569,7 +597,7 @@ function PartRows({
         <ItemActions>
           <span className="text-muted-foreground text-sm tabular-nums">
             {part.memoryBytes === null
-              ? "Not measured"
+              ? ui("Not measured")
               : formatBytes(part.memoryBytes)}
           </span>
         </ItemActions>

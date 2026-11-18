@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type BotBrowserApiState,
   botBrowserApiPaths,
@@ -27,7 +28,7 @@ export function botBrowserStateQueryOptions(botId: string) {
     queryFn: async (): Promise<BotBrowserApiState> =>
       (
         await client(botBrowserApiPaths.state(botId), {
-          fallback: "Couldn't load the Bot's browser.",
+          fallback: ui("Couldn't load the Bot's browser."),
         })
       ).json(),
     refetchInterval: BROWSER_POLL_MS,

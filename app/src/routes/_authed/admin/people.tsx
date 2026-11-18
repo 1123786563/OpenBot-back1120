@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconLock,
   IconSearch,
@@ -42,9 +43,15 @@ export const Route = createFileRoute("/_authed/admin/people")({
 
 /** What each provider is called, since the id it registers under is not a name. */
 const PROVIDER_NAMES: Record<string, string> = {
-  google: "Google",
-  microsoft: "Microsoft",
-  okta: "Okta",
+  get google() {
+    return ui("Google");
+  },
+  get microsoft() {
+    return ui("Microsoft");
+  },
+  get okta() {
+    return ui("Okta");
+  },
 };
 
 /**
@@ -58,18 +65,26 @@ function describe(person: Person): string {
     .map((provider) => PROVIDER_NAMES[provider] ?? provider)
     .join(", ");
   const when = person.lastSignedInAt
-    ? `last signed in ${new Date(person.lastSignedInAt).toLocaleDateString()}`
+    ? ui("last signed in {{value0}}", {
+        value0: String(
+          new Date(person.lastSignedInAt).toLocaleDateString(getLocale()),
+        ),
+      })
     : "never signed in";
 
   if (person.revoked)
-    return `Access removed · ${providers || "no provider"} · ${when}`;
+    return ui("Access removed · {{value0}} · {{value1}}", {
+      value0: String(providers || "no provider"),
+      value1: String(when),
+    });
   if (person.configuredAdmin) {
-    return `Admin by configuration · ${when}`;
+    return ui("Admin by configuration · {{value0}}", { value0: String(when) });
   }
   return `${providers || "no provider"} · ${when}`;
 }
 
 function PeoplePage() {
+  useLocale();
   const [search, setSearch] = useState("");
   /*
    * Debounced, so typing a name is one request rather than one per keystroke against an aggregate
@@ -95,12 +110,16 @@ function PeoplePage() {
 
   return (
     <PageShell
-      description="Manage access for people who have signed in. Only admins can access the Admin pages."
-      title="People"
+      description={ui(
+        "Manage access for people who have signed in. Only admins can access the Admin pages.",
+      )}
+      title={ui("People")}
     >
       <PageSection
-        description="Addresses in INITIAL_ADMIN_EMAILS are always admins. You can't change them here."
-        title="Who is here"
+        description={ui(
+          "Addresses in INITIAL_ADMIN_EMAILS are always admins. You can't change them here.",
+        )}
+        title={ui("Who is here")}
       >
         {failure ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
@@ -109,12 +128,18 @@ function PeoplePage() {
         ) : null}
         {terminate.data ? (
           <p className="mt-4 text-muted-foreground text-sm" role="status">
-            Stopped {terminate.data.stopped.length}{" "}
-            {terminate.data.stopped.length === 1 ? "computer" : "computers"}
-            {terminate.data.failed.length > 0
-              ? `. ${terminate.data.failed.length} couldn't be stopped`
-              : ""}
-            . Their disks are kept.
+            {uiNodes(
+              "Stopped {{slot0}} {{slot1}}{{slot2}}. Their disks are kept.",
+              [
+                terminate.data.stopped.length,
+                terminate.data.stopped.length === 1
+                  ? ui("computer")
+                  : ui("computers"),
+                terminate.data.failed.length > 0
+                  ? `. ${terminate.data.failed.length} couldn't be stopped`
+                  : "",
+              ],
+            )}
           </p>
         ) : null}
         {/*
@@ -122,25 +147,25 @@ function PeoplePage() {
           is the opposite of what somebody looking for a colleague needs.
         */}
         <Input
-          aria-label="Search people"
+          aria-label={ui("Search people")}
           className="mt-4"
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name or address"
+          placeholder={ui("Search by name or address")}
           value={search}
         />
 
         {people.isPending ? null : people.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load people. Reload the page.
+            {ui("Couldn't load people. Reload the page.")}
           </p>
         ) : rows.length === 0 ? (
           <PageEmpty
             icon={query ? IconSearch : IconUsers}
-            title={query ? "No matches" : "Nobody has signed in yet"}
+            title={query ? ui("No matches") : ui("Nobody has signed in yet")}
           >
             {query
-              ? `Nobody matches "${query}".`
-              : "People show here once they do."}
+              ? ui('Nobody matches "{{value0}}".', { value0: String(query) })
+              : ui("People show here once they do.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -179,7 +204,7 @@ function PeoplePage() {
                         size="sm"
                         variant="outline"
                       >
-                        Stop computers
+                        {ui("Stop computers")}
                       </Button>
                       <Button
                         disabled={busy || isSelf || person.configuredAdmin}
@@ -192,10 +217,12 @@ function PeoplePage() {
                         size="sm"
                         variant={person.revoked ? "outline" : "destructive"}
                       >
-                        {person.revoked ? "Restore" : "Remove"}
+                        {person.revoked ? ui("Restore") : ui("Remove")}
                       </Button>
                       <Switch
-                        aria-label={`Admin: ${person.email}`}
+                        aria-label={ui("Admin: {{value0}}", {
+                          value0: String(person.email),
+                        })}
                         checked={person.role === "admin"}
                         disabled={busy || person.configuredAdmin || isSelf}
                         onCheckedChange={(checked) =>
@@ -226,7 +253,7 @@ function PeoplePage() {
             size="sm"
             variant="outline"
           >
-            {people.isFetchingNextPage ? "Loading…" : "Show more"}
+            {people.isFetchingNextPage ? ui("Loading…") : ui("Show more")}
           </Button>
         ) : null}
       </PageSection>

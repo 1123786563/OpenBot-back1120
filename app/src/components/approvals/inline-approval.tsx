@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { offersStandingRule } from "@openbot/shared/standing-rule";
 import { approvalPhrase } from "@openbot/shared/tool-name";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,34 +27,65 @@ const CHOICE_WORDS: Record<
   { label: string; description: string; done: string; tone: Tone }
 > = {
   allow_once: {
-    label: "Allow once",
-    description: "The Bot does it this time. You're asked again next time.",
-    done: "Allowed once",
+    get label() {
+      return ui("Allow once");
+    },
+    get description() {
+      return ui("The Bot does it this time. You're asked again next time.");
+    },
+    get done() {
+      return ui("Allowed once");
+    },
     tone: "positive",
   },
   allow_conversation: {
-    label: "Allow for this conversation",
-    description:
-      "The Bot does it now, and again in this conversation without asking.",
-    done: "Allowed for this conversation",
+    get label() {
+      return ui("Allow for this conversation");
+    },
+    get description() {
+      return ui(
+        "The Bot does it now, and again in this conversation without asking.",
+      );
+    },
+    get done() {
+      return ui("Allowed for this conversation");
+    },
     tone: "positive",
   },
   allow_always: {
-    label: "Always allow here",
-    description: "The Bot does it now, and here without asking from now on.",
-    done: "Always allowed",
+    get label() {
+      return ui("Always allow here");
+    },
+    get description() {
+      return ui("The Bot does it now, and here without asking from now on.");
+    },
+    get done() {
+      return ui("Always allowed");
+    },
     tone: "positive",
   },
   deny: {
-    label: "Deny",
-    description: "The Bot doesn't do it, and is told you said no.",
-    done: "Denied",
+    get label() {
+      return ui("Deny");
+    },
+    get description() {
+      return ui("The Bot doesn't do it, and is told you said no.");
+    },
+    get done() {
+      return ui("Denied");
+    },
     tone: "negative",
   },
   handled: {
-    label: "I did it myself",
-    description: "You've done it, so the Bot carries on from there.",
-    done: "Done by you",
+    get label() {
+      return ui("I did it myself");
+    },
+    get description() {
+      return ui("You've done it, so the Bot carries on from there.");
+    },
+    get done() {
+      return ui("Done by you");
+    },
     tone: "positive",
   },
 };
@@ -65,6 +97,7 @@ export function InlineApproval({
   toolCallId?: string;
   fallback: ReactNode;
 }) {
+  useLocale();
   const cache = useQueryClient();
   const inbox = useQuery(approvalInboxOptions());
   const reduceMotion = useReducedMotion();
@@ -103,14 +136,14 @@ export function InlineApproval({
           "deny",
         ];
   // In the words the step and Activity use for the same action: "Save a file todo.txt in share".
-  const title = request ? approvalPhrase(request.action) : "";
+  const title = request ? approvalPhrase(request.action, ui) : "";
   return (
     <>
       {/* The card leaves by folding away; what is left behind is the tool's own line. */}
       <AnimatePresence initial={false}>
         {pending && request ? (
           <motion.section
-            aria-label="Waiting for your approval"
+            aria-label={ui("Waiting for your approval")}
             exit={{ height: 0, opacity: 0 }}
             key="approval"
             style={{ overflow: "hidden" }}
@@ -130,7 +163,7 @@ export function InlineApproval({
               }
               caption={
                 request.action.policy?.reason ??
-                (handOff ? "This one is yours to do." : undefined)
+                (handOff ? ui("This one is yours to do.") : undefined)
               }
               error={decision.error?.message ?? null}
               onSubmit={(value) => decision.mutate(value as ApprovalDecision)}
@@ -138,7 +171,7 @@ export function InlineApproval({
                 value: choice,
                 label:
                   handOff && choice === "deny"
-                    ? "Don't do it"
+                    ? ui("Don't do it")
                     : CHOICE_WORDS[choice].label,
                 description: CHOICE_WORDS[choice].description,
               }))}
@@ -159,6 +192,7 @@ export function InlineApproval({
  * the sheet draws them too. The same card, from the same inbox, so answering either answers both.
  */
 export function ConversationApprovals({ threadId }: { threadId: string }) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const ids = (inbox.data?.requests ?? []).flatMap((request) =>
     request.status === "pending" &&
@@ -188,6 +222,7 @@ export function PendingApprovals({
 }: {
   toolCallIds: readonly string[];
 }) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const waiting = new Set(
     (inbox.data?.requests ?? [])

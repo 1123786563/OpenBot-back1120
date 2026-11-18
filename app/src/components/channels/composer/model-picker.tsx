@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Combobox as ComboboxPrimitive } from "@base-ui/react";
 import {
   IconCheck,
@@ -68,9 +69,10 @@ const sameChoice = (a: Choice, b: Choice) =>
  * highlight and vanished). The row's own right padding keeps it clear of the check.
  */
 function DefaultTag() {
+  useLocale();
   return (
     <span className="ml-auto shrink-0 pr-5 text-muted-foreground text-xs">
-      Default
+      {ui("Default")}
     </span>
   );
 }
@@ -81,6 +83,7 @@ function DefaultTag() {
  * drawn for somebody's brand; see `shared/marks/README.md`.
  */
 function ModelMark({ model }: { model: ModelOption }) {
+  useLocale();
   return markFor(model.vendor) ? (
     <HarnessMark
       className="size-3.5"
@@ -137,6 +140,7 @@ export function ModelPicker({
   saving?: boolean;
   className?: string;
 }) {
+  useLocale();
   if (!catalogue?.choosable || !value) return null;
   const selected =
     catalogue.models.find((model) => model.id === value.model) ??
@@ -169,6 +173,7 @@ function Picker({
   disabled?: boolean;
   className?: string;
 }) {
+  const interfaceLocale = useLocale();
   const { contains } = ComboboxPrimitive.useFilter();
   /** What is typed in the search, to say when no model matches: the efforts always do. */
   const [query, setQuery] = useState("");
@@ -182,13 +187,14 @@ function Picker({
    */
   const stayOpen = useRef(false);
   const [effortStep, setEffortStep] = useState(false);
-  const current: Choice = useMemo(
-    () => ({ kind: "model", model: selected }),
-    [selected],
-  );
+  const current: Choice = useMemo(() => {
+    void interfaceLocale;
+    return { kind: "model", model: selected };
+  }, [selected, interfaceLocale]);
   /** The effort the model will run at, chosen or its own: the row that carries the check. */
   const running = shownEffort(selected, effort) ?? null;
   const groups = useMemo((): ChoiceGroup[] => {
+    void interfaceLocale;
     const models: ChoiceGroup = {
       value: "models",
       items: catalogue.models.map((model) => ({ kind: "model", model })),
@@ -201,10 +207,10 @@ function Picker({
     }));
     // A provider that does not say which effort is its default still has one: offer it by name.
     if (!selected.defaultEffort)
-      efforts.unshift({ kind: "effort", effort: null, label: "Default" });
+      efforts.unshift({ kind: "effort", effort: null, label: ui("Default") });
     const thinking: ChoiceGroup = { value: "thinking", items: efforts };
     return effortStep ? [thinking] : [models, thinking];
-  }, [catalogue.models, selected, effortStep]);
+  }, [catalogue.models, selected, effortStep, interfaceLocale]);
 
   const matches = (model: ModelOption, typed: string) =>
     contains(model.label, typed) || contains(model.id, typed);
@@ -269,8 +275,11 @@ function Picker({
               ref={trigger}
               aria-label={
                 effortText
-                  ? `Model: ${selected.label}, thinking: ${effortText}`
-                  : `Model: ${selected.label}`
+                  ? ui("Model: {{value0}}, thinking: {{value1}}", {
+                      value0: String(selected.label),
+                      value1: String(effortText),
+                    })
+                  : ui("Model: {{value0}}", { value0: String(selected.label) })
               }
               className={cn(
                 "h-8 shrink-0 gap-1 px-2 font-normal text-muted-foreground",
@@ -316,19 +325,19 @@ function Picker({
                 "pointer-events-none absolute! m-0! h-0! w-0! overflow-hidden border-0! opacity-0"
               : "col-start-1 row-start-1"
           }
-          placeholder="Search models"
+          placeholder={ui("Search models")}
           showTrigger={false}
         />
         {noModels && !effortsOnly ? (
           <p className="col-start-1 row-start-2 px-3 py-6 text-center text-muted-foreground text-sm">
-            No models match.
+            {ui("No models match.")}
           </p>
         ) : null}
         <ComboboxList className="contents">
           {(group: ChoiceGroup) =>
             group.value === "models" ? (
               <ComboboxGroup
-                aria-label="Models"
+                aria-label={ui("Models")}
                 className="no-scrollbar col-start-1 row-start-2 max-h-[min(20rem,calc(var(--available-height)-4rem))] min-h-0 scroll-py-1 overflow-y-auto overscroll-contain p-1.5 pt-0.5"
                 items={group.items}
                 key="models"
@@ -370,7 +379,9 @@ function Picker({
                  * name sits outside the label, so the group is still called "Thinking".
                  */}
                 <div className="flex h-10 items-center gap-2 px-2.5">
-                  <ComboboxLabel className="p-0">Thinking</ComboboxLabel>
+                  <ComboboxLabel className="p-0">
+                    {ui("Thinking")}
+                  </ComboboxLabel>
                   <span
                     aria-hidden
                     className="ml-auto min-w-0 truncate text-muted-foreground text-xs"

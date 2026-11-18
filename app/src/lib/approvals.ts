@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -52,10 +53,18 @@ export type ApprovalRuleRow = ApprovalRuleInput & {
   account?: string | null;
 };
 export const BEHAVIOUR_LABELS: Record<RuleBehaviour, string> = {
-  allow: "Take action without asking",
-  pre_approved: "Take action if pre-approved",
-  ask: "Ask before taking action",
-  hand_off: "Hand off to you",
+  get allow() {
+    return ui("Take action without asking");
+  },
+  get pre_approved() {
+    return ui("Take action if pre-approved");
+  },
+  get ask() {
+    return ui("Ask before taking action");
+  },
+  get hand_off() {
+    return ui("Hand off to you");
+  },
 };
 export type ApprovalInboxData = {
   enabled: boolean;
@@ -124,7 +133,7 @@ export const approvalInboxOptions = () =>
     queryKey: ["approvals"],
     queryFn: async (): Promise<ApprovalInboxData> => {
       const response = await client("/api/approvals", {
-        fallback: "Your approvals could not be loaded.",
+        fallback: ui("Your approvals could not be loaded."),
       });
       return response.json();
     },
@@ -182,7 +191,7 @@ export const threadAsksEveryStepQueryOptions = (threadId: string) =>
       client(
         `/api/approvals/threads/${encodeURIComponent(threadId)}`,
         "asksEveryStep",
-        { fallback: "This conversation's approvals could not be checked." },
+        { fallback: ui("This conversation's approvals could not be checked.") },
       ),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -190,17 +199,17 @@ export const decideApproval = (id: string, decision: ApprovalDecision) =>
   client(`/api/approvals/${encodeURIComponent(id)}/decision`, {
     method: "POST",
     body: { decision },
-    fallback: "Your decision could not be saved.",
+    fallback: ui("Your decision could not be saved."),
   });
 export const revokeConversationGrant = (id: string) =>
   client(`/api/approvals/conversation-grants/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    fallback: "Couldn't turn that off. Try again.",
+    fallback: ui("Couldn't turn that off. Try again."),
   });
 export const revokeApprovalRule = (id: string) =>
   client(`/api/approvals/rules/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    fallback: "The permission could not be revoked.",
+    fallback: ui("The permission could not be revoked."),
   });
 export const setApprovalEnabled = (enabled: boolean) =>
   setApprovalPreferences({ enabled });
@@ -212,13 +221,13 @@ export const setApprovalPreferences = (input: {
   client("/api/approvals/preferences", {
     method: "PATCH",
     body: input,
-    fallback: "Your approval preference could not be saved.",
+    fallback: ui("Your approval preference could not be saved."),
   });
 export const createApprovalRule = (input: ApprovalRuleInput) =>
   client("/api/approvals/rules", {
     method: "POST",
     body: input,
-    fallback: "The rule could not be saved.",
+    fallback: ui("The rule could not be saved."),
   });
 export const setTeamApprovalSettings = (input: {
   enforceAutoReview?: boolean;
@@ -229,18 +238,18 @@ export const setTeamApprovalSettings = (input: {
   client("/api/approvals/team", {
     method: "PATCH",
     body: input,
-    fallback: "The team setting could not be saved.",
+    fallback: ui("The team setting could not be saved."),
   });
 export const createTeamApprovalRule = (input: ApprovalRuleInput) =>
   client("/api/approvals/team/rules", {
     method: "POST",
     body: input,
-    fallback: "The team rule could not be saved.",
+    fallback: ui("The team rule could not be saved."),
   });
 export const revokeTeamApprovalRule = (id: string) =>
   client(`/api/approvals/team/rules/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    fallback: "The team rule could not be removed.",
+    fallback: ui("The team rule could not be removed."),
   });
 /**
  * Answer a question a Bot asked. Given in the open conversation (`inConversation`), it may be that
@@ -258,13 +267,13 @@ export const answerPersonQuestion = async (
     {
       method: "POST",
       body: inConversation ? { response, inConversation } : { response },
-      fallback: "Your answer could not be saved.",
+      fallback: ui("Your answer could not be saved."),
     },
   )) === true;
 export const dismissPersonQuestion = (id: string) =>
   client(`/api/approvals/questions/${encodeURIComponent(id)}/dismiss`, {
     method: "POST",
-    fallback: "Couldn't dismiss that question.",
+    fallback: ui("Couldn't dismiss that question."),
   });
 export const updateApprovalRule = (
   id: string,
@@ -273,7 +282,7 @@ export const updateApprovalRule = (
   client(`/api/approvals/rules/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: input,
-    fallback: "The rule could not be changed.",
+    fallback: ui("The rule could not be changed."),
   });
 export const updateTeamApprovalRule = (
   id: string,
@@ -282,7 +291,7 @@ export const updateTeamApprovalRule = (
   client(`/api/approvals/team/rules/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: input,
-    fallback: "The team rule could not be changed.",
+    fallback: ui("The team rule could not be changed."),
   });
 
 /** The inbox's key, which every approval write invalidates: requests, rules and settings alike. */

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { AuditEvent } from "@/components/audit/audit-cells";
 import { client } from "@/lib/client";
@@ -29,7 +30,7 @@ export function auditVocabularyQueryOptions() {
     queryFn: async (): Promise<AuditVocabulary> =>
       (
         await client("/api/admin/audit-events/vocabulary", {
-          fallback: "Couldn't load the filters",
+          fallback: ui("Couldn't load the filters"),
         })
       ).json(),
   });
@@ -59,7 +60,7 @@ export function auditEventsQueryOptions(search = "") {
         : "";
       const response = await client(
         `/api/admin/audit-events${search}${cursor}`,
-        { fallback: "Could not load audit events" },
+        { fallback: ui("Could not load audit events") },
       );
       return response.json();
     },

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { ComposioApp } from "./queries";
 
 /**
@@ -29,7 +30,9 @@ export function coverageWarning(
 ): string | null {
   if (app.classifiedCount === null) return null;
   if (app.actionCount > 0 && app.classifiedCount === 0) {
-    return "This provider hasn't said which of its actions only read, so each one is treated as a change. Bots ask before using it wherever changes need approval, and check-ins can't use it.";
+    return ui(
+      "This provider hasn't said which of its actions only read, so each one is treated as a change. Bots ask before using it wherever changes need approval, and check-ins can't use it.",
+    );
   }
   return null;
 }
@@ -65,8 +68,11 @@ export function consentBreadth(
   if (actionCount <= 0) return null;
   if (permissionCount === 0) {
     return actionCount === 1
-      ? "This app has a single action, and approving it approves the app."
-      : `Approving any action in this app approves all ${actionCount} of them.`;
+      ? ui("This app has a single action, and approving it approves the app.")
+      : ui(
+          "Approving any action in this app approves all {{value0}} of them.",
+          { value0: String(actionCount) },
+        );
   }
   const permissions = `${permissionCount} separate ${permissionCount === 1 ? "permission" : "permissions"}`;
   const actions = `${actionCount} ${actionCount === 1 ? "action" : "actions"}`;
@@ -74,8 +80,14 @@ export function consentBreadth(
   const unscoped = actionCount - scopedActionCount;
   if (unscoped <= 0) return base;
   return unscoped === 1
-    ? `${base} A further 1 requests no permission of its own and becomes callable with any approval here.`
-    : `${base} A further ${unscoped} request no permission of their own and become callable with any approval here.`;
+    ? ui(
+        "{{value0}} A further 1 requests no permission of its own and becomes callable with any approval here.",
+        { value0: String(base) },
+      )
+    : ui(
+        "{{value0}} A further {{value1}} request no permission of their own and become callable with any approval here.",
+        { value0: String(base), value1: String(unscoped) },
+      );
 }
 
 /**
@@ -129,7 +141,9 @@ export function needsKey(app: Pick<ComposioApp, "connection">): boolean {
 export function keyNeededLine(
   app: Pick<ComposioApp, "connection" | "name">,
 ): string | null {
-  return needsKey(app) ? `Needs a key from ${app.name}` : null;
+  return needsKey(app)
+    ? ui("Needs a key from {{value0}}", { value0: String(app.name) })
+    : null;
 }
 
 /**

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useForm } from "@tanstack/react-form";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -58,7 +60,7 @@ function conversationsWith(
 function conversationName(channel: ChannelSummary): string {
   const title = (channel.summary || untitledLine(channel) || "").trim();
   // What the sidebar calls one nobody has named or written in yet.
-  return title ? openingOf(title, 60) : "New conversation";
+  return title ? openingOf(title, 60) : ui("New conversation");
 }
 
 const MONTH_DAY_LABEL = Object.fromEntries(
@@ -84,6 +86,7 @@ export function NewRoutinePage({
   agentId?: string;
   channelId?: string;
 }) {
+  useLocale();
   const navigate = useNavigate();
   const agents = useQuery(agentListQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
@@ -124,9 +127,11 @@ export function NewRoutinePage({
 
   return (
     <PageShell
-      backButton={{ label: "Routines", linkProps: { to: "/routines" } }}
-      description="Pick a Bot, say what it should do, and choose when. It posts what it did in a conversation with you."
-      title="New routine"
+      backButton={{ label: ui("Routines"), linkProps: { to: "/routines" } }}
+      description={ui(
+        "Pick a Bot, say what it should do, and choose when. It posts what it did in a conversation with you.",
+      )}
+      title={ui("New routine")}
     >
       <form
         noValidate
@@ -142,7 +147,7 @@ export function NewRoutinePage({
                 render={(props) => <Link {...props} to="/routines" />}
                 variant="outline"
               >
-                Cancel
+                {ui("Cancel")}
               </Button>
               <form.Subscribe
                 selector={(state) => [state.canSubmit, state.isSubmitting]}
@@ -155,8 +160,8 @@ export function NewRoutinePage({
                     type="submit"
                   >
                     {isSubmitting || createRoutine.isPending
-                      ? "Creating…"
-                      : "Create routine"}
+                      ? ui("Creating…")
+                      : ui("Create routine")}
                   </Button>
                 )}
               </form.Subscribe>
@@ -170,7 +175,7 @@ export function NewRoutinePage({
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Bot</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{ui("Bot")}</FieldLabel>
                     <Select
                       items={botItems}
                       onValueChange={(value) => {
@@ -193,7 +198,7 @@ export function NewRoutinePage({
                         className="w-full"
                         id={field.name}
                       >
-                        <SelectValue placeholder="Choose a Bot" />
+                        <SelectValue placeholder={ui("Choose a Bot")} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -227,9 +232,13 @@ export function NewRoutinePage({
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>What to do</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>
+                      {ui("What to do")}
+                    </FieldLabel>
                     <FieldDescription>
-                      Write it as one run of the work. Leave the schedule out.
+                      {ui(
+                        "Write it as one run of the work. Leave the schedule out.",
+                      )}
                     </FieldDescription>
                     <Textarea
                       aria-invalid={isInvalid}
@@ -239,7 +248,9 @@ export function NewRoutinePage({
                       onChange={(event) =>
                         field.handleChange(event.target.value)
                       }
-                      placeholder="Send me a summary of yesterday's new leads"
+                      placeholder={ui(
+                        "Send me a summary of yesterday's new leads",
+                      )}
                       rows={3}
                       value={field.state.value}
                     />
@@ -252,7 +263,7 @@ export function NewRoutinePage({
             </form.Field>
 
             <Field>
-              <FieldLabel htmlFor="repeat">When</FieldLabel>
+              <FieldLabel htmlFor="repeat">{ui("When")}</FieldLabel>
               <div className="flex flex-wrap gap-3">
                 <form.Field name="repeat">
                   {(field) => (
@@ -292,7 +303,7 @@ export function NewRoutinePage({
                               value={field.state.value}
                             >
                               <SelectTrigger
-                                aria-label="Day of the week"
+                                aria-label={ui("Day of the week")}
                                 className="min-w-36 flex-1"
                               >
                                 <SelectValue />
@@ -301,10 +312,10 @@ export function NewRoutinePage({
                                 <SelectGroup>
                                   {WEEKDAY_LABEL.map((label, index) => (
                                     <SelectItem
-                                      key={label}
+                                      key={ui(label)}
                                       value={String(index)}
                                     >
-                                      {label}
+                                      {ui(label)}
                                     </SelectItem>
                                   ))}
                                 </SelectGroup>
@@ -324,7 +335,7 @@ export function NewRoutinePage({
                               value={field.state.value}
                             >
                               <SelectTrigger
-                                aria-label="Day of the month"
+                                aria-label={ui("Day of the month")}
                                 className="min-w-24"
                               >
                                 <SelectValue />
@@ -346,7 +357,7 @@ export function NewRoutinePage({
                         <form.Field name="time">
                           {(field) => (
                             <Input
-                              aria-label="Time"
+                              aria-label={ui("Time")}
                               className="w-32"
                               onChange={(event) =>
                                 field.handleChange(event.target.value)
@@ -368,8 +379,11 @@ export function NewRoutinePage({
                     <span className="font-medium text-foreground">
                       {scheduleSentence(values)}
                     </span>
-                    , your time ({timeZone}). For anything else, like every
-                    other Tuesday, ask the Bot in a conversation.
+                    {ui(", your time (")}
+                    {timeZone}
+                    {ui(
+                      "). For anything else, like every other Tuesday, ask the Bot in a conversation.",
+                    )}
                   </FieldDescription>
                 )}
               </form.Subscribe>
@@ -401,11 +415,15 @@ export function NewRoutinePage({
                   <form.Field name="channelId">
                     {(field) => (
                       <Field>
-                        <FieldLabel htmlFor={field.name}>Posts in</FieldLabel>
+                        <FieldLabel htmlFor={field.name}>
+                          {ui("Posts in")}
+                        </FieldLabel>
                         <FieldDescription>
                           {field.state.value === NEW_CONVERSATION
-                            ? "OpenBot starts a conversation for this routine, named after it."
-                            : "Each run posts in this conversation."}
+                            ? ui(
+                                "OpenBot starts a conversation for this routine, named after it.",
+                              )
+                            : ui("Each run posts in this conversation.")}
                         </FieldDescription>
                         <Select
                           disabled={!agentId}
@@ -426,7 +444,7 @@ export function NewRoutinePage({
                             <SelectGroup>
                               {choices.map(([value, label]) => (
                                 <SelectItem key={value} value={value}>
-                                  {label}
+                                  {ui(label)}
                                 </SelectItem>
                               ))}
                             </SelectGroup>
@@ -445,9 +463,9 @@ export function NewRoutinePage({
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Name</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{ui("Name")}</FieldLabel>
                     <FieldDescription>
-                      Optional. The Routines page shows it by this name.
+                      {ui("Optional. The Routines page shows it by this name.")}
                     </FieldDescription>
                     <Input
                       aria-invalid={isInvalid}
@@ -457,7 +475,7 @@ export function NewRoutinePage({
                       onChange={(event) =>
                         field.handleChange(event.target.value)
                       }
-                      placeholder="Morning leads"
+                      placeholder={ui("Morning leads")}
                       value={field.state.value}
                     />
                     {isInvalid ? (
@@ -470,7 +488,7 @@ export function NewRoutinePage({
           </FieldGroup>
           {createRoutine.error ? (
             <p className="mt-5 text-destructive text-sm" role="alert">
-              {createRoutine.error.message}
+              {<ErrorDetails error={createRoutine.error} />}
             </p>
           ) : null}
         </PageCard>

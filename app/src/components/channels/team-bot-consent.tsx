@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ export function TeamBotConsentCard({
   serverId: string;
   message: string;
 }) {
+  useLocale();
   const answer = useMutation(teamBotConsentMutationOptions());
   const [chosen, setChosen] = useState<TeamBotConsentDecision | null>(null);
   const choose = (decision: TeamBotConsentDecision) =>
@@ -36,12 +39,12 @@ export function TeamBotConsentCard({
       {chosen ? (
         <p className="text-muted-foreground" role="status">
           {chosen === "skip"
-            ? "Skipped. Nothing of yours was used."
+            ? ui("Skipped. Nothing of yours was used.")
             : chosen === "allow_once"
-              ? "Allowed once. Ask the Bot to try again."
+              ? ui("Allowed once. Ask the Bot to try again.")
               : chosen === "allow_all_team_bots"
-                ? "Always allowed for every Team Bot. Ask it to try again."
-                : "Always allowed for this Bot. Ask it to try again."}
+                ? ui("Always allowed for every Team Bot. Ask it to try again.")
+                : ui("Always allowed for this Bot. Ask it to try again.")}
         </p>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -50,7 +53,7 @@ export function TeamBotConsentCard({
             onClick={() => choose("allow_once")}
             size="sm"
           >
-            Allow once
+            {ui("Allow once")}
           </Button>
           <Button
             disabled={answer.isPending}
@@ -58,7 +61,7 @@ export function TeamBotConsentCard({
             size="sm"
             variant="outline"
           >
-            Always allow for this Bot
+            {ui("Always allow for this Bot")}
           </Button>
           <Button
             disabled={answer.isPending}
@@ -66,7 +69,7 @@ export function TeamBotConsentCard({
             size="sm"
             variant="outline"
           >
-            Always allow for all Team Bots
+            {ui("Always allow for all Team Bots")}
           </Button>
           <Button
             disabled={answer.isPending}
@@ -74,13 +77,13 @@ export function TeamBotConsentCard({
             size="sm"
             variant="ghost"
           >
-            Skip
+            {ui("Skip")}
           </Button>
         </div>
       )}
       {answer.error ? (
         <p className="text-destructive" role="alert">
-          {answer.error.message}
+          {<ErrorDetails error={answer.error} />}
         </p>
       ) : null}
     </div>

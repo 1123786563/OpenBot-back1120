@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { LearnedSkillRecording } from "@openbot/shared/learning";
 import { IconChevronRight, IconVideo } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -33,9 +35,10 @@ import {
  * without opening a browser (`?recordings`); one the back end no longer has says so and opens nothing.
  */
 function LearnedFrom({ recordings }: { recordings: LearnedSkillRecording[] }) {
+  useLocale();
   return (
     <section className="grid gap-1.5">
-      <h3 className="font-medium text-sm">Learned from</h3>
+      <h3 className="font-medium text-sm">{ui("Learned from")}</h3>
       <div className="grid gap-2">
         {recordings.map((recording) => {
           const row = (
@@ -44,9 +47,13 @@ function LearnedFrom({ recordings }: { recordings: LearnedSkillRecording[] }) {
                 <IconVideo />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>{recording.title ?? "Untitled recording"}</ItemTitle>
+                <ItemTitle>
+                  {recording.title ?? ui("Untitled recording")}
+                </ItemTitle>
                 {!recording.available && (
-                  <ItemDescription>No longer available.</ItemDescription>
+                  <ItemDescription>
+                    {ui("No longer available.")}
+                  </ItemDescription>
                 )}
               </ItemContent>
             </>
@@ -94,6 +101,7 @@ export function LearnedSkillDialog({
   onClose: () => void;
   footer?: ReactNode;
 }) {
+  useLocale();
   const detail = useQuery({
     ...learnedSkillQueryOptions(source, name ?? ""),
     enabled: name !== null,
@@ -124,7 +132,7 @@ export function LearnedSkillDialog({
         <DialogBody className="mt-4 gap-5 overflow-y-auto">
           {detail.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {detail.error.message}
+              {<ErrorDetails error={detail.error} />}
             </p>
           ) : skill ? (
             <>
@@ -138,7 +146,7 @@ export function LearnedSkillDialog({
         <DialogFooter className="mt-4">
           {footer ?? (
             <Button onClick={onClose} size="sm" type="button">
-              Done
+              {ui("Done")}
             </Button>
           )}
         </DialogFooter>

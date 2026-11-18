@@ -1,3 +1,7 @@
+import { getLocale, ui, useLocale } from "@/lib/i18n";
+import type { SystemDisplay } from "@openbot/shared/system-display";
+import { approvalPhrase } from "@openbot/shared/tool-name";
+
 import {
   IconArrowsExchange,
   type IconBell,
@@ -44,6 +48,46 @@ import { relativeTime } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
 
+function displayText(fallback: string, display?: SystemDisplay): string {
+  return display
+    ? ui(display.key, "name" in display ? { name: display.name } : undefined)
+    : fallback;
+}
+
+function detailText(item: ActivityItem): string | null {
+  if (item.detailStarts) {
+    const { schedules, events } = item.detailStarts;
+    const parts = [];
+    if (schedules.length)
+      parts.push(
+        ui(
+          schedules.length === 1
+            ? "{{schedules}}, from its routine"
+            : "{{schedules}}, from its routines",
+          {
+            schedules: schedules
+              .map(
+                (schedule) =>
+                  `${getLocale() === "zh-CN" ? schedule.scheduleZhCN : schedule.schedule} (${schedule.timezone})`,
+              )
+              .join("; "),
+          },
+        ),
+      );
+    if (events.length)
+      parts.push(ui("Wakes on {{events}}", { events: events.join(", ") }));
+    return parts.join(" · ");
+  }
+  return item.detail
+    ? displayText(
+        getLocale() === "zh-CN"
+          ? (item.detailZhCN ?? item.detail)
+          : item.detail,
+        item.detailDisplay,
+      )
+    : null;
+}
+
 const ICONS: Record<ActivityKind, typeof IconBell> = {
   routine: IconCalendarRepeat,
   responsibility: IconTargetArrow,
@@ -54,12 +98,24 @@ const ICONS: Record<ActivityKind, typeof IconBell> = {
 };
 
 const KIND_LABEL: Record<ActivityKind, string> = {
-  routine: "Routine",
-  responsibility: "Goal",
-  handoff: "Delegated task",
-  approval: "Approval",
-  question: "Question",
-  follow_up: "Follow-up",
+  get routine() {
+    return ui("Routine");
+  },
+  get responsibility() {
+    return ui("Goal");
+  },
+  get handoff() {
+    return ui("Delegated task");
+  },
+  get approval() {
+    return ui("Approval");
+  },
+  get question() {
+    return ui("Question");
+  },
+  get follow_up() {
+    return ui("Follow-up");
+  },
 };
 
 /** Where an item opens: its conversation when it has one, otherwise the screen that owns its kind. */
@@ -91,11 +147,18 @@ function ActivityRow({
   /** Under way now: a pulsing dot on its icon, amber when it is waiting on the person. */
   live?: boolean;
 }) {
+  useLocale();
   const stop = useMutation(stopHandoffMutationOptions(queryClient));
   const cancel = useMutation(cancelFollowUpMutationOptions(queryClient));
   const Icon = ICONS[item.kind];
   const link = linkFor(item, agentId);
   const when = relativeTime(item.at);
+  const actionTitle = item.titleAction
+    ? approvalPhrase(item.titleAction, ui)
+    : null;
+  const title = actionTitle
+    ? actionTitle.charAt(0).toUpperCase() + actionTitle.slice(1)
+    : displayText(item.title, item.titleDisplay);
   const control = item.stoppable ? (
     <Button
       disabled={stop.isPending}
@@ -103,7 +166,7 @@ function ActivityRow({
       size="sm"
       variant="outline"
     >
-      {stop.isPending ? "Stopping…" : "Stop"}
+      {stop.isPending ? ui("Stopping…") : ui("Stop")}
     </Button>
   ) : item.cancellable ? (
     <Button
@@ -112,7 +175,7 @@ function ActivityRow({
       size="sm"
       variant="outline"
     >
-      {cancel.isPending ? "Cancelling…" : "Cancel"}
+      {cancel.isPending ? ui("Cancelling…") : ui("Cancel")}
     </Button>
   ) : null;
   const content = (
@@ -131,13 +194,14 @@ function ActivityRow({
       </ItemMedia>
       {/* One line, cut with an ellipsis; the whole title shows on hover. */}
       <ItemContent className="min-w-0">
-        <ItemTitle className="block w-auto truncate" title={item.title}>
-          {item.title}
+        <ItemTitle className="block w-auto truncate" title={title}>
+          {title}
         </ItemTitle>
         <ItemDescription>
-          {KIND_LABEL[item.kind]} · {item.needsYou ? "needs you" : item.status}
+          {KIND_LABEL[item.kind]} ·{" "}
+          {item.needsYou ? ui("needs you") : ui(item.status)}
           {when ? ` · ${when}` : ""}
-          {item.detail ? ` · ${item.detail}` : ""}
+          {item.detail ? ` · ${detailText(item)}` : ""}
         </ItemDescription>
       </ItemContent>
     </>
@@ -153,7 +217,7 @@ function ActivityRow({
         <ItemActions>
           {link ? (
             <Button render={link} size="sm" variant="ghost">
-              Open
+              {ui("Open")}
             </Button>
           ) : null}
           {control}
@@ -182,6 +246,7 @@ function ActivitySection({
   live?: boolean;
   title: string;
 }) {
+  useLocale();
   return (
     <PageSection title={title}>
       {items.length === 0 ? (
@@ -229,11 +294,12 @@ function upcomingOf(activity: BotActivity | undefined) {
  * least urgent, so it lives only on the Activity page.
  */
 export function BotActivityGlance({ agentId }: { agentId: string }) {
+  useLocale();
   const activity = useQuery(botActivityQueryOptions(agentId));
   const upcoming = upcomingOf(activity.data);
   if (activity.isPending || upcoming.length === 0) return null;
   return (
-    <PageSection title="Activity">
+    <PageSection title={ui("Activity")}>
       <PageRows>
         {upcoming.map(({ item, live }) => (
           <Fragment key={item.id}>
@@ -253,6 +319,7 @@ export function BotActivityGlance({ agentId }: { agentId: string }) {
  * card's other rows.
  */
 export function BotActivityRow({ agentId }: { agentId: string }) {
+  useLocale();
   const activity = useQuery(botActivityQueryOptions(agentId));
   if (activity.isPending || upcomingOf(activity.data).length > 0) return null;
   return (
@@ -261,7 +328,7 @@ export function BotActivityRow({ agentId }: { agentId: string }) {
       <AllActivityItem
         activity={activity.data}
         agentId={agentId}
-        title="Activity"
+        title={ui("Activity")}
         withIcon
       />
     </>
@@ -279,6 +346,7 @@ function AllActivityItem({
   title?: string;
   withIcon?: boolean;
 }) {
+  useLocale();
   return (
     <Item
       render={<Link params={{ agentId }} to="/bots/$agentId/activity" />}
@@ -294,7 +362,7 @@ function AllActivityItem({
         <ItemDescription>
           {activity
             ? activitySummary(activity)
-            : "Couldn't load this Bot's activity."}
+            : ui("Couldn't load this Bot's activity.")}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
@@ -320,19 +388,20 @@ export function activitySummary(activity: BotActivity): string {
   ].filter(Boolean);
   if (parts.length) return parts.join(" · ");
   return activity.completed.length
-    ? "Nothing running or scheduled"
-    : "No tasks, routines or goals yet";
+    ? ui("Nothing running or scheduled")
+    : ui("No tasks, routines or goals yet");
 }
 
 /** In progress, Scheduled and Completed, read from the ledgers the work already lives in. */
 export function BotActivitySections({ agentId }: { agentId: string }) {
+  useLocale();
   const activity = useQuery(botActivityQueryOptions(agentId));
   if (activity.isPending) return null;
   if (activity.error)
     return (
-      <PageSection title="Activity">
+      <PageSection title={ui("Activity")}>
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load this Bot's activity. Reload the page.
+          {ui("Couldn't load this Bot's activity. Reload the page.")}
         </p>
       </PageSection>
     );
@@ -340,16 +409,16 @@ export function BotActivitySections({ agentId }: { agentId: string }) {
     <>
       <ActivitySection
         agentId={agentId}
-        empty="Nothing is running or waiting on you."
+        empty={ui("Nothing is running or waiting on you.")}
         items={activity.data.inProgress}
         live
-        title="In progress"
+        title={ui("In progress")}
       />
       <ActivitySection
         agentId={agentId}
-        empty="Nothing is scheduled."
+        empty={ui("Nothing is scheduled.")}
         items={activity.data.scheduled}
-        title="Scheduled"
+        title={ui("Scheduled")}
       />
       {/* Only when there is one: most Bots have no goal waiting to be asked. */}
       {activity.data.onDemand?.length ? (
@@ -357,14 +426,14 @@ export function BotActivitySections({ agentId }: { agentId: string }) {
           agentId={agentId}
           empty=""
           items={activity.data.onDemand}
-          title="On demand"
+          title={ui("On demand")}
         />
       ) : null}
       <ActivitySection
         agentId={agentId}
-        empty="No tasks, routines or goals have finished yet."
+        empty={ui("No tasks, routines or goals have finished yet.")}
         items={activity.data.completed}
-        title="Completed"
+        title={ui("Completed")}
       />
       <BotActionsSection agentId={agentId} />
     </>
@@ -381,12 +450,13 @@ export function BotActivitySections({ agentId }: { agentId: string }) {
  * can open the trail: Settings › Activity in the personal edition, Admin › Audit for an admin.
  */
 function BotActionsSection({ agentId }: { agentId: string }) {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const admin = useQuery(currentUserQueryOptions()).data?.role === "admin";
   if (!personal && !admin) return null;
   return (
-    <PageSection title="Actions">
+    <PageSection title={ui("Actions")}>
       <PageRows>
         <Item
           render={
@@ -402,10 +472,11 @@ function BotActionsSection({ agentId }: { agentId: string }) {
             <IconListDetails />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Every action this Bot took</ItemTitle>
+            <ItemTitle>{ui("Every action this Bot took")}</ItemTitle>
             <ItemDescription>
-              See the files, pages and apps it used, and which were allowed,
-              blocked or didn't happen.
+              {ui(
+                "See the files, pages and apps it used, and which were allowed, blocked or didn't happen.",
+              )}
             </ItemDescription>
           </ItemContent>
           <ItemActions>

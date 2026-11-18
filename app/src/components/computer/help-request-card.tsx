@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { HandoffStatus } from "@openbot/shared/computer-control";
 import {
   IconAlertTriangle,
@@ -61,21 +62,22 @@ function endedAs(outcome: HelpOutcome): {
   detail?: string;
 } {
   if (outcome.handoffStatus === "completed")
-    return { title: "Taken over and handed back", done: true };
-  if (outcome.stopped) return { title: "Stopped waiting for you", done: false };
+    return { title: ui("Taken over and handed back"), done: true };
+  if (outcome.stopped)
+    return { title: ui("Stopped waiting for you"), done: false };
   switch (outcome.handoffStatus) {
     case "cancelled":
-      return { title: "Nobody took over", done: false };
+      return { title: ui("Nobody took over"), done: false };
     case "expired":
-      return { title: "Nobody took over in time", done: false };
+      return { title: ui("Nobody took over in time"), done: false };
     case "interrupted":
       return {
-        title: "The computer stopped before this was done",
+        title: ui("The computer stopped before this was done"),
         done: false,
       };
     default:
       return {
-        title: "Couldn't wait for you",
+        title: ui("Couldn't wait for you"),
         done: false,
         ...(outcome.reason ? { detail: outcome.reason } : {}),
       };
@@ -94,6 +96,7 @@ export function HelpRequestCard({
   reason: string | undefined;
   result: string | undefined;
 }) {
+  useLocale();
   const place = useToolPlace();
   const ask = useConversation()?.ask;
   const outcome = outcomeOf(result);
@@ -120,7 +123,7 @@ export function HelpRequestCard({
     );
 
   const ended = handedBackHere
-    ? { title: "Taken over and handed back", done: true }
+    ? { title: ui("Taken over and handed back"), done: true }
     : endedAs(outcome ?? {});
   /*
    * The Bot's turn ended on the hand-back without a word. Its tool result asks it to say what it does next, and it
@@ -160,22 +163,23 @@ export function HelpRequestCard({
                 aria-hidden="true"
                 className="mr-1 inline size-3.5 align-[-2px]"
               />
-              The Bot asked: “{asked}”
+              {ui("The Bot asked: “")}
+              {asked}”
             </>
           ) : (
-            "The Bot asked you to take over its browser."
+            ui("The Bot asked you to take over its browser.")
           )}
           {ended.detail ? ` ${ended.detail}` : null}
-          {handedBackHere ? " The Bot is carrying on." : null}
+          {handedBackHere ? ui(" The Bot is carrying on.") : null}
           {silent
-            ? " The Bot stopped here without saying what it does next."
+            ? ui(" The Bot stopped here without saying what it does next.")
             : null}
         </ItemDescription>
       </ItemContent>
       {silent ? (
         <ItemActions>
           <Button onClick={() => ask?.("Please carry on.")} size="sm">
-            Carry on
+            {ui("Carry on")}
           </Button>
         </ItemActions>
       ) : null}

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconChevronDown } from "@tabler/icons-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useState } from "react";
@@ -30,12 +31,13 @@ const ITEMS_SHOWN = 3;
  * a Bot the person hid from their roster.
  */
 export function useBotName() {
+  useLocale();
   const bots = useQuery(agentListQueryOptions());
   const attention = useQuery(botAttentionQueryOptions());
   return (agentId: string) =>
     bots.data?.find((bot) => bot.id === agentId)?.name ??
     attention.data?.find((bot) => bot.agentId === agentId)?.name ??
-    "Your Bot";
+    ui("Your Bot");
 }
 
 /**
@@ -51,6 +53,7 @@ export function useBotName() {
  * conversations list the sidebar keeps live over the socket.
  */
 export function useNeedsYou(agentId?: string) {
+  useLocale();
   const suggestions = useQuery(proactiveSuggestionsQueryOptions());
   const taskList = useQuery(taskListQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
@@ -88,6 +91,7 @@ export function NeedsYouRows({
   tasks: ListedTask[];
   items: ProactiveSuggestion[];
 }) {
+  useLocale();
   const botName = useBotName();
   const [expanded, setExpanded] = useState(false);
   /*
@@ -127,7 +131,7 @@ export function NeedsYouRows({
           >
             <ItemContent>
               <ItemTitle className="text-muted-foreground">
-                Show {folded} more
+                {uiNodes("Show {{slot0}}more", [folded])}
               </ItemTitle>
             </ItemContent>
             <ItemActions>
@@ -145,6 +149,7 @@ export function NeedsYouRows({
  * list everybody reads past. Not drawn when there are none.
  */
 export function DoneTasks({ done }: { done: ListedTask[] }) {
+  useLocale();
   const botName = useBotName();
   const [open, setOpen] = useState(false);
   if (done.length === 0) return null;
@@ -152,11 +157,14 @@ export function DoneTasks({ done }: { done: ListedTask[] }) {
     <PageSection
       action={
         <Button onClick={() => setOpen(!open)} size="sm" variant="ghost">
-          {open ? "Hide" : "Show"}
+          {open ? ui("Hide") : ui("Show")}
         </Button>
       }
-      description={`${done.length} ${done.length === 1 ? "task" : "tasks"} you marked done this week.`}
-      title="Done"
+      description={ui("{{value0}} {{value1}} you marked done this week.", {
+        value0: String(done.length),
+        value1: String(done.length === 1 ? ui("task") : ui("tasks")),
+      })}
+      title={ui("Done")}
     >
       {open ? (
         <PageRows>

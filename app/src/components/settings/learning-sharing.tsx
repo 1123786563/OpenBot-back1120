@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   LearningSharingMode,
   PersonalLearningSharing,
@@ -49,21 +51,34 @@ export const SHARING_CHOICES: {
   {
     mode: "closed",
     icon: IconLock,
-    title: "Only my Bots",
-    description: "Only the Bots you use draw on your skills.",
+    get title() {
+      return ui("Only my Bots");
+    },
+    get description() {
+      return ui("Only the Bots you use draw on your skills.");
+    },
   },
   {
     mode: "open",
     icon: IconUsersGroup,
-    title: "Everyone's Bots",
-    description: "Every Bot on OpenBot draws on all of your skills.",
+    get title() {
+      return ui("Everyone's Bots");
+    },
+    get description() {
+      return ui("Every Bot on OpenBot draws on all of your skills.");
+    },
   },
   {
     mode: "choose",
     icon: IconListCheck,
-    title: "The skills I choose",
-    description:
-      "Every Bot draws on the skills you open below; your own Bots use all of them.",
+    get title() {
+      return ui("The skills I choose");
+    },
+    get description() {
+      return ui(
+        "Every Bot draws on the skills you open below; your own Bots use all of them.",
+      );
+    },
   },
 ];
 
@@ -73,12 +88,17 @@ export const SHARING_CHOICES: {
  */
 function choiceSentence(data: PersonalLearningSharing): string {
   if (data.sharingAllowed)
-    return "Your own Bots always use every skill learned from your recordings.";
+    return ui(
+      "Your own Bots always use every skill learned from your recordings.",
+    );
   const off =
     "An admin hasn't turned on sharing skills with every Bot, so only the Bots you use draw on yours.";
   return data.mode === "closed"
     ? off
-    : `${off} Your choice below applies again if an admin turns it on.`;
+    : ui(
+        "{{value0}} Your choice below applies again if an admin turns it on.",
+        { value0: String(off) },
+      );
 }
 
 /** What the Skills list says when it has none to show. */
@@ -89,16 +109,28 @@ function emptySentence(
 ): string {
   if (personal) {
     return data.skills === null
-      ? "Couldn't read your Skills from the backend just now. Reload the page to try again."
-      : "No skills learned from your recordings and conversations yet. Once there are, they show up here.";
+      ? ui(
+          "Couldn't read your Skills from the backend just now. Reload the page to try again.",
+        )
+      : ui(
+          "No skills learned from your recordings and conversations yet. Once there are, they show up here.",
+        );
   }
   if (data.unavailable === "off")
-    return "An admin has turned off automatic learning, so no skills are learned from your recordings.";
+    return ui(
+      "An admin has turned off automatic learning, so no skills are learned from your recordings.",
+    );
   if (data.skills === null)
-    return "Couldn't read your Skills from the backend just now. Your choice above still applies to them.";
+    return ui(
+      "Couldn't read your Skills from the backend just now. Your choice above still applies to them.",
+    );
   return mode === "choose"
-    ? "No Skills learned from your recordings yet. Once there are, each one you open here reaches every Bot."
-    : "No Skills learned from your recordings yet. Once there are, they show up here.";
+    ? ui(
+        "No Skills learned from your recordings yet. Once there are, each one you open here reaches every Bot.",
+      )
+    : ui(
+        "No Skills learned from your recordings yet. Once there are, they show up here.",
+      );
 }
 
 /** What the Your Skills section says about who draws on them, in the mode chosen. */
@@ -115,6 +147,7 @@ const SKILLS_DESCRIPTION: Record<LearningSharingMode, string> = {
  * (Admin, Automatic learning, Skill sharing): until then nothing can be opened, and what was opened can still be closed.
  */
 export function LearningSharing() {
+  useLocale();
   const sharing = useQuery(personalLearningQueryOptions());
   const setMode = useMutation(
     setLearningSharingModeMutationOptions(queryClient),
@@ -131,7 +164,7 @@ export function LearningSharing() {
   if (sharing.error) {
     return (
       <p className="mt-6 text-destructive text-sm" role="alert">
-        {sharing.error.message}
+        {<ErrorDetails error={sharing.error} />}
       </p>
     );
   }
@@ -150,9 +183,11 @@ export function LearningSharing() {
     const none = data.skills === null || data.skills.length === 0;
     return (
       <PageSection
-        title="Your skills"
+        title={ui("Your skills")}
         // Said only over skills to open: above the empty state it would point at nothing.
-        description={none ? undefined : "Open a skill to read what it does."}
+        description={
+          none ? undefined : ui("Open a skill to read what it does.")
+        }
       >
         {data.skills === null || data.skills.length === 0 ? (
           <PageEmpty>{emptySentence(data, mode, true)}</PageEmpty>
@@ -200,7 +235,7 @@ export function LearningSharing() {
   return (
     <>
       <PageSection
-        title="Who else's Bots use your skills"
+        title={ui("Who else's Bots use your skills")}
         description={choiceSentence(data)}
       >
         <PageRows>
@@ -247,7 +282,7 @@ export function LearningSharing() {
         </PageRows>
       </PageSection>
       <PageSection
-        title="Your skills"
+        title={ui("Your skills")}
         description={SKILLS_DESCRIPTION[data.sharingAllowed ? mode : "closed"]}
       >
         {data.skills === null || data.skills.length === 0 ? (
@@ -287,9 +322,9 @@ export function LearningSharing() {
                               needsAdmin ||
                               (mode === "choose" &&
                                 !(open && data.sharingAllowed))
-                                ? "Only your Bots use it."
+                                ? ui("Only your Bots use it.")
                                 : mode === "choose"
-                                  ? "Every Bot may use it."
+                                  ? ui("Every Bot may use it.")
                                   : null,
                               skill.description,
                             ]
@@ -303,11 +338,15 @@ export function LearningSharing() {
                           <>
                             {needsAdmin && skill.sharing === "requested" ? (
                               <span className="text-muted-foreground text-sm">
-                                Asked to share
+                                {ui("Asked to share")}
                               </span>
                             ) : null}
                             <Switch
-                              aria-label={`Open ${skillTitle(skill.name, skill.description)} to everyone`}
+                              aria-label={ui("Open {{value0}} to everyone", {
+                                value0: String(
+                                  skillTitle(skill.name, skill.description),
+                                ),
+                              })}
                               checked={open}
                               // An open Skill can always be closed; opening one waits for an admin.
                               disabled={
@@ -340,7 +379,7 @@ export function LearningSharing() {
                           </>
                         ) : skill.sharing === "requested" ? (
                           <span className="text-muted-foreground text-sm">
-                            Asked to share
+                            {ui("Asked to share")}
                           </span>
                         ) : (
                           <Button
@@ -350,7 +389,7 @@ export function LearningSharing() {
                             type="button"
                             variant="outline"
                           >
-                            Ask to share
+                            {ui("Ask to share")}
                           </Button>
                         )}
                       </ItemActions>

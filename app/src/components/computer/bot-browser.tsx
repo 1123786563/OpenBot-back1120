@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { BotBrowserApiState } from "@openbot/shared/bot-browser";
 import { IconLock, IconPlayerStop } from "@tabler/icons-react";
 import { RECORDER_COLLECTS_SHORT } from "@openbot/shared/recorder-disclosure";
@@ -78,6 +80,7 @@ export function BotBrowserBar({
   onNavigated?: () => void;
   children: ReactNode;
 }) {
+  useLocale();
   const tabs = useMutation(botBrowserTabsMutationOptions(queryClient, botId));
   const navigate = useMutation(
     navigateBotBrowserMutationOptions(queryClient, botId),
@@ -200,6 +203,7 @@ function useBotRecording(
     answered: (narrate: boolean) => void;
   },
 ) {
+  useLocale();
   const recorder = state.recorder;
   const running = recorder !== undefined && recorder.phase !== "idle";
   const runningId =
@@ -298,18 +302,19 @@ export function BotRecordPanel(props: {
   botId: string;
   state: BotBrowserApiState;
 }) {
+  useLocale();
   // Where the Bots share one computer, so another Bot could read the person's Recorder connection off the disk.
   if (props.state.recordRefused)
     return (
-      <section aria-label="Record a task">
-        <h2 className="font-semibold text-sm">Record a task</h2>
+      <section aria-label={ui("Record a task")}>
+        <h2 className="font-semibold text-sm">{ui("Record a task")}</h2>
         <PageRows className="mt-3">
           <Item size="sm" role="status">
             <ItemMedia variant="icon">
               <IconLock className="text-muted-foreground" />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Recording isn't available here</ItemTitle>
+              <ItemTitle>{ui("Recording isn't available here")}</ItemTitle>
               <ItemDescription className="line-clamp-none">
                 {props.state.recordRefused}
               </ItemDescription>
@@ -328,6 +333,7 @@ function RecordPanel({
   botId: string;
   state: BotBrowserApiState;
 }) {
+  useLocale();
   const language = narrationLanguage();
   const listening =
     state.recordingIsMine && state.recorder?.phase === "recording";
@@ -349,15 +355,16 @@ function RecordPanel({
   /** Why a recording of the person's ended that Stop did not end: the wheel going back, as a rule. */
   const ended = state.mine ? "The recording ended." : ENDED_WITH_THE_WHEEL;
   return (
-    <section aria-label="Record a task">
-      <h2 className="font-semibold text-sm">Record a task</h2>
+    <section aria-label={ui("Record a task")}>
+      <h2 className="font-semibold text-sm">{ui("Record a task")}</h2>
       <p className="mt-1 text-pretty text-muted-foreground text-sm">
-        Do the task in the Bot's browser while you have control. Only what you
-        do is recorded, and it goes to your own Learning space.
+        {ui(
+          "Do the task in the Bot's browser while you have control. Only what you do is recorded, and it goes to your own Learning space.",
+        )}
       </p>
       {/* What the Recorder keeps, said before Record, quieter than what to do. */}
       <p className="mt-2 text-pretty text-muted-foreground text-xs leading-relaxed">
-        {RECORDER_COLLECTS_SHORT}
+        {ui(RECORDER_COLLECTS_SHORT)}
       </p>
       <PageRows className="mt-3">
         {recording.theirs ? (
@@ -366,14 +373,16 @@ function RecordPanel({
               <RecordingMark live={false} />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Someone is recording</ItemTitle>
-              <ItemDescription>You can record once they stop.</ItemDescription>
+              <ItemTitle>{ui("Someone is recording")}</ItemTitle>
+              <ItemDescription>
+                {ui("You can record once they stop.")}
+              </ItemDescription>
             </ItemContent>
           </Item>
         ) : (
           <RecordingRow
             recording={recording}
-            placeholder="Name the task to record"
+            placeholder={ui("Name the task to record")}
           />
         )}
         {/* Narration is for the person who can record: their own microphone, while they hold the wheel. */}
@@ -418,7 +427,7 @@ function RecordPanel({
       </PageRows>
       {recording.error ? (
         <p className="mt-2 text-destructive text-sm" role="alert">
-          {recording.error.message}
+          {<ErrorDetails error={recording.error} />}
         </p>
       ) : null}
       <NarrationChoiceDialog {...recording.question} />

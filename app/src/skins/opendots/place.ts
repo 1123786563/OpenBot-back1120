@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { type AgentProfile, agentListQueryOptions } from "@/lib/agents/queries";
@@ -66,12 +67,12 @@ export function parsePlace(
   const agent = typeof search.agent === "string" ? search.agent : undefined;
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/") {
-    return { section: "chat", label: "New chat", ownsWatch: false };
+    return { section: "chat", label: ui("New chat"), ownsWatch: false };
   }
   if (path === "/channel/new") {
     return {
       section: "chat",
-      label: (bot) => bot ?? "New chat",
+      label: (bot) => bot ?? ui("New chat"),
       agentFromUrl: agent,
       ownsWatch: false,
     };
@@ -104,19 +105,27 @@ export function parsePlace(
     };
   }
   if (path === "/bots" || path === "/agents") {
-    return { section: "bots", label: "All Bots", ownsWatch: false };
+    return { section: "bots", label: ui("All Bots"), ownsWatch: false };
   }
   if (path === "/s/routines" || path === "/routines") {
-    return { section: "routines", label: "Routines", ownsWatch: false };
+    return { section: "routines", label: ui("Routines"), ownsWatch: false };
   }
   if (path === "/s/memories" || path === "/capabilities/memory") {
-    return { section: "memories", label: "Memories", ownsWatch: false };
+    return { section: "memories", label: ui("Memories"), ownsWatch: false };
   }
   if (path.startsWith("/capabilities")) {
-    return { section: "capabilities", label: "Capabilities", ownsWatch: false };
+    return {
+      section: "capabilities",
+      label: ui("Capabilities"),
+      ownsWatch: false,
+    };
   }
   if (path.startsWith("/connections")) {
-    return { section: "connections", label: "Connections", ownsWatch: false };
+    return {
+      section: "connections",
+      label: ui("Connections"),
+      ownsWatch: false,
+    };
   }
   return {
     section: "other",
@@ -134,6 +143,7 @@ export function botName(
 }
 
 export function usePlace(): Place {
+  useLocale();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });

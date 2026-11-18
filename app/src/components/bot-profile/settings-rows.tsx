@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBrain,
   IconChecks,
@@ -66,6 +67,7 @@ type Row = {
  * that changes it. Sharing is for its owner, administrators, and anyone it is published to.
  */
 export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
+  useLocale();
   const me = useQuery(currentUserQueryOptions()).data;
   const routines = useQuery(routinesQueryOptions());
   const plugins = useQuery(agentPluginsQueryOptions(agent.id));
@@ -89,7 +91,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
   const allRows: Row[] = [
     {
       to: "/bots/$agentId/responsibilities",
-      title: "Goals",
+      title: ui("Goals"),
       icon: IconTargetArrow,
       summary: goals.data
         ? countLabel(
@@ -104,7 +106,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
     },
     {
       to: "/bots/$agentId/reach",
-      title: "Reaching you",
+      title: ui("Reaching you"),
       icon: IconDeviceMobile,
       summary: reach.data
         ? reachSummary(
@@ -121,7 +123,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
       ? [
           {
             to: "/bots/$agentId/memory" as const,
-            title: "Memory",
+            title: ui("Memory"),
             icon: IconBrain,
             summary:
               sources.data && research.data
@@ -139,7 +141,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
       : []),
     {
       to: "/bots/$agentId/approvals",
-      title: "Approval rules",
+      title: ui("Approval rules"),
       icon: IconChecks,
       summary: approvals.data
         ? countLabel(
@@ -155,7 +157,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
     },
     {
       to: "/bots/$agentId/routines",
-      title: "Routines",
+      title: ui("Routines"),
       icon: IconClock,
       summary: routines.data
         ? countLabel(
@@ -169,7 +171,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
     },
     {
       to: "/bots/$agentId/access",
-      title: "Skills and access",
+      title: ui("Skills and access"),
       icon: IconPuzzle,
       summary: plugins.data
         ? accessSummary(
@@ -182,7 +184,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
       ? [
           {
             to: "/bots/$agentId/sharing" as const,
-            title: "Sharing",
+            title: ui("Sharing"),
             icon: IconUsersGroup,
             summary: teamBots.data
               ? sharingSummary(published, agent.visibility)
@@ -192,7 +194,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
       : []),
     {
       to: "/bots/$agentId/setup",
-      title: "Setup",
+      title: ui("Setup"),
       icon: IconSettings,
       summary: setupSummary(agent, personal ? "personal" : "team"),
     },
@@ -206,7 +208,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
   const rows = personal
     ? allRows.flatMap((row): Row[] =>
         row.to === "/bots/$agentId/access"
-          ? [{ ...row, title: "What it can do" }]
+          ? [{ ...row, title: ui("What it can do") }]
           : row.to === "/bots/$agentId/responsibilities" ||
               row.to === "/bots/$agentId/reach" ||
               row.to === "/bots/$agentId/approvals"
@@ -216,7 +218,7 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
     : allRows;
 
   return (
-    <PageSection title="Settings for this Bot">
+    <PageSection title={ui("Settings for this Bot")}>
       <PageRows>
         {rows.map(({ to, title, icon: Icon, summary }, index) => (
           <Fragment key={to}>

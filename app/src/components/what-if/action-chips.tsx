@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   WHAT_IF_INITIATOR_WORDS,
   WHAT_IF_INITIATORS,
@@ -46,6 +47,7 @@ export function ActionChips({
   vocabulary: WhatIfVocabulary | undefined;
   onChange: (next: WhatIfAction) => void;
 }) {
+  useLocale();
   const set = (patch: Partial<WhatIfAction>) =>
     onChange({ ...action, ...patch });
   const bot = vocabulary?.bots.find((entry) => entry.id === action.bot);
@@ -55,14 +57,14 @@ export function ActionChips({
   const intent = action.intent as WhatIfIntent | "";
   const detail =
     intent === "run_command"
-      ? ({ key: "command", title: "Command" } as const)
+      ? ({ key: "command", title: ui("Command") } as const)
       : intent === "read_file" ||
           intent === "write_file" ||
           intent === "download_file" ||
           intent === "list_files"
-        ? ({ key: "file", title: "File" } as const)
+        ? ({ key: "file", title: ui("File") } as const)
         : intent === "activate" || intent === "type"
-          ? ({ key: "label", title: "Button or field" } as const)
+          ? ({ key: "label", title: ui("Button or field") } as const)
           : null;
 
   return (
@@ -70,7 +72,7 @@ export function ActionChips({
       <MenuChip
         chip="bot"
         empty={!bot}
-        title="Bot"
+        title={ui("Bot")}
         value={bot?.name ?? "Choose"}
       >
         <DropdownMenuRadioGroup
@@ -99,7 +101,7 @@ export function ActionChips({
       <MenuChip
         chip="person"
         empty={!person && !action.group}
-        title="Runs as"
+        title={ui("Runs as")}
         value={
           action.group
             ? `Anyone in ${action.group}`
@@ -117,7 +119,7 @@ export function ActionChips({
           value={action.group ? `group:${action.group}` : action.person}
         >
           <DropdownMenuGroup>
-            <DropdownMenuLabel>People</DropdownMenuLabel>
+            <DropdownMenuLabel>{ui("People")}</DropdownMenuLabel>
             {(vocabulary?.people ?? []).map((entry) => (
               <DropdownMenuRadioItem key={entry.id} value={entry.id}>
                 <span className="truncate">{entry.name ?? entry.email}</span>
@@ -128,7 +130,7 @@ export function ActionChips({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Anyone in a group</DropdownMenuLabel>
+                <DropdownMenuLabel>{ui("Anyone in a group")}</DropdownMenuLabel>
                 {vocabulary.groups.map((group) => (
                   <DropdownMenuRadioItem key={group} value={`group:${group}`}>
                     <span className="truncate">{group}</span>
@@ -142,7 +144,7 @@ export function ActionChips({
 
       <MenuChip
         chip="initiator"
-        title="Started by"
+        title={ui("Started by")}
         value={WHAT_IF_INITIATOR_WORDS[action.initiator]}
       >
         <DropdownMenuRadioGroup
@@ -161,8 +163,8 @@ export function ActionChips({
 
       <MenuChip
         chip="surface"
-        title="Uses"
-        value={action.surface === "app" ? "An app" : "Its computer"}
+        title={ui("Uses")}
+        value={action.surface === "app" ? ui("An app") : ui("Its computer")}
       >
         <DropdownMenuRadioGroup
           onValueChange={(value) =>
@@ -181,9 +183,11 @@ export function ActionChips({
           }
           value={action.surface}
         >
-          <DropdownMenuRadioItem value="app">An app</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="app">
+            {ui("An app")}
+          </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="computer">
-            Its computer
+            {ui("Its computer")}
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </MenuChip>
@@ -193,7 +197,7 @@ export function ActionChips({
           <MenuChip
             chip="app"
             empty={!app}
-            title="App"
+            title={ui("App")}
             value={app?.name ?? "Choose"}
           >
             <DropdownMenuRadioGroup
@@ -210,7 +214,7 @@ export function ActionChips({
           <MenuChip
             chip="tool"
             empty={!tool}
-            title="Tool"
+            title={ui("Tool")}
             value={tool ? humanise(tool.name) : "Choose"}
           >
             {app?.tools.length ? (
@@ -222,7 +226,7 @@ export function ActionChips({
                   <DropdownMenuRadioItem key={entry.name} value={entry.name}>
                     <span className="truncate">{humanise(entry.name)}</span>
                     <span className="ml-auto ps-3 text-muted-foreground text-xs">
-                      {entry.effect === "write" ? "Changes" : "Reads"}
+                      {entry.effect === "write" ? ui("Changes") : ui("Reads")}
                     </span>
                   </DropdownMenuRadioItem>
                 ))}
@@ -230,16 +234,20 @@ export function ActionChips({
             ) : (
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="font-normal">
-                  {app ? "This app lists no tools." : "Choose an app first."}
+                  {app
+                    ? ui("This app lists no tools.")
+                    : ui("Choose an app first.")}
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
             )}
           </MenuChip>
           {tool ? (
             <StaticChip
-              title="Effect"
+              title={ui("Effect")}
               value={
-                tool.effect === "write" ? "Changes something" : "Only reads"
+                tool.effect === "write"
+                  ? ui("Changes something")
+                  : ui("Only reads")
               }
             />
           ) : null}
@@ -249,7 +257,7 @@ export function ActionChips({
           <MenuChip
             chip="intent"
             empty={!intent}
-            title="Does"
+            title={ui("Does")}
             value={intent ? WHAT_IF_INTENT_WORDS[intent] : "Choose"}
           >
             <DropdownMenuRadioGroup
@@ -266,10 +274,10 @@ export function ActionChips({
           <TextChip
             chip="host"
             empty={!action.host}
-            label="Web site"
+            label={ui("Web site")}
             onChange={(host) => set({ host })}
-            placeholder="www.linkedin.com"
-            title="Site"
+            placeholder={ui("www.linkedin.com")}
+            title={ui("Site")}
             value={action.host}
           />
           {detail ? (
@@ -280,10 +288,10 @@ export function ActionChips({
               optional
               placeholder={
                 detail.key === "command"
-                  ? "rm -rf build"
+                  ? ui("rm -rf build")
                   : detail.key === "file"
-                    ? "reports/q3.csv"
-                    : "Submit"
+                    ? ui("reports/q3.csv")
+                    : ui("Submit")
               }
               title={detail.title}
               value={action[detail.key]}
@@ -305,6 +313,7 @@ function chipTone(empty: boolean | undefined) {
 }
 
 function ChipText({ title, value }: { title: string; value: string }) {
+  useLocale();
   return (
     <>
       <span className="text-muted-foreground">{title}:</span>
@@ -327,6 +336,7 @@ function MenuChip({
   empty?: boolean;
   children: ReactNode;
 }) {
+  useLocale();
   return (
     <span className={cn(CHIP, chipTone(empty))} data-what-if-chip={chip}>
       <DropdownMenu>
@@ -346,6 +356,7 @@ function MenuChip({
 
 /** A chip that only states something, such as the effect the app gives a tool. */
 function StaticChip({ title, value }: { title: string; value: string }) {
+  useLocale();
   return (
     <span
       className={cn(CHIP, "h-7 gap-1 bg-secondary/60 px-2.5 text-[0.8rem]")}
@@ -376,6 +387,7 @@ function TextChip({
   empty?: boolean;
   onChange: (value: string) => void;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const id = useId();
@@ -410,7 +422,7 @@ function TextChip({
               {label}
               {optional ? (
                 <span className="ms-1 font-normal text-muted-foreground">
-                  (optional)
+                  {ui("(optional)")}
                 </span>
               ) : null}
             </label>
@@ -423,7 +435,7 @@ function TextChip({
             />
             <div>
               <Button size="sm" type="submit">
-                Apply
+                {ui("Apply")}
               </Button>
             </div>
           </form>

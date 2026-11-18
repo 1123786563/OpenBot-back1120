@@ -272,7 +272,7 @@ test("turning SSO-required on ends the Recorders of the people it signs out, bef
   recorder = broken;
   const failed = await requireSso();
   expect(failed.status).toBe(503);
-  expect(await failed.json()).toEqual({
+  expect(await failed.json()).toMatchObject({
     error:
       "SSO is now required, but not everybody could be signed out yet. Save it again to finish.",
   });

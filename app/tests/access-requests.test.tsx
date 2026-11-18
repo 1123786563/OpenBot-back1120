@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -203,7 +204,7 @@ test("an approval the server cannot complete says why, on the request, and leave
   const row = within(
     (await view.findByRole("alert")).closest("[data-request]") as HTMLElement,
   );
-  expect(row.getByRole("alert").textContent).toMatch(
+  expect(readErrorDetails(row.getByRole("alert"))).toMatch(
     /^The shared Gmail account is not connected yet\./,
   );
   expect(row.getByRole("button", { name: "Approve" })).toBeTruthy();
@@ -263,7 +264,7 @@ test("an app with no read-only actions is refused on the row, which stays", asyn
   });
   const view = draw(() => <AccessRequestsSection app="composio-gmail" />);
   fireEvent.click(await view.findByRole("button", { name: "Approve" }));
-  expect((await view.findByRole("alert")).textContent).toMatch(
+  expect(readErrorDetails(await view.findByRole("alert"))).toMatch(
     /^Gmail has no read-only actions to grant\./,
   );
   expect(view.getByText("Give Gmail to Expenses")).toBeTruthy();

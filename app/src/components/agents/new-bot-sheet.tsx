@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   OPENBOT_HARNESS_NAME,
   summaryFor,
@@ -95,6 +97,7 @@ export function NewBotSheet({
   /** The new Bot's id, so the caller can take the person to it. */
   onCreated: (agentId: string) => void;
 }) {
+  useLocale();
   return (
     <Sheet
       onOpenChange={(next) => {
@@ -137,11 +140,11 @@ type Runtime = { kind: "builtin" } | { kind: "managed"; harness: string };
 /** Framework name used in default custom-agent instructions. */
 function frameworkName(runtime: Runtime): string {
   if (runtime.kind === "builtin") return "Assistant";
-  if (runtime.harness === "byo-url") return "AG-UI agent";
+  if (runtime.harness === "byo-url") return ui("AG-UI agent");
   const harness = WEB_HARNESSES.find(
     (harness) => harness.id === runtime.harness,
   );
-  return harness ? harness.name : "AG-UI agent";
+  return harness ? harness.name : ui("AG-UI agent");
 }
 
 /**
@@ -150,12 +153,17 @@ function frameworkName(runtime: Runtime): string {
  * cannot know what is behind its address.
  */
 function poweredBy(runtime: Runtime): string {
-  if (runtime.kind === "builtin") return `Powered by ${OPENBOT_HARNESS_NAME}`;
+  if (runtime.kind === "builtin")
+    return ui("Powered by {{value0}}", {
+      value0: String(OPENBOT_HARNESS_NAME),
+    });
   if (runtime.harness === "byo-url") return "";
   const framework = WEB_HARNESSES.find(
     (harness) => harness.id === runtime.harness,
   );
-  return framework ? `Powered by ${framework.name}` : "";
+  return framework
+    ? ui("Powered by {{value0}}", { value0: String(framework.name) })
+    : "";
 }
 
 /**
@@ -169,7 +177,9 @@ function defaultInstructions(name: string, runtime: Runtime): string {
   if (runtime.kind === "builtin") {
     return `You are ${name}. Help the people you work with on whatever they bring you, clearly and briefly.`;
   }
-  return `Connected from ${frameworkName(runtime)}.`;
+  return ui("Connected from {{value0}}.", {
+    value0: String(frameworkName(runtime)),
+  });
 }
 
 /**
@@ -182,6 +192,7 @@ function defaultInstructions(name: string, runtime: Runtime): string {
  * `min-h-0` and no overflow of its own shrinks and paints over the footer instead.
  */
 function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const createAgent = useMutation(createAgentMutationOptions(queryClient));
@@ -362,7 +373,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
   if (createdId) {
     return (
       <MotionConfig reducedMotion="user">
-        <SheetTitle className="sr-only">New Bot</SheetTitle>
+        <SheetTitle className="sr-only">{ui("New Bot")}</SheetTitle>
         <CreatedView name={name.trim()} />
       </MotionConfig>
     );
@@ -412,7 +423,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
               />
             </motion.div>
             <SheetTitle className="text-2xl font-semibold tracking-tight">
-              New Bot
+              {ui("New Bot")}
             </SheetTitle>
           </div>
 
@@ -457,8 +468,9 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
                 />
                 {!builtInAvailable && (
                   <p className="mt-3 text-sm text-muted-foreground">
-                    An admin must enable built-in hosting before you can run a
-                    Bot here.
+                    {ui(
+                      "An admin must enable built-in hosting before you can run a Bot here.",
+                    )}
                   </p>
                 )}
               </>
@@ -491,7 +503,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
 
         {createAgent.error ? (
           <p className="mt-6 text-destructive text-sm" role="alert">
-            {createAgent.error.message}
+            {<ErrorDetails error={createAgent.error} />}
           </p>
         ) : null}
       </div>
@@ -501,7 +513,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
           <SheetClose
             render={<Button className="px-4" size="lg" variant="ghost" />}
           >
-            Cancel
+            {ui("Cancel")}
           </SheetClose>
         ) : (
           <Button
@@ -512,7 +524,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
             type="button"
             variant="ghost"
           >
-            Back
+            {ui("Back")}
           </Button>
         )}
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -533,8 +545,9 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
                 go("runtime");
               }}
             >
-              <IconPlugConnected className="size-4" />
-              Connect a custom agent
+              {uiNodes("{{slot0}}Connect a custom agent", [
+                <IconPlugConnected key="slot0" className="size-4" />,
+              ])}
             </Button>
           )}
           {step !== "runtime" && (
@@ -545,12 +558,12 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
               type="submit"
             >
               {checking
-                ? "Checking…"
+                ? ui("Checking…")
                 : createAgent.isPending
-                  ? "Creating…"
+                  ? ui("Creating…")
                   : step === "endpoint" || (step === "about" && !custom)
-                    ? "Create Bot"
-                    : "Continue"}
+                    ? ui("Create Bot")
+                    : ui("Continue")}
             </Button>
           )}
         </div>
@@ -577,6 +590,7 @@ const ORB_LAYOUT_ID = "new-bot-orb";
  * and on the roster, which is the same place the hand-over would have led.
  */
 function CreatedView({ name }: { name: string }) {
+  useLocale();
   return (
     <div
       aria-live="polite"
@@ -610,9 +624,11 @@ function CreatedView({ name }: { name: string }) {
         transition={{ delay: 0.3, duration: 0.35, ease: "easeOut" }}
       >
         <h2 className="break-words font-semibold text-xl tracking-tight">
-          {name} is ready
+          {uiNodes("{{slot0}}is ready", [name])}
         </h2>
-        <p className="mt-1 text-muted-foreground text-sm">Taking you to it…</p>
+        <p className="mt-1 text-muted-foreground text-sm">
+          {ui("Taking you to it…")}
+        </p>
       </motion.div>
     </div>
   );
@@ -629,14 +645,22 @@ const VISIBILITY_OPTIONS: Array<{
 }> = [
   {
     value: "private",
-    title: "Private",
-    description: "Only you can see it and talk to it.",
+    get title() {
+      return ui("Private");
+    },
+    get description() {
+      return ui("Only you can see it and talk to it.");
+    },
     icon: IconLock,
   },
   {
     value: "public",
-    title: "Public",
-    description: "Everyone in your company can find and use it.",
+    get title() {
+      return ui("Public");
+    },
+    get description() {
+      return ui("Everyone in your company can find and use it.");
+    },
     icon: IconUsers,
   },
 ];
@@ -677,10 +701,11 @@ function AboutStep({
   isolation: IsolationChoice;
   personal: boolean;
 }) {
+  useLocale();
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="new-bot-name">Name</FieldLabel>
+        <FieldLabel htmlFor="new-bot-name">{ui("Name")}</FieldLabel>
         <Input
           autoComplete="off"
           autoFocus
@@ -689,7 +714,7 @@ function AboutStep({
           aria-describedby={nameError ? "new-bot-name-error" : undefined}
           maxLength={80}
           onChange={(event) => onName(event.target.value)}
-          placeholder="Expense Review"
+          placeholder={ui("Expense Review")}
           value={name}
         />
         {nameError && (
@@ -704,15 +729,19 @@ function AboutStep({
       </Field>
       <Field>
         <FieldLabel htmlFor="new-bot-instructions">
-          Instructions
-          <span className="font-normal text-muted-foreground">Optional</span>
+          {ui("Instructions")}
+          <span className="font-normal text-muted-foreground">
+            {ui("Optional")}
+          </span>
         </FieldLabel>
         <Textarea
           autoComplete="off"
           id="new-bot-instructions"
           maxLength={1000}
           onChange={(event) => onInstructions(event.target.value)}
-          placeholder="Review receipts, categorize expenses, and prepare reimbursement reports."
+          placeholder={ui(
+            "Review receipts, categorize expenses, and prepare reimbursement reports.",
+          )}
           rows={5}
           value={instructions}
         />
@@ -722,7 +751,7 @@ function AboutStep({
       ) : (
         <>
           <FieldSet>
-            <FieldLegend variant="label">Who can see it</FieldLegend>
+            <FieldLegend variant="label">{ui("Who can see it")}</FieldLegend>
             <div className="grid gap-2 sm:grid-cols-2">
               {VISIBILITY_OPTIONS.map((option) => {
                 const Icon = option.icon;
@@ -755,9 +784,9 @@ function AboutStep({
         <EveryAppList turnedOn={turnedOn} />
       ) : apps.length > 0 ? (
         <FieldSet>
-          <FieldLegend variant="label">Apps it can use</FieldLegend>
+          <FieldLegend variant="label">{ui("Apps it can use")}</FieldLegend>
           <FieldDescription>
-            It always uses the account of whoever is asking.
+            {ui("It always uses the account of whoever is asking.")}
           </FieldDescription>
           <div className="grid gap-2 sm:grid-cols-2">
             {apps.map((app) => (
@@ -803,20 +832,24 @@ function AboutStep({
  * choice the server doesn't offer.
  */
 function EveryAppList({ turnedOn }: { turnedOn: UseQueryResult<PluginsPage> }) {
+  useLocale();
   if (turnedOn.isPending) return null;
   const servers = turnedOn.data?.servers ?? [];
   return (
     <FieldSet>
-      <FieldLegend variant="label">Apps it can use</FieldLegend>
+      <FieldLegend variant="label">{ui("Apps it can use")}</FieldLegend>
       <FieldDescription>
-        Every Bot can use every app you turn on in Connections.
+        {ui("Every Bot can use every app you turn on in Connections.")}
       </FieldDescription>
       {turnedOn.error ? (
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load your apps.
+          {ui("Couldn't load your apps.")}
         </p>
       ) : servers.length > 0 ? (
-        <ul aria-label="Apps it can use" className="grid gap-2 sm:grid-cols-2">
+        <ul
+          aria-label={ui("Apps it can use")}
+          className="grid gap-2 sm:grid-cols-2"
+        >
           {servers.map((server) => (
             <li
               className={cn(
@@ -869,6 +902,7 @@ function IsolatedOption({
   isPublic,
   onChange,
 }: IsolationChoice & { isPublic: boolean }) {
+  useLocale();
   const reason = !available
     ? ISOLATION_UNAVAILABLE
     : !allowed
@@ -876,7 +910,7 @@ function IsolatedOption({
       : null;
   return (
     <FieldSet>
-      <FieldLegend variant="label">Its computer</FieldLegend>
+      <FieldLegend variant="label">{ui("Its computer")}</FieldLegend>
       <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
         <Checkbox
           aria-describedby="new-bot-isolated-summary"
@@ -895,13 +929,13 @@ function IsolatedOption({
               )}
               htmlFor="new-bot-isolated"
             >
-              Isolated
+              {ui("Isolated")}
             </label>
             <Tooltip>
               <TooltipTrigger
                 render={
                   <Button
-                    aria-label="What Isolated means"
+                    aria-label={ui("What Isolated means")}
                     className="text-muted-foreground"
                     size="icon-xs"
                     type="button"
@@ -920,7 +954,7 @@ function IsolatedOption({
             className="text-pretty text-muted-foreground text-xs"
             id="new-bot-isolated-summary"
           >
-            {reason ?? "A computer of its own, instead of sharing yours."}
+            {reason ?? ui("A computer of its own, instead of sharing yours.")}
           </p>
         </div>
       </div>
@@ -942,6 +976,7 @@ const OPTION_CLASSES =
  * an inner scroller would give this list a second scrollbar.
  */
 function RuntimeStep({ onChoose }: { onChoose: (runtime: Runtime) => void }) {
+  useLocale();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
 
@@ -952,7 +987,7 @@ function RuntimeStep({ onChoose }: { onChoose: (runtime: Runtime) => void }) {
         ref={heading}
         tabIndex={-1}
       >
-        Connect a custom agent
+        {ui("Connect a custom agent")}
       </h2>
 
       {CONNECTION_OPTIONS.map((harness) => (
@@ -1005,6 +1040,7 @@ function EndpointStep({
   onEndpoint: (value: string) => void;
   onKey: (value: string) => void;
 }) {
+  useLocale();
   const chosen = WEB_HARNESSES.find((entry) => entry.id === harness);
 
   return (
@@ -1017,13 +1053,15 @@ function EndpointStep({
           </span>
         ) : null}
         <h2 className="break-words font-semibold text-lg tracking-tight">
-          Where can it be reached?
+          {ui("Where can it be reached?")}
         </h2>
       </div>
 
       <FieldGroup>
         <Field data-invalid={endpointError ? true : undefined}>
-          <FieldLabel htmlFor="new-bot-endpoint">Agent address</FieldLabel>
+          <FieldLabel htmlFor="new-bot-endpoint">
+            {ui("Agent address")}
+          </FieldLabel>
           <Input
             aria-invalid={endpointError ? true : undefined}
             autoComplete="off"
@@ -1041,27 +1079,30 @@ function EndpointStep({
             />
           ) : (
             <FieldDescription>
-              Any agent that speaks AG-UI works. OpenBot connects to it, so it
-              has to be reachable from OpenBot's server.
+              {ui(
+                "Any agent that speaks AG-UI works. OpenBot connects to it, so it has to be reachable from OpenBot's server.",
+              )}
             </FieldDescription>
           )}
         </Field>
         <Field>
           <FieldLabel htmlFor="new-bot-key">
-            Key
-            <span className="font-normal text-muted-foreground">Optional</span>
+            {ui("Key")}
+            <span className="font-normal text-muted-foreground">
+              {ui("Optional")}
+            </span>
           </FieldLabel>
           <Input
             autoComplete="off"
             id="new-bot-key"
             onChange={(event) => onKey(event.target.value)}
-            placeholder="Bearer …"
+            placeholder={ui("Bearer …")}
             type="password"
             value={secret}
           />
           <FieldDescription>
-            Sent as an <code>Authorization</code> header with every request, and
-            stored encrypted.
+            {ui("Sent as an")} <code>{"Authorization"}</code>{" "}
+            {ui("header with every request, and stored encrypted.")}
           </FieldDescription>
         </Field>
       </FieldGroup>

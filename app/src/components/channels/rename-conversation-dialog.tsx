@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ export function RenameConversationDialog({
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
+  useLocale();
   const formId = useId();
   const rename = useMutation(renameChannelMutationOptions(queryClient));
   const { reset } = rename;
@@ -79,9 +82,9 @@ export function RenameConversationDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename conversation</DialogTitle>
+          <DialogTitle>{ui("Rename conversation")}</DialogTitle>
           <DialogDescription>
-            Leave it empty to go back to the name OpenBot chose.
+            {ui("Leave it empty to go back to the name OpenBot chose.")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4">
@@ -93,7 +96,7 @@ export function RenameConversationDialog({
             }}
           >
             <Field>
-              <FieldLabel htmlFor={`${formId}-name`}>Name</FieldLabel>
+              <FieldLabel htmlFor={`${formId}-name`}>{ui("Name")}</FieldLabel>
               <Input
                 autoComplete="off"
                 autoFocus
@@ -106,20 +109,20 @@ export function RenameConversationDialog({
                 }}
                 // All of it selected, so typing replaces the name and an arrow key keeps it.
                 onFocus={(event) => event.currentTarget.select()}
-                placeholder="New conversation"
+                placeholder={ui("New conversation")}
                 value={draft}
               />
             </Field>
           </form>
           {rename.error ? (
             <p className="mt-3 text-destructive text-sm" role="alert">
-              {rename.error.message}
+              {<ErrorDetails error={rename.error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={() => onOpenChange(false)} size="sm" variant="ghost">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={rename.isPending}
@@ -127,7 +130,7 @@ export function RenameConversationDialog({
             size="sm"
             type="submit"
           >
-            {rename.isPending ? "Saving…" : "Save"}
+            {rename.isPending ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type Icon,
   IconBolt,
@@ -74,7 +75,9 @@ export function isNavigationLink(item: NavigationItem): item is NavigationLink {
 const TEAM_FEATURES_ITEM: NavigationItem = {
   kind: "dialog",
   id: "team-features",
-  label: "OpenBot for Business",
+  get label() {
+    return ui("OpenBot for Business");
+  },
   icon: OpenBotLogo,
   section: "account",
 };
@@ -82,35 +85,45 @@ const TEAM_FEATURES_ITEM: NavigationItem = {
 export const NAVIGATION: readonly NavigationItem[] = [
   {
     id: "bots",
-    label: "Bots",
+    get label() {
+      return ui("Bots");
+    },
     to: "/bots",
     icon: IconBolt,
     section: "primary",
   },
   {
     id: "routines",
-    label: "Routines",
+    get label() {
+      return ui("Routines");
+    },
     to: "/routines",
     icon: IconClock,
     section: "primary",
   },
   {
     id: "capabilities",
-    label: "Capabilities",
+    get label() {
+      return ui("Capabilities");
+    },
     to: "/capabilities",
     icon: IconBox,
     section: "primary",
   },
   {
     id: "connections",
-    label: "Connections",
+    get label() {
+      return ui("Connections");
+    },
     to: "/connections",
     icon: IconPlug,
     section: "primary",
   },
   {
     id: "admin",
-    label: "Admin",
+    get label() {
+      return ui("Admin");
+    },
     to: "/admin",
     icon: IconShieldLock,
     section: "account",
@@ -118,7 +131,9 @@ export const NAVIGATION: readonly NavigationItem[] = [
   },
   {
     id: "settings",
-    label: "Settings",
+    get label() {
+      return ui("Settings");
+    },
     to: "/settings",
     icon: IconSettings,
     section: "account",
@@ -147,6 +162,7 @@ export function navigationFor(
 
 /** `navigationFor` the signed-in person, on this deployment's edition. */
 export function useNavigationItems(): readonly NavigationItem[] {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
   return navigationFor(user?.role, capabilities?.edition ?? "team");

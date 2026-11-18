@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconPalette } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,6 +31,7 @@ import { SKIN_IDS } from "./types";
  * control waits for them.
  */
 export function SkinPicker() {
+  useLocale();
   const skin = useSkinId();
   const preferences = useUserPreferences();
   const queryClient = useQueryClient();
@@ -44,11 +46,12 @@ export function SkinPicker() {
           <IconPalette />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>Skin</ItemTitle>
+          <ItemTitle>{ui("Skin")}</ItemTitle>
           <ItemDescription>
-            Change how {appConfig.brand.productName} looks for you, on every
-            device. Every skin keeps everything {appConfig.brand.productName}{" "}
-            does.
+            {uiNodes(
+              "Change how {{slot0}}looks for you, on every device. Every skin keeps everything {{slot1}} does.",
+              [appConfig.brand.productName, appConfig.brand.productName],
+            )}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -60,7 +63,7 @@ export function SkinPicker() {
               if (id && id !== skin) save.mutate(id);
             }}
           >
-            <SelectTrigger aria-label="Skin">
+            <SelectTrigger aria-label={ui("Skin")}>
               <SelectValue>{SKINS[skin].name}</SelectValue>
             </SelectTrigger>
             {/* Wider than the trigger, so each skin's description has room to wrap. */}
@@ -85,8 +88,10 @@ export function SkinPicker() {
       </Item>
       {save.isError ? (
         <p className="px-3 pb-3 text-sm text-destructive" role="alert">
-          Couldn't save that skin to your account, so {SKINS[skin].name} is
-          back. Try again.
+          {uiNodes(
+            "Couldn't save that skin to your account, so {{slot0}}is back. Try again.",
+            [SKINS[skin].name],
+          )}
         </p>
       ) : null}
     </>

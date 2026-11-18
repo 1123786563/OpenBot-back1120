@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
  * preferences have to say they have not closed it.
  */
 export function SelfHostBanner() {
+  useLocale();
   const queryClient = useQueryClient();
   const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
   const { data: preferences, userId } = useUserPreferences();
@@ -29,7 +31,7 @@ export function SelfHostBanner() {
 
   return (
     <aside
-      aria-label="Self-host OpenBot"
+      aria-label={ui("Self-host OpenBot")}
       className="flex shrink-0 flex-wrap items-center gap-x-2 border-b border-border bg-muted/60 px-4 py-1.5 text-sm"
     >
       {/*
@@ -41,7 +43,7 @@ export function SelfHostBanner() {
        * together and drop to the next line as one, which keeps Dismiss on the left there too.
        */}
       <p className="text-foreground">
-        Self-host OpenBot for your organization.
+        {ui("Self-host OpenBot for your organization.")}
       </p>
       <span className="flex items-center gap-2">
         {/* An anchor, not Button: Base UI gives a rendered anchor role="button", and this is a link. */}
@@ -55,10 +57,10 @@ export function SelfHostBanner() {
           rel="noopener noreferrer"
           target="_blank"
         >
-          Book a call
+          {ui("Book a call")}
         </a>
         <Button
-          aria-label="Dismiss"
+          aria-label={ui("Dismiss")}
           onClick={() => dismiss.mutate()}
           size="icon-xs"
           variant="ghost"

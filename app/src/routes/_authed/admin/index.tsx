@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBrain,
   IconBuildingBank,
@@ -57,131 +58,218 @@ const SECTIONS: {
   }[];
 }[] = [
   {
-    title: "What Bots can reach",
-    description: "Control what Bots can access outside OpenBot.",
+    get title() {
+      return ui("What Bots can reach");
+    },
+    get description() {
+      return ui("Control what Bots can access outside OpenBot.");
+    },
     items: [
       {
-        title: "Credentials",
-        description: "Manage this deployment’s keys and tokens.",
+        get title() {
+          return ui("Credentials");
+        },
+        get description() {
+          return ui("Manage this deployment’s keys and tokens.");
+        },
         icon: IconKey,
         linkOptions: { to: "/admin/credentials" },
       },
       {
-        title: "Boundaries",
-        description: "Define actions that no Bot may take.",
+        get title() {
+          return ui("Boundaries");
+        },
+        get description() {
+          return ui("Define actions that no Bot may take.");
+        },
         icon: IconShieldCheck,
         linkOptions: { to: "/admin/boundaries" },
       },
       {
-        title: "Approvals",
-        description: "Choose which actions require approval for members’ Bots.",
+        get title() {
+          return ui("Approvals");
+        },
+        get description() {
+          return ui("Choose which actions require approval for members’ Bots.");
+        },
         icon: IconChecks,
         linkOptions: { to: "/admin/approvals" },
       },
       {
-        title: "Computers",
-        description:
-          "Manage the computers that run Bot tools, when idle ones stop, and where they can connect.",
+        get title() {
+          return ui("Computers");
+        },
+        get description() {
+          return ui(
+            "Manage the computers that run Bot tools, when idle ones stop, and where they can connect.",
+          );
+        },
         icon: IconDeviceDesktop,
         linkOptions: { to: "/admin/computers" },
       },
     ],
   },
   {
-    title: "What Bots can do",
-    description:
-      "Configure the models, apps, skills, and UI components available to Bots.",
+    get title() {
+      return ui("What Bots can do");
+    },
+    get description() {
+      return ui(
+        "Configure the models, apps, skills, and UI components available to Bots.",
+      );
+    },
     items: [
       {
-        title: "Plugins",
-        description:
-          "Connect services, choose which Bots can use them, and approve MCP servers.",
+        get title() {
+          return ui("Plugins");
+        },
+        get description() {
+          return ui(
+            "Connect services, choose which Bots can use them, and approve MCP servers.",
+          );
+        },
         icon: IconPuzzle,
         linkOptions: { to: "/admin/plugins" },
       },
       {
-        title: "Providers",
-        description:
-          "See which provider serves your Bots' models, and choose which models they may use.",
+        get title() {
+          return ui("Providers");
+        },
+        get description() {
+          return ui(
+            "See which provider serves your Bots' models, and choose which models they may use.",
+          );
+        },
         icon: IconBrain,
         linkOptions: { to: "/admin/providers" },
       },
       {
-        title: "Skills",
-        description: "Create reusable instructions people can run with /.",
+        get title() {
+          return ui("Skills");
+        },
+        get description() {
+          return ui("Create reusable instructions people can run with /.");
+        },
         icon: IconFileText,
         linkOptions: { to: "/admin/skills" },
       },
       {
-        title: "Automatic learning",
-        description:
-          "Learn from finished conversations, review the skills it proposes, and choose whether people may share theirs.",
+        get title() {
+          return ui("Automatic learning");
+        },
+        get description() {
+          return ui(
+            "Learn from finished conversations, review the skills it proposes, and choose whether people may share theirs.",
+          );
+        },
         icon: IconFileText,
         linkOptions: { to: "/admin/learning" },
       },
       {
-        title: "Check-ins",
-        description:
-          "Turn check-ins on or off, limit them, and see how often people start what Bots raise.",
+        get title() {
+          return ui("Check-ins");
+        },
+        get description() {
+          return ui(
+            "Turn check-ins on or off, limit them, and see how often people start what Bots raise.",
+          );
+        },
         icon: IconRadar,
         linkOptions: { to: "/admin/proactive" },
       },
       {
-        title: "UI components",
-        description:
-          "Manage custom components that Bots can display in conversations.",
+        get title() {
+          return ui("UI components");
+        },
+        get description() {
+          return ui(
+            "Manage custom components that Bots can display in conversations.",
+          );
+        },
         icon: IconLayoutGrid,
         linkOptions: { to: "/admin/components" },
       },
       {
-        title: "Playground",
-        description: "Write a component and watch it render as you type.",
+        get title() {
+          return ui("Playground");
+        },
+        get description() {
+          return ui("Write a component and watch it render as you type.");
+        },
         icon: IconCode,
         linkOptions: { to: "/admin/playground" },
       },
     ],
   },
   {
-    title: "Who can get in",
+    get title() {
+      return ui("Who can get in");
+    },
     description: "",
     items: [
       {
-        title: "People",
-        description: "Review members, manage admin roles, and remove access.",
+        get title() {
+          return ui("People");
+        },
+        get description() {
+          return ui("Review members, manage admin roles, and remove access.");
+        },
         icon: IconUsers,
         linkOptions: { to: "/admin/people" },
       },
       {
-        title: "Permissions",
-        description:
-          "Choose what people may do with Bots, for everybody and per role or group.",
+        get title() {
+          return ui("Permissions");
+        },
+        get description() {
+          return ui(
+            "Choose what people may do with Bots, for everybody and per role or group.",
+          );
+        },
         icon: IconLockAccess,
         linkOptions: { to: "/admin/permissions" },
       },
       {
-        title: "Identity providers",
-        description:
-          "Configure your company’s sign-in provider for each email domain, and require SSO.",
+        get title() {
+          return ui("Identity providers");
+        },
+        get description() {
+          return ui(
+            "Configure your company’s sign-in provider for each email domain, and require SSO.",
+          );
+        },
         icon: IconBuildingBank,
         linkOptions: { to: "/admin/identity-providers" },
       },
     ],
   },
   {
-    title: "What happened",
+    get title() {
+      return ui("What happened");
+    },
     description: "",
     items: [
       {
-        title: "Audit",
-        description:
-          "Review actions taken in OpenBot and who took them, and record Bots' commands.",
+        get title() {
+          return ui("Audit");
+        },
+        get description() {
+          return ui(
+            "Review actions taken in OpenBot and who took them, and record Bots' commands.",
+          );
+        },
         icon: IconListDetails,
         linkOptions: { to: "/admin/audit" },
       },
       {
-        title: "What would happen",
-        description:
-          "Ask what OpenBot would do if a Bot took an action, and see which control decides.",
+        get title() {
+          return ui("What would happen");
+        },
+        get description() {
+          return ui(
+            "Ask what OpenBot would do if a Bot took an action, and see which control decides.",
+          );
+        },
         icon: IconZoomQuestion,
         linkOptions: { to: "/admin/what-if" },
       },
@@ -190,10 +278,13 @@ const SECTIONS: {
 ];
 
 function RouteComponent() {
+  useLocale();
   return (
     <PageShell
-      description="Manage settings that apply to everyone and every Bot in this deployment."
-      title="Admin"
+      description={ui(
+        "Manage settings that apply to everyone and every Bot in this deployment.",
+      )}
+      title={ui("Admin")}
     >
       {SECTIONS.map((section) => (
         <PageSection

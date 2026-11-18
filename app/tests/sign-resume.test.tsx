@@ -1,3 +1,4 @@
+import { LanguageProvider } from "@/lib/i18n/provider";
 import { afterAll, afterEach, beforeAll, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -163,7 +164,9 @@ function renderSignScreen(options: {
   } as never) as never;
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <LanguageProvider>
+        <RouterProvider router={router} />
+      </LanguageProvider>
     </QueryClientProvider>,
   );
   return {
@@ -281,7 +284,9 @@ test("a signed-in arrival with a handle lands on the verifier, not back on the h
   try {
     render(
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <LanguageProvider>
+          <RouterProvider router={router} />
+        </LanguageProvider>
       </QueryClientProvider>,
     );
     // Where the browser is: the document it was sent to, or the in-app location when it was never

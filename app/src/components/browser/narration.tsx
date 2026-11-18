@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { LauncherState } from "@openbot/shared/openbot-browser";
 import {
   IconInfoCircle,
@@ -45,17 +46,17 @@ export function narrationProblemSentence(
   _problem: NarrationProblem,
   _language: string,
 ): string {
-  return NARRATION_OFF;
+  return ui(NARRATION_OFF);
 }
 
 /** What the person is told while their browser downloads the narration's language: narration starts by itself. */
 export function downloadingSentence(_language: string): string {
-  return NARRATION_OFF;
+  return ui(NARRATION_OFF);
 }
 
 /** What the Desktop narration row says while a recording runs, from the Recorder's own report of whether it hears the person. */
 function nativeNarrationSentence(voice: LauncherState["voice"]): string {
-  if (voice === "listening") return NARRATION_CAPTURING;
+  if (voice === "listening") return ui(NARRATION_CAPTURING);
   return voice === "muted" || voice === "unavailable"
     ? NARRATION_OFF
     : NARRATION_ON;
@@ -77,6 +78,7 @@ export function NativeNarrationRow({
   /** A recording is running (or starting, or stopping). */
   recording: boolean;
 }) {
+  useLocale();
   // No microphone on this computer: off, and said, while the person's choice stays as they made it.
   const noMicrophone = useMicrophone() === false;
   if (!recording) {
@@ -89,18 +91,18 @@ export function NativeNarrationRow({
           {on ? <IconMicrophone /> : <IconMicrophoneOff />}
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>Narration</ItemTitle>
+          <ItemTitle>{ui("Narration")}</ItemTitle>
           <ItemDescription className="line-clamp-none">
             {noMicrophone
-              ? NARRATION_NO_MICROPHONE
+              ? ui(NARRATION_NO_MICROPHONE)
               : on
-                ? NARRATION_ON
-                : NARRATION_OFF}
+                ? ui(NARRATION_ON)
+                : ui(NARRATION_OFF)}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
           <Switch
-            aria-label="Narration"
+            aria-label={ui("Narration")}
             checked={on}
             disabled={!known || noMicrophone}
             onCheckedChange={choice.choose}
@@ -116,7 +118,7 @@ export function NativeNarrationRow({
         {hearing ? <IconMicrophone /> : <IconMicrophoneOff />}
       </ItemMedia>
       <ItemContent>
-        <ItemTitle>Narration</ItemTitle>
+        <ItemTitle>{ui("Narration")}</ItemTitle>
         <ItemDescription className="line-clamp-none">
           {voice === "listening" ? (
             <span className="inline-flex items-center gap-1.5">
@@ -156,6 +158,7 @@ export function NarrationSwitch({
   recording: boolean;
   onChange: (on: boolean) => void;
 }) {
+  useLocale();
   const id = useId();
   const labelId = useId();
   if (!narration.supported) return null;
@@ -173,17 +176,18 @@ export function NarrationSwitch({
           className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"
           role="status"
         >
-          {/* Decorative: the word beside it says it is live. */}
-          <span
-            aria-hidden="true"
-            className="size-1.5 shrink-0 rounded-full bg-emerald-500 motion-safe:animate-pulse"
-          />
-          Listening
+          {uiNodes("{{slot0}}Listening", [
+            <span
+              key="slot0"
+              aria-hidden="true"
+              className="size-1.5 shrink-0 rounded-full bg-emerald-500 motion-safe:animate-pulse"
+            />,
+          ])}
         </span>
       ) : null}
       <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
       <label htmlFor={id} id={labelId} className="text-muted-foreground">
-        Narration
+        {ui("Narration")}
       </label>
       {/*
         What narration is for, on hover or focus, where the choice is made (Record's popover). Not while recording:
@@ -195,7 +199,7 @@ export function NarrationSwitch({
           <TooltipTrigger
             render={
               <button
-                aria-label="About narration"
+                aria-label={ui("About narration")}
                 className="-ml-1 flex size-5 items-center justify-center rounded-full text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 type="button"
               />
@@ -204,7 +208,7 @@ export function NarrationSwitch({
             <IconInfoCircle aria-hidden="true" className="size-4" />
           </TooltipTrigger>
           <TooltipContent className="max-w-60" side="top">
-            {NARRATION_EXPLAINED}
+            {ui(NARRATION_EXPLAINED)}
           </TooltipContent>
         </Tooltip>
       )}
@@ -236,6 +240,7 @@ export function NarrationNotice({
   /** Where it is drawn as the browser window's status bar rather than a row under its bar. */
   className?: string;
 }) {
+  useLocale();
   const sentence = narrationNoticeSentence(narration, language);
   if (!sentence) return null;
   return (
@@ -260,14 +265,14 @@ function narrationNoticeSentence(
   _language: string,
 ): string | null {
   if (narration.supported && narration.noMicrophone)
-    return NARRATION_NO_MICROPHONE;
+    return ui(NARRATION_NO_MICROPHONE);
   if (
     !narration.supported ||
     !narration.on ||
     narration.status?.state === "failed" ||
     narration.status?.state === "downloading"
   )
-    return NARRATION_OFF;
+    return ui(NARRATION_OFF);
   return narration.status?.state === "listening"
     ? NARRATION_CAPTURING
     : NARRATION_ON;
@@ -296,6 +301,7 @@ export function NarrationRow({
   recording: boolean;
   onChange: (on: boolean) => void;
 }) {
+  useLocale();
   const labelId = useId();
   const notice = narrationNoticeSentence(narration, language);
   const listening =
@@ -313,7 +319,7 @@ export function NarrationRow({
         )}
       </ItemMedia>
       <ItemContent>
-        <ItemTitle id={labelId}>Narration</ItemTitle>
+        <ItemTitle id={labelId}>{ui("Narration")}</ItemTitle>
         <ItemDescription className="line-clamp-none" role="status">
           {listening ? (
             <span className="inline-flex items-center gap-1.5">

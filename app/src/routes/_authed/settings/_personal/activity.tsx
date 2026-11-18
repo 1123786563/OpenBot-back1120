@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   createFileRoute,
   useNavigate,
@@ -17,12 +18,15 @@ export const Route = createFileRoute("/_authed/settings/_personal/activity")({
  * as the audit tests do. The route's own `validateSearch` has already checked it.
  */
 function ActivityPage() {
+  useLocale();
   const { bot } = useSearch({ strict: false }) as { bot?: string };
   const navigate = useNavigate();
   return (
     <AuditPage
       bot={bot}
-      description="See what your Bots did, and which of their actions were allowed, blocked or didn't happen."
+      description={ui(
+        "See what your Bots did, and which of their actions were allowed, blocked or didn't happen.",
+      )}
       onClearBot={() => navigate({ to: "/settings/activity" })}
     />
   );

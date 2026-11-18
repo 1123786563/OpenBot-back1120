@@ -397,7 +397,9 @@ describe("a page on another website", () => {
       },
     );
     expect(posted.status).toBe(403);
-    expect(await posted.json()).toEqual({ error: CROSS_SITE });
+    expect(await posted.json()).toMatchObject({
+      error: CROSS_SITE,
+    });
     expect(local.turns).toEqual([]);
   });
 
@@ -529,7 +531,9 @@ describe("a page whose name was pointed at this machine (DNS rebinding)", () => 
       headers: { host, "sec-fetch-site": "same-origin" },
     });
     expect(me.status).toBe(403);
-    expect(await me.json()).toEqual({ error: WRONG_HOST });
+    expect(await me.json()).toMatchObject({
+      error: WRONG_HOST,
+    });
 
     const posted = await fetch(
       `${local.base}/api/delivery/conversations/channel-1/messages`,
@@ -662,7 +666,9 @@ describe("the app opened at an address on the network, the only one configured",
 
       const posted = await post(origin);
       expect(posted.status).toBe(403);
-      expect(await posted.json()).toEqual({ error: CROSS_SITE });
+      expect(await posted.json()).toMatchObject({
+        error: CROSS_SITE,
+      });
       expect(lan.turns).toEqual([]);
     },
   );
@@ -685,7 +691,7 @@ describe.skipIf(!lanIsPrivate)("another machine on the network", () => {
   test("is not the administrator of an OpenBot running on somebody's own machine", async () => {
     const me = await overTheNetwork({ port: local.port, path: "/api/me" });
     expect(me.status).toBe(403);
-    expect(JSON.parse(me.body)).toEqual({ error: OTHER_MACHINE });
+    expect(JSON.parse(me.body)).toMatchObject({ error: OTHER_MACHINE });
     const posted = await overTheNetwork({
       port: local.port,
       method: "POST",

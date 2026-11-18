@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import type { Message } from "@ag-ui/core";
@@ -34,6 +35,7 @@ export const Route = createFileRoute("/_authed/_app/start/$startId")({
  * because there is no channel yet for anything typed to go to.
  */
 function RouteComponent() {
+  useLocale();
   const { startId } = Route.useParams();
   // Read once: the start forgets itself when it is done, a beat before this screen is replaced, and
   // that must not redirect home in between. The message is made once too, so it keeps its identity.
@@ -99,7 +101,7 @@ function RouteComponent() {
               agentId ? null : "text-muted-foreground",
             )}
           >
-            {agentId ? (bot?.name ?? "") : "Picking a Bot"}
+            {agentId ? (bot?.name ?? "") : ui("Picking a Bot")}
           </span>
         </div>
       </div>

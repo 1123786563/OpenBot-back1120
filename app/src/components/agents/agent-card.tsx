@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconArrowRight } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { AbstractAvatar } from "@/components/agents/abstract-avatar";
@@ -11,6 +12,7 @@ export function AgentCard({
   agent: AgentProfile;
   appearance?: "compact" | "row";
 }) {
+  useLocale();
   if (appearance === "row") {
     return (
       /*
@@ -54,11 +56,13 @@ export function AgentCard({
         <Button
           variant="ghost"
           size="xs"
-          aria-label={`View details for ${agent.name}`}
+          aria-label={ui("View details for {{value0}}", {
+            value0: String(agent.name),
+          })}
           className="-ml-2 text-muted-foreground after:absolute after:inset-0"
           render={<Link params={{ agentId: agent.id }} to="/bots/$agentId" />}
         >
-          Details
+          {ui("Details")}
         </Button>
         <IconArrowRight
           aria-hidden="true"

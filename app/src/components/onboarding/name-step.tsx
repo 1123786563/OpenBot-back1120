@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { type CSSProperties, useId, useState } from "react";
 import { ORB_GLOW_REACH } from "@/components/agents/orb/agent-orb";
@@ -30,6 +32,7 @@ export function useNameStep({
   /** The orb is playing its finish. */
   finished: boolean;
 }): OnboardingStep {
+  useLocale();
   const formId = useId();
   const fieldId = useId();
   const { data: user } = useQuery(currentUserQueryOptions());
@@ -39,7 +42,7 @@ export function useNameStep({
 
   return {
     id: "name",
-    title: "What should we call you?",
+    title: ui("What should we call you?"),
     intro: () => (
       <StepIntro
         after={
@@ -53,7 +56,7 @@ export function useNameStep({
             }}
           >
             <label className="text-left" htmlFor={fieldId}>
-              Name
+              {ui("Name")}
             </label>
             <Input
               autoComplete="name"
@@ -69,23 +72,23 @@ export function useNameStep({
             />
             {save.error ? (
               <p className="text-left text-sm text-destructive" role="alert">
-                {save.error.message}
+                {<ErrorDetails error={save.error} />}
               </p>
             ) : null}
           </form>
         }
       >
-        <p>You can change your name later in Settings.</p>
+        <p>{ui("You can change your name later in Settings.")}</p>
       </StepIntro>
     ),
     demo: () => <NameOrb finished={finished} size={128} />,
     demoFirst: true,
     primaryForm: formId,
     primaryLabel: finished
-      ? "All set"
+      ? ui("All set")
       : save.isPending
         ? "Saving…"
-        : "Get started",
+        : ui("Get started"),
     primaryDone: finished,
     primaryDisabled: !finished && (!name.trim() || save.isPending),
   };
@@ -111,6 +114,7 @@ export function NameOrb({
   finished?: boolean;
   size?: number;
 }) {
+  useLocale();
   return (
     <span
       className="flex justify-center pt-(--orb-glow) lg:py-(--orb-glow)"

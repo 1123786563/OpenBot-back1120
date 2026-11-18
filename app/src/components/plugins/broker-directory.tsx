@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import { IconKey, IconPlug, IconSearch } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, type LinkOptions, useNavigate } from "@tanstack/react-router";
@@ -77,6 +78,7 @@ import {
 const LOADING_ROWS = ["a", "b", "c", "d", "e", "f"];
 
 export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
+  useLocale();
   // The provider's client, which is the app's own one; a screen mounted under another is refetched there.
   const queryClient = useQueryClient();
   const paths = useManagePaths();
@@ -260,7 +262,7 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
     >
       <PageSection
         description={directoryDescriptions(paths.edition).search}
-        title="Apps"
+        title={ui("Apps")}
       >
         {enableError || tabError ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
@@ -269,10 +271,10 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
         ) : null}
 
         <Input
-          aria-label="Search apps"
+          aria-label={ui("Search apps")}
           className="mt-4"
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by app name"
+          placeholder={ui("Search by app name")}
           value={search}
         />
 
@@ -282,7 +284,7 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
          * nothing on it. They assert nothing, so no sentence claims anything mid-fetch.
          */}
         {apps.isPending ? (
-          <div aria-busy="true" aria-label="Loading apps" role="status">
+          <div aria-busy="true" aria-label={ui("Loading apps")} role="status">
             <PageRows>
               {LOADING_ROWS.map((key, index) => (
                 <React.Fragment key={key}>
@@ -313,19 +315,21 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
         ) : listed.length === 0 ? (
           <PageEmpty
             icon={query ? IconSearch : IconPlug}
-            title={query ? "No matches" : "No apps"}
+            title={query ? ui("No matches") : ui("No apps")}
           >
             {query
-              ? `No app matches "${query}".`
-              : "No apps to show yet. Reload the page to try again."}
+              ? ui('No app matches "{{value0}}".', { value0: String(query) })
+              : ui("No apps to show yet. Reload the page to try again.")}
           </PageEmpty>
         ) : (
           <>
             {/* How many there are, before the list: with no search, this is the whole directory. */}
             <p className="mt-4 text-muted-foreground text-xs">
               {query
-                ? `${listed.length.toLocaleString()} ${listed.length === 1 ? "match" : "matches"}`
-                : `${listed.length.toLocaleString()} apps. Search by name to narrow them.`}
+                ? `${listed.length.toLocaleString(getLocale())} ${listed.length === 1 ? "match" : "matches"}`
+                : ui("{{value0}} apps. Search by name to narrow them.", {
+                    value0: String(listed.length.toLocaleString(getLocale())),
+                  })}
             </p>
             <PageRows className="mt-2">
               {listed.map((entry, index) => {
@@ -363,7 +367,7 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
                         {/* The size of the decision, stated before it is made: an app is not one
                           tool, and "167 actions" is what says so. */}
                         <span className="text-muted-foreground text-xs">
-                          {entry.actionCount} actions
+                          {uiNodes("{{slot0}}actions", [entry.actionCount])}
                         </span>
                         {/*
                          * An app this deployment already has says where it stands rather than
@@ -378,7 +382,7 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
                             size="sm"
                             variant="outline"
                           >
-                            {isAdding ? "Adding…" : "Add"}
+                            {isAdding ? ui("Adding…") : ui("Add")}
                           </Button>
                         ) : (
                           <DirectoryRowState
@@ -426,6 +430,7 @@ export function BrokerDirectory({ provider }: { provider: PluginsProvider }) {
  * reads this list too. Draws nothing for an app you sign in to.
  */
 export function KeyNeededNote({ app }: { app: ComposioApp }) {
+  useLocale();
   const line = keyNeededLine(app);
   if (!line) return null;
   return (
@@ -441,6 +446,7 @@ export function KeyNeededNote({ app }: { app: ComposioApp }) {
 
 /** The warning on a row, shown before Add is pressed. Draws nothing when there is none. */
 export function CoverageNote({ app }: { app: ComposioApp }) {
+  useLocale();
   const warning = coverageWarning(app);
   if (!warning) return null;
   return (
@@ -452,6 +458,7 @@ export function CoverageNote({ app }: { app: ComposioApp }) {
 
 /** The breadth line on a row, shown before Add is pressed. Draws nothing when there is none. */
 export function BreadthNote({ app }: { app: ComposioApp }) {
+  useLocale();
   const breadth = consentBreadth(app);
   if (!breadth) return null;
   return (
@@ -486,18 +493,20 @@ function DirectoryRowState({
   opening: boolean;
   waiting: boolean;
 }) {
+  useLocale();
   if (state.kind === "loading") return null;
   if (state.kind === "added")
-    return <span className="text-muted-foreground text-xs">Added</span>;
+    return <span className="text-muted-foreground text-xs">{ui("Added")}</span>;
   if (state.kind === "connected")
     return (
       <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
-        {/* Decorative: the word beside it already says which. */}
-        <span
-          aria-hidden="true"
-          className="size-1.5 rounded-full bg-emerald-500"
-        />
-        Connected
+        {uiNodes("{{slot0}}Connected", [
+          <span
+            key="slot0"
+            aria-hidden="true"
+            className="size-1.5 rounded-full bg-emerald-500"
+          />,
+        ])}
       </span>
     );
   return (
@@ -506,30 +515,34 @@ function DirectoryRowState({
         className="text-muted-foreground text-xs"
         data-testid="directory-not-connected"
       >
-        {personal ? "Not connected" : "Added, not connected"}
+        {personal ? ui("Not connected") : ui("Added, not connected")}
       </span>
       {connectLink ? (
         <Button
           render={<Link {...connectLink} />}
-          aria-label={`Connect ${name}`}
+          aria-label={ui("Connect {{value0}}", { value0: String(name) })}
           size="sm"
           variant="outline"
         >
-          Connect
+          {ui("Connect")}
         </Button>
       ) : (
         <Button
-          aria-label={opening || waiting ? undefined : `Connect ${name}`}
+          aria-label={
+            opening || waiting
+              ? undefined
+              : ui("Connect {{value0}}", { value0: String(name) })
+          }
           disabled={opening}
           onClick={onConnect}
           size="sm"
           variant="outline"
         >
           {waiting
-            ? `Waiting for ${name}…`
+            ? ui("Waiting for {{value0}}…", { value0: String(name) })
             : opening
-              ? "Opening sign-in…"
-              : "Connect"}
+              ? ui("Opening sign-in…")
+              : ui("Connect")}
         </Button>
       )}
     </>
@@ -538,17 +551,19 @@ function DirectoryRowState({
 
 /** Under the row whose sign-in is open: where to finish it, or the link when the tab was blocked. */
 function SignInNote({ name, tab }: { name: string; tab: ConnectInNewTab }) {
+  useLocale();
   if (tab.blockedUrl)
     return (
       <p className="text-xs" role="status">
-        This browser blocked the tab.{" "}
+        {ui("This browser blocked the tab.")}{" "}
         <a
           className="underline underline-offset-2"
           href={tab.blockedUrl}
           rel="noreferrer"
           target="_blank"
         >
-          Open {name}'s sign-in
+          {ui("Open")} {name}
+          {ui("'s sign-in")}
         </a>
         .
       </p>
@@ -556,7 +571,9 @@ function SignInNote({ name, tab }: { name: string; tab: ConnectInNewTab }) {
   if (tab.waiting)
     return (
       <p className="text-muted-foreground text-xs" role="status">
-        Finish signing in to {name} in the tab that opened.
+        {uiNodes("Finish signing in to {{slot0}}in the tab that opened.", [
+          name,
+        ])}
       </p>
     );
   return null;

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconBulb,
   IconChevronDown,
@@ -61,10 +63,30 @@ import { queryClient } from "@/query-client";
 import { SuggestionRow } from "./suggestion-row";
 
 const intervals = [
-  { minutes: 60, label: "Every hour" },
-  { minutes: 240, label: "Every 4 hours" },
-  { minutes: 720, label: "Twice a day" },
-  { minutes: 1440, label: "Once a day" },
+  {
+    minutes: 60,
+    get label() {
+      return ui("Every hour");
+    },
+  },
+  {
+    minutes: 240,
+    get label() {
+      return ui("Every 4 hours");
+    },
+  },
+  {
+    minutes: 720,
+    get label() {
+      return ui("Twice a day");
+    },
+  },
+  {
+    minutes: 1440,
+    get label() {
+      return ui("Once a day");
+    },
+  },
 ];
 /** The label map, so a closed trigger says "Every 4 hours" rather than 240. */
 const intervalItems = intervals.map((interval) => ({
@@ -88,6 +110,7 @@ export function SuggestionsInbox({
   /** Only this Bot's suggestions, and nothing at all when it has none. */
   agentId?: string;
 } = {}) {
+  useLocale();
   const suggestions = useQuery(proactiveSuggestionsQueryOptions());
   const shown = (suggestions.data ?? []).filter(
     (suggestion) => agentId === undefined || suggestion.agentId === agentId,
@@ -105,10 +128,10 @@ export function SuggestionsInbox({
   const hidden = expanded ? 0 : Math.max(0, shown.length - SUGGESTIONS_SHOWN);
   const visible = hidden ? shown.slice(0, SUGGESTIONS_SHOWN) : shown;
   return (
-    <PageSection title="Suggested next steps">
+    <PageSection title={ui("Suggested next steps")}>
       {suggestions.isPending ? null : suggestions.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {suggestions.error.message}
+          {<ErrorDetails error={suggestions.error} />}
         </p>
       ) : shown.length ? (
         <PageRows>
@@ -131,7 +154,7 @@ export function SuggestionsInbox({
               >
                 <ItemContent>
                   <ItemTitle className="text-muted-foreground">
-                    Show {hidden} more
+                    {uiNodes("Show {{slot0}}more", [hidden])}
                   </ItemTitle>
                 </ItemContent>
                 <ItemActions>
@@ -142,9 +165,10 @@ export function SuggestionsInbox({
           ) : null}
         </PageRows>
       ) : (
-        <PageEmpty icon={IconBulb} title="Nothing needs you right now">
-          When a Bot's check-in finds something that needs you, it shows up
-          here.
+        <PageEmpty icon={IconBulb} title={ui("Nothing needs you right now")}>
+          {ui(
+            "When a Bot's check-in finds something that needs you, it shows up here.",
+          )}
         </PageEmpty>
       )}
     </PageSection>
@@ -156,10 +180,11 @@ export function SuggestionsInbox({
  * admin turned check-ins off for them, or they turned them off for all their Bots.
  */
 function useCheckInsBlocked(): string | null {
+  useLocale();
   const allowed = useQuery(proactiveAllowedQueryOptions());
   const preferences = useUserPreferences();
-  if (allowed.data === false) return "Turned off by your admin";
-  if (preferences.data?.proactive === "off") return "Off for all your Bots";
+  if (allowed.data === false) return ui("Turned off by your admin");
+  if (preferences.data?.proactive === "off") return ui("Off for all your Bots");
   return null;
 }
 
@@ -181,6 +206,7 @@ export function ProactiveResearchSettings({
   /** Only this Bot's check-ins, and a new one is this Bot's without asking. */
   agentId?: string;
 } = {}) {
+  useLocale();
   const settings = useQuery(proactiveSettingsQueryOptions());
   const bots = useQuery(agentListQueryOptions());
   const blocked = useCheckInsBlocked();
@@ -195,46 +221,48 @@ export function ProactiveResearchSettings({
       action={
         canAdd ? (
           <Button onClick={() => setAdding(true)} size="sm" variant="ghost">
-            <IconPlus />
-            Turn on check-ins
+            {uiNodes("{{slot0}}Turn on check-ins", [<IconPlus key="slot0" />])}
           </Button>
         ) : null
       }
-      description="A Bot offers a check-in when you look at something together that keeps changing, like a document or your inbox. It reads that once a day, or as often as you choose, and tells you when something there needs you. It can only read: it can't send messages, change anything in an app, or use a browser or computer."
-      title="Check-ins"
+      description={ui(
+        "A Bot offers a check-in when you look at something together that keeps changing, like a document or your inbox. It reads that once a day, or as often as you choose, and tells you when something there needs you. It can only read: it can't send messages, change anything in an app, or use a browser or computer.",
+      )}
+      title={ui("Check-ins")}
     >
       {blocked ? (
         <p className="mt-1 max-w-prose text-muted-foreground text-sm">
-          {blocked === "Off for all your Bots" ? (
+          {blocked === ui("Off for all your Bots") ? (
             <>
-              You turned off check-ins for all your Bots in{" "}
+              {ui("You turned off check-ins for all your Bots in")}{" "}
               <Link
                 className="underline underline-offset-4"
                 to="/settings/notifications"
               >
-                Notifications
+                {ui("Notifications")}
               </Link>
               .
             </>
           ) : (
-            "Your admin turned off check-ins for you."
+            ui("Your admin turned off check-ins for you.")
           )}
         </p>
       ) : null}
       {settings.isPending ? null : settings.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {settings.error.message}
+          {<ErrorDetails error={settings.error} />}
         </p>
       ) : shown.length === 0 ? (
         <PageEmpty
           action={
             <Button onClick={() => setAdding(true)} size="sm" variant="outline">
-              <IconPlus />
-              Turn on check-ins
+              {uiNodes("{{slot0}}Turn on check-ins", [
+                <IconPlus key="slot0" />,
+              ])}
             </Button>
           }
           icon={IconRadar}
-          title="No check-ins yet"
+          title={ui("No check-ins yet")}
         />
       ) : (
         <PageRows>
@@ -275,6 +303,7 @@ function TurnOnResearchDialog({
   fixedBot?: string;
   onClose: () => void;
 }) {
+  useLocale();
   const settings = useQuery(proactiveSettingsQueryOptions());
   const allBots = useQuery(agentListQueryOptions());
   const bots = {
@@ -299,10 +328,11 @@ function TurnOnResearchDialog({
     <Dialog onOpenChange={(next) => !next && onClose()} open>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Turn on check-ins</DialogTitle>
+          <DialogTitle>{ui("Turn on check-ins")}</DialogTitle>
           <DialogDescription>
-            It reads the apps it can use in this conversation and tells you when
-            something needs you.
+            {ui(
+              "It reads the apps it can use in this conversation and tells you when something needs you.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
@@ -321,7 +351,7 @@ function TurnOnResearchDialog({
             <FieldGroup>
               {fixedBot === undefined ? (
                 <Field>
-                  <FieldLabel htmlFor={`${id}-bot`}>Bot</FieldLabel>
+                  <FieldLabel htmlFor={`${id}-bot`}>{ui("Bot")}</FieldLabel>
                   <Select
                     items={bots.data?.map((bot) => ({
                       value: bot.id,
@@ -335,7 +365,7 @@ function TurnOnResearchDialog({
                     value={agentId || null}
                   >
                     <SelectTrigger className="w-full" id={`${id}-bot`}>
-                      <SelectValue placeholder="Choose a Bot" />
+                      <SelectValue placeholder={ui("Choose a Bot")} />
                     </SelectTrigger>
                     <SelectContent>
                       {bots.data?.map((bot) => (
@@ -348,7 +378,9 @@ function TurnOnResearchDialog({
                 </Field>
               ) : null}
               <Field>
-                <FieldLabel htmlFor={`${id}-channel`}>Conversation</FieldLabel>
+                <FieldLabel htmlFor={`${id}-channel`}>
+                  {ui("Conversation")}
+                </FieldLabel>
                 <Select
                   items={eligibleChannels.map((channel) => ({
                     value: channel.id,
@@ -359,7 +391,7 @@ function TurnOnResearchDialog({
                   value={channelId || null}
                 >
                   <SelectTrigger className="w-full" id={`${id}-channel`}>
-                    <SelectValue placeholder="Choose a conversation" />
+                    <SelectValue placeholder={ui("Choose a conversation")} />
                   </SelectTrigger>
                   <SelectContent>
                     {eligibleChannels.map((channel) => (
@@ -371,7 +403,9 @@ function TurnOnResearchDialog({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor={`${id}-interval`}>How often</FieldLabel>
+                <FieldLabel htmlFor={`${id}-interval`}>
+                  {ui("How often")}
+                </FieldLabel>
                 <Select
                   items={intervalItems}
                   onValueChange={(value) => {
@@ -396,27 +430,29 @@ function TurnOnResearchDialog({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${id}-focus`}>
-                  What to look for (optional)
+                  {ui("What to look for (optional)")}
                 </FieldLabel>
                 <Input
                   id={`${id}-focus`}
                   maxLength={1000}
                   value={focus}
                   onChange={(event) => setFocus(event.target.value)}
-                  placeholder="Open issues assigned to me and questions waiting on me"
+                  placeholder={ui(
+                    "Open issues assigned to me and questions waiting on me",
+                  )}
                 />
               </Field>
             </FieldGroup>
           </form>
           {add.error && (
             <p role="alert" className="text-destructive text-sm">
-              {add.error.message}
+              {<ErrorDetails error={add.error} />}
             </p>
           )}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={add.isPending || !agentId || !channelId}
@@ -424,7 +460,7 @@ function TurnOnResearchDialog({
             size="sm"
             type="submit"
           >
-            Turn on check-ins
+            {ui("Turn on check-ins")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -442,8 +478,12 @@ function checkInStatus(setting: ProactiveSetting, blocked: string | null) {
     : blocked
       ? blocked
       : setting.lastStatus === "running"
-        ? "Checking now"
-        : `Next ${new Date(setting.nextRunAt).toLocaleString()}`;
+        ? ui("Checking now")
+        : ui("Next {{value0}}", {
+            value0: String(
+              new Date(setting.nextRunAt).toLocaleString(getLocale()),
+            ),
+          });
 }
 
 /** When a check-in happened, as its line says it: "just now" for the moment after a Run now. */
@@ -460,15 +500,30 @@ export function lastCheckInLine(run: LastCheckIn | null | undefined) {
   const when = sinceThen(run.startedAt);
   switch (run.outcome) {
     case "running":
-      return `Started ${when}.`;
+      return ui("Started {{value0}}.", { value0: String(when) });
     case "quiet":
-      return `Checked ${when}. Nothing needed you.`;
+      return ui("Checked {{value0}}. Nothing needed you.", {
+        value0: String(when),
+      });
     case "raised":
-      return `Checked ${when}. Found ${run.itemsRaised === 1 ? "1 thing" : `${run.itemsRaised} things`} for you.`;
+      return ui("Checked {{value0}}. Found {{value1}} for you.", {
+        value0: String(when),
+        value1: String(
+          run.itemsRaised === 1 ? "1 thing" : `${run.itemsRaised} things`,
+        ),
+      });
     case "failed":
-      return `Checked ${when}. ${run.why ?? "Couldn't finish."}`;
+      return ui("Checked {{value0}}. {{value1}}", {
+        value0: String(when),
+        value1: String(run.why ?? ui("Couldn't finish.")),
+      });
     case "skipped":
-      return run.why ? `Skipped ${when}. ${run.why}` : `Skipped ${when}.`;
+      return run.why
+        ? ui("Skipped {{value0}}. {{value1}}", {
+            value0: String(when),
+            value1: String(run.why),
+          })
+        : ui("Skipped {{value0}}.", { value0: String(when) });
   }
 }
 
@@ -490,6 +545,7 @@ function SettingRow({
   botName: string;
   blocked: string | null;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const id = useId();
   const change = useMutation(
@@ -540,7 +596,7 @@ function SettingRow({
           ) : null}
           {setting.focus ? (
             <ItemDescription className="line-clamp-1">
-              Looks for: {setting.focus}
+              {uiNodes("Looks for: {{slot0}}", [setting.focus])}
             </ItemDescription>
           ) : null}
         </ItemContent>
@@ -551,7 +607,7 @@ function SettingRow({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Check-ins</DialogTitle>
+            <DialogTitle>{ui("Check-ins")}</DialogTitle>
             <DialogDescription>
               {[botName, setting.subject, setting.focus]
                 .filter(Boolean)
@@ -567,7 +623,7 @@ function SettingRow({
                 <ItemTitle>{checkInStatus(setting, blocked)}</ItemTitle>
                 {onItsWay ? (
                   <ItemDescription>
-                    Queued. It checks in within a minute.
+                    {ui("Queued. It checks in within a minute.")}
                   </ItemDescription>
                 ) : last ? (
                   <ItemDescription
@@ -582,7 +638,9 @@ function SettingRow({
               </ItemContent>
             </Item>
             <Field>
-              <FieldLabel htmlFor={`${id}-interval`}>How often</FieldLabel>
+              <FieldLabel htmlFor={`${id}-interval`}>
+                {ui("How often")}
+              </FieldLabel>
               {/* Writes on pick: one value, no draft worth holding. */}
               <Select
                 disabled={change.isPending}
@@ -610,7 +668,7 @@ function SettingRow({
             </Field>
             {change.error && (
               <p role="alert" className="text-destructive text-sm">
-                {change.error.message}
+                {<ErrorDetails error={change.error} />}
               </p>
             )}
           </DialogBody>
@@ -626,7 +684,7 @@ function SettingRow({
                 )
               }
             >
-              Remove
+              {ui("Remove")}
             </Button>
             <Button
               size="sm"
@@ -636,7 +694,7 @@ function SettingRow({
                 change.mutate({ setting, change: { kind: "toggle" } })
               }
             >
-              {setting.enabled ? "Turn off" : "Turn on"}
+              {setting.enabled ? ui("Turn off") : ui("Turn on")}
             </Button>
             <Button
               size="sm"
@@ -646,8 +704,8 @@ function SettingRow({
               }
             >
               {change.isPending && change.variables.change.kind === "run"
-                ? "Starting…"
-                : "Run now"}
+                ? ui("Starting…")
+                : ui("Run now")}
             </Button>
           </DialogFooter>
         </DialogContent>

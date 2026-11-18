@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { client } from "@/lib/client";
 
 /** Whether a rule compiles against the policy schema, and the compiler's words when it does not. */
@@ -30,7 +31,7 @@ export async function translatePolicyRule(
   const response = await client("/api/computers/policy-translate", {
     method: "POST",
     body: { text },
-    fallback: "Couldn't write the rule. Try again, or write it in CEL.",
+    fallback: ui("Couldn't write the rule. Try again, or write it in CEL."),
   });
   return (await response.json()) as PolicyTranslation;
 }

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { SkillAgents } from "@/components/skills/skill-agents";
@@ -14,6 +15,7 @@ import { pluginsPageQueryOptions } from "@/lib/plugins/queries";
  * refused anyone editing a skill that is not theirs before it gets that far.
  */
 export function EditSkill({ slug }: { slug: string }) {
+  useLocale();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data, isPending } = useQuery(pluginsPageQueryOptions());
@@ -38,7 +40,7 @@ export function EditSkill({ slug }: { slug: string }) {
     return (
       <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-8">
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load this skill. Reload the page.
+          {ui("Couldn't load this skill. Reload the page.")}
         </p>
       </div>
     );
@@ -54,7 +56,7 @@ export function EditSkill({ slug }: { slug: string }) {
          * not own.
          */}
         <p className="text-muted-foreground text-sm">
-          This skill was deleted, or it isn't yours to edit.
+          {ui("This skill was deleted, or it isn't yours to edit.")}
         </p>
       </div>
     );
@@ -63,10 +65,12 @@ export function EditSkill({ slug }: { slug: string }) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-8">
       <header>
-        <h1 className="text-2xl font-semibold">Edit skill</h1>
+        <h1 className="text-2xl font-semibold">{ui("Edit skill")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Changes apply the next time someone uses {skill.title}. Bots that have
-          it keep it.
+          {uiNodes(
+            "Changes apply the next time someone uses {{slot0}}. Bots that have it keep it.",
+            [skill.title],
+          )}
         </p>
       </header>
 
@@ -92,7 +96,7 @@ export function EditSkill({ slug }: { slug: string }) {
           await navigate({ search: {}, to: "/capabilities/skills" });
         }}
         slugLocked
-        submitLabel="Save changes"
+        submitLabel={ui("Save changes")}
       />
     </div>
   );

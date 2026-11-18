@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconBell } from "@tabler/icons-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ function remember() {
  * good, and Not now hides it in this browser. A Bot's page still offers notifications afterwards.
  */
 export function NotifyPrompt() {
+  useLocale();
   const permission = useNotificationPermission();
   const [dismissed, setDismissed] = useState(answered);
   if (permission !== "default" || dismissed) return null;
@@ -58,7 +60,7 @@ export function NotifyPrompt() {
       </ItemMedia>
       <ItemContent>
         <ItemTitle className="text-pretty">
-          Get notified when your Bot finishes or needs your approval.
+          {ui("Get notified when your Bot finishes or needs your approval.")}
         </ItemTitle>
       </ItemContent>
       <ItemActions>
@@ -70,7 +72,7 @@ export function NotifyPrompt() {
           size="sm"
           variant="ghost"
         >
-          Not now
+          {ui("Not now")}
         </Button>
         <Button
           onClick={() => {
@@ -81,7 +83,7 @@ export function NotifyPrompt() {
           size="sm"
           variant="outline"
         >
-          Enable notifications
+          {ui("Enable notifications")}
         </Button>
       </ItemActions>
     </Item>

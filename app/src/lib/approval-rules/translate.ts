@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { ApprovalRuleInput } from "@/lib/approvals";
 import { client } from "@/lib/client";
 
@@ -41,7 +42,9 @@ export async function translateApprovalRules(
   const response = await client("/api/approvals/team/rules/translate", {
     method: "POST",
     body: { text },
-    fallback: "Couldn't write the rules. Try again, or add the rule by hand.",
+    fallback: ui(
+      "Couldn't write the rules. Try again, or add the rule by hand.",
+    ),
   });
   return (await response.json()) as ApprovalRuleTranslation;
 }

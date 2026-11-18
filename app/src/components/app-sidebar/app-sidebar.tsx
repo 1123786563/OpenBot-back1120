@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconLogout, IconPlus, IconSearch } from "@tabler/icons-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, type LinkOptions, useParams } from "@tanstack/react-router";
@@ -59,6 +60,7 @@ const appLinkOptions = { to: "/" } satisfies LinkOptions;
 const userMenuItemClassName = "gap-2 px-2 py-1.5";
 
 function UserAvatar() {
+  useLocale();
   const { data: currentUser } = useQuery(currentUserQueryOptions());
   const initials =
     currentUser?.name
@@ -165,6 +167,7 @@ function ChannelRow({
   animateOrder: boolean;
   emphasis: MessageListEmphasis;
 }) {
+  useLocale();
   const shouldReduceMotion = useReducedMotion();
   // Whether this row is unread, as a boolean, for the same reason `Channel` computes `isOpen`
   // that way: navigating re-renders the rows whose answer changed, not the whole roster.
@@ -207,6 +210,7 @@ function ChannelRow({
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  useLocale();
   const emphasis = useMessageListEmphasis();
   const { data: currentUser } = useQuery(currentUserQueryOptions());
   const signOut = useSignOut();
@@ -246,7 +250,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             {/* Square, as tall as the name beside it, with the sidebar's hover rather than `muted`, which
                 is nearly the sidebar's own colour. */}
             <Button
-              aria-label="New conversation"
+              aria-label={ui("New conversation")}
               className="aspect-square h-full w-auto hover:bg-foreground/5 dark:hover:bg-foreground/5"
               size="icon"
               variant="ghost"
@@ -271,9 +275,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem>
               <InputGroup className="bg-background text-sm rounded-lg h-9">
                 <InputGroupInput
-                  aria-label="Search conversations"
+                  aria-label={ui("Search conversations")}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search…"
+                  placeholder={ui("Search…")}
                   value={search}
                 />
                 <InputGroupAddon>
@@ -294,13 +298,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <EmptyHeader>
                     <EmptyTitle>
                       {channels.hasNextPage
-                        ? "No loaded conversations match your search"
-                        : "No conversations match your search"}
+                        ? ui("No loaded conversations match your search")
+                        : ui("No conversations match your search")}
                     </EmptyTitle>
                     <EmptyDescription className="text-pretty">
                       {channels.hasNextPage
-                        ? "Load older conversations to search more of your history."
-                        : `No conversation has “${search.trim()}” in its name or latest message.`}
+                        ? ui(
+                            "Load older conversations to search more of your history.",
+                          )
+                        : ui(
+                            "No conversation has “{{value0}}” in its name or latest message.",
+                            { value0: String(search.trim()) },
+                          )}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -310,9 +319,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="py-4">
                 <Empty className="border border-dashed min-h-[40dvh]">
                   <EmptyHeader>
-                    <EmptyTitle>No conversations yet</EmptyTitle>
+                    <EmptyTitle>{ui("No conversations yet")}</EmptyTitle>
                     <EmptyDescription className="text-pretty">
-                      Start a conversation with a Bot and it shows up here.
+                      {ui(
+                        "Start a conversation with a Bot and it shows up here.",
+                      )}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -414,7 +425,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     variant="destructive"
                   >
                     <IconLogout />
-                    Sign out
+                    {ui("Sign out")}
                   </DropdownMenuItem>
                 ) : null}
               </DropdownMenuContent>

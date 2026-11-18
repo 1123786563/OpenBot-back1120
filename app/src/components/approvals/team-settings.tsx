@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconChecklist,
   IconChevronRight,
@@ -52,32 +54,68 @@ const ACTION_KIND_ROWS: {
   title: string;
   icon: typeof IconSend;
 }[] = [
-  { kind: "sending", title: "Sending to other people", icon: IconSend },
-  { kind: "deleting", title: "Deleting", icon: IconTrash },
-  { kind: "sharing", title: "Sharing", icon: IconShare },
+  {
+    kind: "sending",
+    get title() {
+      return ui("Sending to other people");
+    },
+    icon: IconSend,
+  },
+  {
+    kind: "deleting",
+    get title() {
+      return ui("Deleting");
+    },
+    icon: IconTrash,
+  },
+  {
+    kind: "sharing",
+    get title() {
+      return ui("Sharing");
+    },
+    icon: IconShare,
+  },
   {
     kind: "publishing",
-    title: "Posting and publishing",
+    get title() {
+      return ui("Posting and publishing");
+    },
     icon: IconSpeakerphone,
   },
-  { kind: "payments", title: "Paying and buying", icon: IconCreditCard },
+  {
+    kind: "payments",
+    get title() {
+      return ui("Paying and buying");
+    },
+    icon: IconCreditCard,
+  },
   {
     kind: "security_settings",
-    title: "Security and access settings",
+    get title() {
+      return ui("Security and access settings");
+    },
     icon: IconLock,
   },
   {
     kind: "credentials",
-    title: "Passwords and sign-in details",
+    get title() {
+      return ui("Passwords and sign-in details");
+    },
     icon: IconKey,
   },
 ];
 
 /** What members can do about one kind of action. Open unless the admin closes it. */
 const ACTION_KIND_LABELS: Record<ActionKindPolicy, string> = {
-  open: "Members choose",
-  ask: "Ask every time",
-  hand_off: "Members do it themselves",
+  get open() {
+    return ui("Members choose");
+  },
+  get ask() {
+    return ui("Ask every time");
+  },
+  get hand_off() {
+    return ui("Members do it themselves");
+  },
 };
 
 /**
@@ -86,6 +124,7 @@ const ACTION_KIND_LABELS: Record<ActionKindPolicy, string> = {
  * Settings → Approvals.
  */
 export function TeamApprovalSettings() {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const guidance = useQuery(reviewerGuidanceQueryOptions());
   const team = useMutation(teamApprovalSettingsMutationOptions(queryClient));
@@ -108,11 +147,11 @@ export function TeamApprovalSettings() {
     <>
       {error ? (
         <p className="mt-6 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {settings ? (
-        <PageSection title="Team settings">
+        <PageSection title={ui("Team settings")}>
           <PageRows>
             <Item size="sm">
               <ItemMedia variant="icon">
@@ -120,7 +159,7 @@ export function TeamApprovalSettings() {
               </ItemMedia>
               <ItemContent>
                 <ItemTitle id="enforce-auto-review-title">
-                  Require auto-review for everyone
+                  {ui("Require auto-review for everyone")}
                 </ItemTitle>
               </ItemContent>
               <ItemActions>
@@ -140,14 +179,16 @@ export function TeamApprovalSettings() {
                 <IconNotes />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Guidance for auto-review</ItemTitle>
+                <ItemTitle>{ui("Guidance for auto-review")}</ItemTitle>
                 <ItemDescription>
                   {guidance.isPending
                     ? null
                     : guidance.error
-                      ? "Couldn't load the guidance."
+                      ? ui("Couldn't load the guidance.")
                       : (guidance.data ??
-                        "None. Tell the reviewer what your organization needs a person for.")}
+                        ui(
+                          "None. Tell the reviewer what your organization needs a person for.",
+                        ))}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -161,7 +202,7 @@ export function TeamApprovalSettings() {
               </ItemMedia>
               <ItemContent>
                 <ItemTitle id="custom-rules-title">
-                  Let members set personal rules
+                  {ui("Let members set personal rules")}
                 </ItemTitle>
               </ItemContent>
               <ItemActions>
@@ -181,15 +222,17 @@ export function TeamApprovalSettings() {
                 <IconTerminal2 />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Commands on members' computers, at most</ItemTitle>
+                <ItemTitle>
+                  {ui("Commands on members' computers, at most")}
+                </ItemTitle>
                 <ItemDescription>
-                  A member's own stricter setting still applies.
+                  {ui("A member's own stricter setting still applies.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <LabelSelect
                   disabled={team.isPending}
-                  label="Commands on members' computers, at most"
+                  label={ui("Commands on members' computers, at most")}
                   labels={HOST_LABELS}
                   onChange={(hostCommandsCap) =>
                     team.mutate({ hostCommandsCap })
@@ -203,8 +246,10 @@ export function TeamApprovalSettings() {
       ) : null}
       {settings ? (
         <PageSection
-          description="Bots ask before these. With Members choose, a member can allow one once, for a conversation, or always. Ask every time leaves only Allow once and Deny."
-          title="Actions that ask first"
+          description={ui(
+            "Bots ask before these. With Members choose, a member can allow one once, for a conversation, or always. Ask every time leaves only Allow once and Deny.",
+          )}
+          title={ui("Actions that ask first")}
         >
           <PageRows>
             {ACTION_KIND_ROWS.map(({ kind, title, icon: Icon }, index) => (
@@ -235,11 +280,13 @@ export function TeamApprovalSettings() {
         </PageSection>
       ) : null}
       <PageSection
-        description="These apply to every member's Bots. Members can't change them."
-        title="Team rules"
+        description={ui(
+          "These apply to every member's Bots. Members can't change them.",
+        )}
+        title={ui("Team rules")}
       >
         {teamRules.length === 0 ? (
-          <PageEmpty icon={IconChecklist} title="No team rules" />
+          <PageEmpty icon={IconChecklist} title={ui("No team rules")} />
         ) : null}
         <PageRows>
           {teamRules.map((rule) => (
@@ -261,9 +308,11 @@ export function TeamApprovalSettings() {
               <IconSparkles />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Describe it in words</ItemTitle>
+              <ItemTitle>{ui("Describe it in words")}</ItemTitle>
               <ItemDescription>
-                Say what Bots should do, and your model writes the rules.
+                {ui(
+                  "Say what Bots should do, and your model writes the rules.",
+                )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
@@ -271,7 +320,7 @@ export function TeamApprovalSettings() {
             </ItemActions>
           </Item>
           <Separator />
-          <RuleForm label="Add a team rule" save={addTeamRule} />
+          <RuleForm label={ui("Add a team rule")} save={addTeamRule} />
         </PageRows>
       </PageSection>
       <SharedUseRequests />

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type InfiniteData,
   mutationOptions,
@@ -19,7 +20,7 @@ export function createChannelMutationOptions(queryClient: QueryClient) {
       const response = await client("/api/channels", {
         method: "POST",
         body: { agentIds },
-        fallback: "Couldn't start a conversation.",
+        fallback: ui("Couldn't start a conversation."),
       });
       return ((await response.json()) as { channel: AgentChannel }).channel;
     },
@@ -91,7 +92,7 @@ export function setChannelPinnedMutationOptions(queryClient: QueryClient) {
       await client(`/api/channels/${variables.channelId}/pin`, {
         method: "PUT",
         body: { pinned: variables.pinned },
-        fallback: "Couldn't pin this conversation.",
+        fallback: ui("Couldn't pin this conversation."),
       });
     },
     onSuccess: () =>
@@ -111,7 +112,7 @@ export function renameChannelMutationOptions(queryClient: QueryClient) {
       await client(`/api/channels/${variables.channelId}/title`, {
         method: "PUT",
         body: { title: variables.title.trim() || null },
-        fallback: "Couldn't rename this conversation.",
+        fallback: ui("Couldn't rename this conversation."),
       });
     },
     onSuccess: () =>
@@ -134,7 +135,7 @@ export function markChannelReadMutationOptions(queryClient: QueryClient) {
     mutationFn: async (channelId: string) => {
       await client(`/api/channels/${channelId}/read`, {
         method: "PUT",
-        fallback: "Couldn't mark this conversation as read.",
+        fallback: ui("Couldn't mark this conversation as read."),
       });
     },
     onSuccess: () =>
@@ -182,7 +183,7 @@ export function deleteChannelMutationOptions(
         `/api/channels/${channelId}${discardFailedStart ? "?discardFailedStart=true" : ""}`,
         {
           method: "DELETE",
-          fallback: "Couldn't delete this conversation.",
+          fallback: ui("Couldn't delete this conversation."),
         },
       );
     },

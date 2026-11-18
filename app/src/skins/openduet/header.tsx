@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronLeft } from "@tabler/icons-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
@@ -44,6 +45,7 @@ export function initialOf(user: { name?: string | null; email: string }) {
  * running, or work it waits on between turns.
  */
 function useOpenConversation() {
+  useLocale();
   const channelId = useParams({
     strict: false,
     select: (params) => (params as { channelId?: string }).channelId,
@@ -63,8 +65,10 @@ function useOpenConversation() {
 export function doingLine(busy: boolean, work: ChannelWork[]): string | null {
   const first = work[0];
   if (first?.kind === "handoff")
-    return `Asking ${first.botName ?? "another Bot"}`;
-  if (first?.kind === "routine") return "Running a routine";
+    return ui("Asking {{value0}}", {
+      value0: String(first.botName ?? "another Bot"),
+    });
+  if (first?.kind === "routine") return ui("Running a routine");
   return busy ? "Thinking" : null;
 }
 
@@ -92,6 +96,7 @@ export function TabHeader({
   /** The frame's content, where the composer the orb talks through is drawn. */
   main: HTMLElement | null;
 }) {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   // Settings, from OpenBot's one navigation list, behind the person's initial.
   const settings = useNavigationItems()
@@ -133,7 +138,9 @@ export function TabHeader({
     ? "Chat"
     : presence.recording
       ? "Stop and add to your message"
-      : `Talk to ${appConfig.brand.productName}`;
+      : ui("Talk to {{value0}}", {
+          value0: String(appConfig.brand.productName),
+        });
 
   return (
     <header
@@ -146,7 +153,7 @@ export function TabHeader({
     >
       <button
         aria-expanded={menuOpen}
-        aria-label="Menu"
+        aria-label={ui("Menu")}
         className={cn(DISC, "pointer-events-auto mt-2")}
         onClick={onMenu}
         style={{ width: SIDE, height: SIDE }}
@@ -173,7 +180,7 @@ export function TabHeader({
         <DoingPill line={doingLine(working, conversation.work)} />
       </div>
       <Link
-        aria-label="Your settings"
+        aria-label={ui("Your settings")}
         to={settings?.to ?? "/settings"}
         className={cn(DISC, "pointer-events-auto mt-2")}
         style={{ width: SIDE, height: SIDE }}
@@ -191,6 +198,7 @@ export function TabHeader({
  * before the first words arrive and it can fade out as well as in.
  */
 function DoingPill({ line }: { line: string | null }) {
+  useLocale();
   const [held, setHeld] = useState(line);
   if (line !== null && line !== held) setHeld(line);
   const shown = line !== null;
@@ -234,6 +242,7 @@ export function readPageFacts(root: ParentNode): PageFacts {
 }
 
 function usePageFacts(root: HTMLElement | null): PageFacts {
+  useLocale();
   const [facts, setFacts] = useState<PageFacts>({ title: null, back: null });
   useEffect(() => {
     if (!root) return;
@@ -265,13 +274,18 @@ function usePageFacts(root: HTMLElement | null): PageFacts {
  * has one (a Bot's page goes to Bots), back through history otherwise, and to Chat with neither.
  */
 export function PageHeader({ main }: { main: HTMLElement | null }) {
+  useLocale();
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const { title, back } = usePageFacts(main);
   return (
     <header className="relative z-20 flex h-[72px] shrink-0 items-start gap-2 px-4 pt-3">
       <button
-        aria-label={back?.label ? `Back to ${back.label}` : "Back"}
+        aria-label={
+          back?.label
+            ? ui("Back to {{value0}}", { value0: String(back.label) })
+            : ui("Back")
+        }
         className={DISC}
         onClick={() => {
           if (back) void router.navigate({ href: back.href });

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconClockHour3,
   IconDeviceDesktop,
@@ -65,6 +66,7 @@ function RailTip({
   label: string;
   children: React.ReactElement;
 }) {
+  useLocale();
   return (
     <Tooltip>
       <TooltipTrigger render={children} />
@@ -75,6 +77,7 @@ function RailTip({
 
 /** Who is signed in, and the way out, at the foot of the rail as OpenBot keeps it in its sidebar. */
 function RailUserMenu() {
+  useLocale();
   const user = useQuery(currentUserQueryOptions());
   const navigate = useNavigate();
   const signOut = useMutation(signOutMutationOptions(queryClient));
@@ -85,7 +88,7 @@ function RailUserMenu() {
       <DropdownMenuTrigger
         render={
           <button
-            aria-label="Account"
+            aria-label={ui("Account")}
             className="grid size-[29px] place-items-center rounded-full border border-(--opendots-avatar-line) bg-(--opendots-avatar) text-[10px] text-(--opendots-avatar-ink) outline-none focus-visible:ring-2 focus-visible:ring-ring"
             type="button"
           />
@@ -114,7 +117,7 @@ function RailUserMenu() {
               variant="destructive"
             >
               <IconLogout />
-              Sign out
+              {ui("Sign out")}
             </DropdownMenuItem>
           </>
         ) : null}
@@ -132,6 +135,7 @@ function RailDestination({
   item: NavigationItem;
   showBadge: boolean;
 }) {
+  useLocale();
   const Icon = item.icon;
   return (
     <RailTip label={item.label}>
@@ -165,29 +169,36 @@ function Rail({
   /** Whether the rail carries the Bots badge: at desktop width, where the rail is on screen. */
   showBadge: boolean;
 }) {
+  useLocale();
   // OpenDots draws Routines itself, as its own screen just above, so not a second time from the list.
   const navigation = useNavigationItems().filter(
     (item) => item.id !== "routines",
   );
   return (
     <nav
-      aria-label="Workspace navigation"
+      aria-label={ui("Workspace navigation")}
       data-opendots-chrome
       className="flex w-12 shrink-0 flex-col items-center gap-3 border-r border-(--opendots-line) bg-(--opendots-rail) px-[5px] py-4 max-md:hidden"
     >
       {/* OpenBot's own mark where OpenDots puts its monogram; the deployment owns the identity. */}
       <Link
-        aria-label={`${appConfig.brand.productName} home`}
+        aria-label={ui("{{value0}} home", {
+          value0: String(appConfig.brand.productName),
+        })}
         className="mb-3 grid size-9 shrink-0 place-items-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
         to="/"
       >
         <AgentOrb size="26px" />
       </Link>
-      <RailTip label={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+      <RailTip
+        label={navCollapsed ? ui("Expand sidebar") : ui("Collapse sidebar")}
+      >
         <button
           aria-controls="opendots-sidebar"
           aria-expanded={!navCollapsed}
-          aria-label={navCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={
+            navCollapsed ? ui("Expand sidebar") : ui("Collapse sidebar")
+          }
           className={railButton}
           onClick={onToggleNav}
           type="button"
@@ -195,14 +206,14 @@ function Rail({
           <IconLayoutSidebar />
         </button>
       </RailTip>
-      <RailTip label="New chat">
-        <Link {...newChat} aria-label="New chat" className={railButton}>
+      <RailTip label={ui("New chat")}>
+        <Link {...newChat} aria-label={ui("New chat")} className={railButton}>
           <IconPlus className="size-[19px]!" />
         </Link>
       </RailTip>
-      <RailTip label="Routines">
+      <RailTip label={ui("Routines")}>
         <Link
-          aria-label="Routines"
+          aria-label={ui("Routines")}
           className={railButton}
           params={{ screen: "routines" }}
           to="/s/$screen"
@@ -233,25 +244,37 @@ function Rail({
  * pauses each Bot on its own, so this is that Bot's switch and only appears where there is one.
  */
 function PauseControl({ botId, name }: { botId: string; name: string }) {
+  useLocale();
   const lifecycle = useQuery(botLifecycleQueryOptions(botId));
   const setPaused = useMutation(setBotPausedMutationOptions(queryClient));
   if (!lifecycle.data) return null;
   const paused = lifecycle.data.paused;
   return (
     <button
-      aria-label={paused ? `Resume ${name}` : `Pause ${name}`}
+      aria-label={
+        paused
+          ? ui("Resume {{value0}}", { value0: String(name) })
+          : ui("Pause {{value0}}", { value0: String(name) })
+      }
       className="inline-flex items-center gap-[5px] rounded-md p-1 text-[12px] text-(--opendots-pause-ink) outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 [&_svg]:size-3.5"
       disabled={setPaused.isPending}
       onClick={() => setPaused.mutate({ agentId: botId, paused: !paused })}
       title={
         paused
-          ? `${name} is paused. Nothing runs for you until you resume it.`
-          : `Pause ${name}. Nothing runs for you until you resume it.`
+          ? ui(
+              "{{value0}} is paused. Nothing runs for you until you resume it.",
+              { value0: String(name) },
+            )
+          : ui("Pause {{value0}}. Nothing runs for you until you resume it.", {
+              value0: String(name),
+            })
       }
       type="button"
     >
       {paused ? <IconPlayerPlay /> : <IconPlayerPause />}
-      <span className="max-md:hidden">{paused ? "Resume" : "Pause"}</span>
+      <span className="max-md:hidden">
+        {paused ? ui("Resume") : ui("Pause")}
+      </span>
     </button>
   );
 }
@@ -269,6 +292,7 @@ function Topbar({
   computerOpen: boolean;
   onToggleComputer: () => void;
 }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const name = botName(agents.data, place.botId);
   return (
@@ -279,7 +303,9 @@ function Topbar({
       <button
         aria-controls="opendots-sidebar"
         aria-expanded={!navCollapsed}
-        aria-label={navCollapsed ? "Show navigation" : "Hide navigation"}
+        aria-label={
+          navCollapsed ? ui("Show navigation") : ui("Hide navigation")
+        }
         className="grid size-10 shrink-0 place-items-center rounded-lg text-(--opendots-toggle-ink) outline-none transition-colors hover:bg-(--opendots-hover) focus-visible:ring-2 focus-visible:ring-ring max-md:hidden [&_svg]:size-[18px]"
         onClick={onToggleNav}
         type="button"
@@ -287,10 +313,10 @@ function Topbar({
         <IconLayoutSidebar />
       </button>
       <nav
-        aria-label="Breadcrumb"
+        aria-label={ui("Breadcrumb")}
         className="flex min-w-0 flex-1 items-center gap-[13px] text-[13px] text-(--opendots-crumb) max-md:gap-[7px]"
       >
-        <span className="shrink-0 max-md:hidden">Bots</span>
+        <span className="shrink-0 max-md:hidden">{ui("Bots")}</span>
         <span aria-hidden className="shrink-0 max-md:hidden">
           /
         </span>
@@ -321,7 +347,7 @@ function Topbar({
             "size-8 [&_svg:not([class*='size-'])]:size-[18px]",
             computerOpen && "bg-(--opendots-tab) text-foreground",
           )}
-          label={computerOpen ? "Hide computer" : "Show computer"}
+          label={computerOpen ? ui("Hide computer") : ui("Show computer")}
           onClick={onToggleComputer}
         >
           <IconDeviceDesktop />
@@ -337,6 +363,7 @@ function Topbar({
  * included, is OpenBot's own and renders as `children`.
  */
 export function OpenDotsFrame({ children }: { children: ReactNode }) {
+  useLocale();
   // One socket for the app, opened where the roster is kept live, as OpenBot's own sidebar does.
   useChannelEvents();
   const place = usePlace();
@@ -397,7 +424,7 @@ export function OpenDotsFrame({ children }: { children: ReactNode }) {
         <>
           <button
             aria-expanded={mobileOpen}
-            aria-label="Open navigation"
+            aria-label={ui("Open navigation")}
             className="fixed top-3.5 left-2.5 z-20 grid size-9 place-items-center rounded-lg text-(--opendots-menu-ink) outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-[21px]"
             data-opendots-chrome
             onClick={() => setMobileOpen(true)}
@@ -417,7 +444,7 @@ export function OpenDotsFrame({ children }: { children: ReactNode }) {
               showCloseButton={false}
               side="left"
             >
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <SheetTitle className="sr-only">{ui("Navigation")}</SheetTitle>
               <OpenDotsSidebar
                 newChat={newChat}
                 onNavigate={() => setMobileOpen(false)}
@@ -428,7 +455,7 @@ export function OpenDotsFrame({ children }: { children: ReactNode }) {
         </>
       ) : (
         <aside
-          aria-label="Sidebar"
+          aria-label={ui("Sidebar")}
           className="w-[220px] shrink-0 border-r border-(--opendots-line) bg-(--opendots-sidebar)"
           data-opendots-chrome
           hidden={navCollapsed}

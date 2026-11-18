@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type {
   RecorderConnectionsResponse,
   RecordingsPage,
@@ -46,7 +47,7 @@ export const recorderConnectionsQueryOptions = (options?: {
     queryFn: async (): Promise<RecorderConnectionsResponse> =>
       (
         await client(recorderPaths.connections, {
-          fallback: "Couldn't load your connected browsers.",
+          fallback: ui("Couldn't load your connected browsers."),
         })
       ).json(),
     refetchInterval: options?.awaiting
@@ -140,7 +141,7 @@ export const recordingsQueryOptions = (options?: { waiting?: boolean }) =>
         ? `?cursor=${encodeURIComponent(pageParam)}`
         : "";
       const response = await client(`${recorderPaths.recordings}${suffix}`, {
-        fallback: "Couldn't load your recordings. Reload the page.",
+        fallback: ui("Couldn't load your recordings. Reload the page."),
       });
       return response.json();
     },

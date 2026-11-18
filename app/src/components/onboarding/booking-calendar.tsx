@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   BOOKING_CALENDAR_ORIGIN,
@@ -80,6 +81,7 @@ export function BookingCalendar({
   onFailed: () => void;
   onBooked: () => void;
 }) {
+  useLocale();
   const frame = useRef<HTMLIFrameElement>(null);
   const [src] = useState(() =>
     bookingCalendarSrc(window.location.host, appColors()),
@@ -151,7 +153,7 @@ export function BookingCalendar({
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
           src={src}
           style={{ height }}
-          title="Booking calendar"
+          title={ui("Booking calendar")}
         />
         {ready ? null : (
           <div
@@ -162,7 +164,7 @@ export function BookingCalendar({
               aria-hidden
               className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none"
             />
-            <span className="sr-only">Loading the calendar</span>
+            <span className="sr-only">{ui("Loading the calendar")}</span>
           </div>
         )}
       </div>

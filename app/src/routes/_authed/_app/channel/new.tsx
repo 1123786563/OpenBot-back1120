@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { Message } from "@ag-ui/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -109,11 +110,13 @@ function ownedBy(composition: string) {
 }
 
 function RouteComponent() {
+  useLocale();
   const { composition } = Route.useRouteContext();
   return <NewConversation composition={composition} key={composition} />;
 }
 
 function NewConversation({ composition }: { composition: string }) {
+  useLocale();
   const { agent } = Route.useSearch();
   const queryClient = useQueryClient();
   const [creatingBot, setCreatingBot] = useState(false);
@@ -254,7 +257,7 @@ function NewConversation({ composition }: { composition: string }) {
         data-slot="conversation-header"
       >
         <SidebarToggle className="mr-1" />
-        <span className="text-sm text-muted-foreground">To:</span>
+        <span className="text-sm text-muted-foreground">{ui("To:")}</span>
         <Combobox
           // Do not auto-open when a recipient is already chosen; the field is already answered.
           open={pickerOpen ?? (!chosen && !loadError && !waitingForUrlAgent)}
@@ -303,8 +306,8 @@ function NewConversation({ composition }: { composition: string }) {
               autoFocus={!chosen}
               placeholder={
                 selected.length
-                  ? "Add another Bot for a group…"
-                  : "Choose a Bot…"
+                  ? ui("Add another Bot for a group…")
+                  : ui("Choose a Bot…")
               }
             />
           </ComboboxChips>
@@ -324,11 +327,13 @@ function NewConversation({ composition }: { composition: string }) {
                 }}
               >
                 <AgentOrb size="24px" state="idle" />
-                <span className="font-medium">New Bot</span>
-                <span className="text-muted-foreground">Create a new Bot</span>
+                <span className="font-medium">{ui("New Bot")}</span>
+                <span className="text-muted-foreground">
+                  {ui("Create a new Bot")}
+                </span>
               </button>
             </div>
-            <ComboboxEmpty>No Bots found.</ComboboxEmpty>
+            <ComboboxEmpty>{ui("No Bots found.")}</ComboboxEmpty>
             <ComboboxList className="min-h-0">
               {(item: AgentProfile) => (
                 <ComboboxItem key={item.id} value={item} className="h-10">
@@ -436,7 +441,7 @@ function NewConversation({ composition }: { composition: string }) {
               className="px-3.5 pb-2 text-sm text-muted-foreground"
               role="status"
             >
-              Choose a Bot first.
+              {ui("Choose a Bot first.")}
             </p>
           ) : null
         }

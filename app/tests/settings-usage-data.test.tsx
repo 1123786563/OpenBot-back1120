@@ -1,3 +1,4 @@
+import { LanguageProvider } from "@/lib/i18n/provider";
 /**
  * Settings → General's Share usage data: OpenBot Desktop's usage data could only be turned off with
  * an environment variable at launch. The switch writes the same opt-out.
@@ -73,9 +74,11 @@ function renderGeneral() {
   const Page = GeneralRoute.options.component as ComponentType;
   return render(
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <Page />
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <Page />
+        </ThemeProvider>
+      </LanguageProvider>
     </QueryClientProvider>,
   );
 }

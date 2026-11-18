@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { BrowserTab } from "@openbot/shared/openbot-browser";
 import {
   IconArrowLeft,
@@ -52,7 +54,7 @@ import { cn } from "@/lib/utils";
 export function tabName(tab: BrowserTab): string {
   const title = tab.title.trim();
   if (title && title !== tab.url) return title;
-  if (!tab.url || tab.url === "about:blank") return "New tab";
+  if (!tab.url || tab.url === "about:blank") return ui("New tab");
   try {
     return new URL(tab.url).host || tab.url;
   } catch {
@@ -121,6 +123,7 @@ export function TabStrip({
   /** Drawn at the start of the strip, before the tabs: the page's sidebar toggle, where the browser fills the page. */
   start?: ReactNode;
 }) {
+  useLocale();
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const selected = tabs.find((tab) => tab.active) ?? tabs[0];
   const focusAt = (index: number) => {
@@ -180,7 +183,7 @@ export function TabStrip({
         </div>
       ) : null}
       <div
-        aria-label="Tabs"
+        aria-label={ui("Tabs")}
         className="-mb-px flex min-w-0 items-end gap-0.5 overflow-x-auto"
         role="tablist"
       >
@@ -234,7 +237,7 @@ export function TabStrip({
                 onClick={() => onClose(tab.id)}
                 size="icon-xs"
                 tabIndex={-1}
-                title={`Close ${name}`}
+                title={ui("Close {{value0}}", { value0: String(name) })}
                 variant="ghost"
               >
                 <IconX />
@@ -244,7 +247,7 @@ export function TabStrip({
         })}
       </div>
       <Button
-        aria-label="New tab"
+        aria-label={ui("New tab")}
         className="mb-1 self-center"
         disabled={disabled}
         onClick={onNew}
@@ -274,11 +277,12 @@ export function TabPanel({
   className?: string;
   children: ReactNode;
 }) {
+  useLocale();
   // The same element either way, so what is inside it keeps its place when the strip arrives.
   if (!tabs) return <div className={className}>{children}</div>;
   return (
     <div
-      aria-label={active ? undefined : "Browser"}
+      aria-label={active ? undefined : ui("Browser")}
       aria-labelledby={active ? tabId(ids, active.id) : undefined}
       className={className}
       id={panelId(ids)}
@@ -325,6 +329,7 @@ export function AddressBar({
   /** Where the bar shares its row with other controls, the row draws the border instead. */
   className?: string;
 }) {
+  useLocale();
   const [draft, setDraft] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const still = disabled || readOnly;
@@ -335,7 +340,7 @@ export function AddressBar({
   }, [focus, still, onFocused]);
   return (
     <form
-      aria-label="Address bar"
+      aria-label={ui("Address bar")}
       className={cn(
         "flex items-center gap-0.5 border-border border-b bg-background px-2 py-1.5",
         className,
@@ -352,7 +357,7 @@ export function AddressBar({
       }}
     >
       <Button
-        aria-label="Back"
+        aria-label={ui("Back")}
         disabled={still}
         onClick={() => onMove("back")}
         size="icon-sm"
@@ -361,7 +366,7 @@ export function AddressBar({
         <IconArrowLeft />
       </Button>
       <Button
-        aria-label="Forward"
+        aria-label={ui("Forward")}
         disabled={still}
         onClick={() => onMove("forward")}
         size="icon-sm"
@@ -370,7 +375,7 @@ export function AddressBar({
         <IconArrowRight />
       </Button>
       <Button
-        aria-label="Reload"
+        aria-label={ui("Reload")}
         disabled={still}
         onClick={() => onMove("reload")}
         size="icon-sm"
@@ -380,11 +385,11 @@ export function AddressBar({
       </Button>
       {clear ? (
         <Button
-          aria-label="Clear browser data"
+          aria-label={ui("Clear browser data")}
           disabled={clear.disabled}
           onClick={clear.ask}
           size="icon-sm"
-          title="Clear browser data"
+          title={ui("Clear browser data")}
           variant="ghost"
         >
           <IconEraser />
@@ -393,7 +398,7 @@ export function AddressBar({
       {/* A pill in the window's frame colour, as a desktop browser's address bar is, lit like a field while typed in. */}
       <InputGroup className="ml-1.5 h-8 min-w-0 flex-1 rounded-full border-transparent bg-muted/70 text-sm shadow-none transition-colors has-[[data-slot=input-group-control]:focus-visible]:bg-background dark:bg-input/40">
         <InputGroupInput
-          aria-label="Address"
+          aria-label={ui("Address")}
           ref={input}
           disabled={disabled}
           readOnly={readOnly}
@@ -402,7 +407,7 @@ export function AddressBar({
           onKeyDown={(event) => {
             if (event.key === "Escape") setDraft(null);
           }}
-          placeholder="Search or type an address"
+          placeholder={ui("Search or type an address")}
           spellCheck={false}
           value={draft ?? address}
         />
@@ -433,6 +438,7 @@ type ClearMutation = Pick<
  * This is the question being asked, kept by whoever draws the bar rather than by the bar, and `ask` for the button.
  */
 export function useClearBrowserData(clear: ClearMutation) {
+  useLocale();
   const [asking, setAsking] = useState(false);
   return {
     asking,
@@ -460,6 +466,7 @@ export function ClearBrowserDialog({
   onOpenChange: (open: boolean) => void;
   stacked?: boolean;
 }) {
+  useLocale();
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
@@ -471,16 +478,17 @@ export function ClearBrowserDialog({
           : {})}
       >
         <DialogHeader>
-          <DialogTitle>Clear this browser?</DialogTitle>
+          <DialogTitle>{ui("Clear this browser?")}</DialogTitle>
           <DialogDescription>
-            Cookies, saved passwords and history are wiped. You'll have to sign
-            in everywhere again.
+            {ui(
+              "Cookies, saved passwords and history are wiped. You'll have to sign in everywhere again.",
+            )}
           </DialogDescription>
         </DialogHeader>
         {clear.error ? (
           <DialogBody className="mt-4">
             <p className="text-destructive text-sm" role="alert">
-              {clear.error.message}
+              {<ErrorDetails error={clear.error} />}
             </p>
           </DialogBody>
         ) : null}
@@ -490,7 +498,7 @@ export function ClearBrowserDialog({
             size="sm"
             variant="outline"
           >
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={clear.isPending}
@@ -498,14 +506,14 @@ export function ClearBrowserDialog({
               clear.mutate(undefined, {
                 onSuccess: () => {
                   onOpenChange(false);
-                  toast.add({ title: "Browser cleared", type: "success" });
+                  toast.add({ title: ui("Browser cleared"), type: "success" });
                 },
               })
             }
             size="sm"
             variant="destructive"
           >
-            {clear.isPending ? "Clearing…" : "Clear"}
+            {clear.isPending ? ui("Clearing…") : ui("Clear")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -518,6 +526,7 @@ export function ClearBrowserDialog({
  * tabs request's answer, and the props that hand the focus to `AddressBar` when that tab is the one showing.
  */
 export function useOpenedTab(activeId: string | undefined) {
+  useLocale();
   const [opened, setOpened] = useState<string | null>(null);
   const focused = useCallback(() => setOpened(null), []);
   return {

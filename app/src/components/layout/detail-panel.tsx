@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconX } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
@@ -53,6 +54,7 @@ export function DetailPanel({
   waiting?: ReactNode;
   children: ReactNode;
 }) {
+  useLocale();
   // Reduced motion keeps the fade, which explains the change, and drops the movement.
   const shouldReduceMotion = useReducedMotion();
   const container = useRef<HTMLDivElement>(null);
@@ -85,7 +87,7 @@ export function DetailPanel({
             style={{ width: `min(${detailWidth}px, 100vw)`, maxWidth: "100vw" }}
           >
             <SheetTitle className="h-12 shrink-0 px-4 pr-12 flex items-center">
-              {title ?? "Details"}
+              {title ?? ui("Details")}
             </SheetTitle>
             <div className="flex-1 min-h-0 overflow-y-auto">
               {open && waiting ? (
@@ -124,7 +126,7 @@ export function DetailPanel({
               </div>
               <div className="flex flex-row gap-1.5">
                 <Button
-                  aria-label="Close details"
+                  aria-label={ui("Close details")}
                   onClick={onClose}
                   variant="ghost"
                   size="icon"

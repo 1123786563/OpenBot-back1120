@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconApps,
   IconBox,
@@ -100,6 +102,7 @@ export function connectorCount(plugins: GrantedPlugins): number {
 
 /** What this Bot may reach: your skills on it, everything granted to it, and who it may ask. */
 export function AccessSections({ agent }: { agent: AgentProfile }) {
+  useLocale();
   // Every Bot has every connected app in the personal edition, so there is no switch per app here.
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -127,6 +130,7 @@ export function AccessSections({ agent }: { agent: AgentProfile }) {
  * the server would refuse it.
  */
 function YourApps({ agent }: { agent: AgentProfile }) {
+  useLocale();
   const giveable = useQuery(giveableAppsQueryOptions());
   const held = useQuery(botAppsQueryOptions(agent.id));
   const give = useMutation(giveBotAppMutationOptions(queryClient));
@@ -154,17 +158,20 @@ function YourApps({ agent }: { agent: AgentProfile }) {
   ];
   return (
     <PageSection
-      description={`Turn on an app to let ${agent.name} use it. It always uses the account of whoever is asking.`}
-      title="Your apps"
+      description={ui(
+        "Turn on an app to let {{value0}} use it. It always uses the account of whoever is asking.",
+        { value0: String(agent.name) },
+      )}
+      title={ui("Your apps")}
     >
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {giveable.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load your apps. Reload the page.
+          {ui("Couldn't load your apps. Reload the page.")}
         </p>
       ) : rows.length === 0 ? (
         <PageEmpty
@@ -174,14 +181,13 @@ function YourApps({ agent }: { agent: AgentProfile }) {
               size="sm"
               variant="outline"
             >
-              <IconPlug />
-              Connections
+              {uiNodes("{{slot0}}Connections", [<IconPlug key="slot0" />])}
             </Button>
           }
           icon={IconApps}
-          title="No apps to give yet"
+          title={ui("No apps to give yet")}
         >
-          Connect an app to let your Bots use it.
+          {ui("Connect an app to let your Bots use it.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -203,15 +209,24 @@ function YourApps({ agent }: { agent: AgentProfile }) {
                     <ItemTitle>{app.displayName}</ItemTitle>
                     <ItemDescription>
                       {locked
-                        ? "An admin gave it to this Bot."
+                        ? ui("An admin gave it to this Bot.")
                         : granted
-                          ? `${agent.name} can use ${yours}.`
-                          : `${agent.name} can't use ${yours}.`}
+                          ? ui("{{value0}} can use {{value1}}.", {
+                              value0: String(agent.name),
+                              value1: String(yours),
+                            })
+                          : ui("{{value0}} can't use {{value1}}.", {
+                              value0: String(agent.name),
+                              value1: String(yours),
+                            })}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <Switch
-                      aria-label={`Let ${agent.name} use ${app.displayName}`}
+                      aria-label={ui("Let {{value0}} use {{value1}}", {
+                        value0: String(agent.name),
+                        value1: String(app.displayName),
+                      })}
                       checked={granted}
                       disabled={busy || locked}
                       onCheckedChange={(next) => {
@@ -244,6 +259,7 @@ function YourApps({ agent }: { agent: AgentProfile }) {
  * the Bot had none, and every switch was drawn off until the page was opened again.
  */
 function YourSkills({ agentId }: { agentId: string }) {
+  useLocale();
   const me = useQuery(currentUserQueryOptions()).data;
   const page = useQuery(pluginsPageQueryOptions());
   const held = useQuery(agentPluginsQueryOptions(agentId));
@@ -254,17 +270,19 @@ function YourSkills({ agentId }: { agentId: string }) {
   const carried = new Set((held.data?.skills ?? []).map((skill) => skill.slug));
   return (
     <PageSection
-      description="Turn on a skill to use it with this Bot. Type / in a conversation to run it."
-      title="Your skills"
+      description={ui(
+        "Turn on a skill to use it with this Bot. Type / in a conversation to run it.",
+      )}
+      title={ui("Your skills")}
     >
       {grant.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {grant.error.message}
+          {<ErrorDetails error={grant.error} />}
         </p>
       ) : null}
       {page.isPending || held.isPending ? null : page.error || held.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load your skills. Reload the page.
+          {ui("Couldn't load your skills. Reload the page.")}
         </p>
       ) : skills.length === 0 ? (
         <PageEmpty
@@ -274,14 +292,13 @@ function YourSkills({ agentId }: { agentId: string }) {
               size="sm"
               variant="outline"
             >
-              <IconPlus />
-              Write a skill
+              {uiNodes("{{slot0}}Write a skill", [<IconPlus key="slot0" />])}
             </Button>
           }
           icon={IconBox}
-          title="No skills yet"
+          title={ui("No skills yet")}
         >
-          Skills you write show up here.
+          {ui("Skills you write show up here.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -337,6 +354,7 @@ function YourSkills({ agentId }: { agentId: string }) {
  * connected what.
  */
 function Granted({ agentId, mine }: { agentId: string; mine: boolean }) {
+  useLocale();
   const me = useQuery(currentUserQueryOptions()).data;
   const edition =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition ?? "team";
@@ -347,7 +365,7 @@ function Granted({ agentId, mine }: { agentId: string; mine: boolean }) {
   if (!plugins.data) {
     return (
       <p className="mt-6 text-destructive text-sm" role="alert">
-        Couldn't load what this Bot can use. Reload the page.
+        {ui("Couldn't load what this Bot can use. Reload the page.")}
       </p>
     );
   }
@@ -365,19 +383,27 @@ function Granted({ agentId, mine }: { agentId: string; mine: boolean }) {
   const count = states.length + rest.length + skills.length;
   return (
     <PageSection
-      description="Review this Bot’s available apps and skills, and check which apps are ready to use. The Bot cannot use apps or skills outside this list."
-      title="What it can use"
+      description={ui(
+        "Review this Bot’s available apps and skills, and check which apps are ready to use. The Bot cannot use apps or skills outside this list.",
+      )}
+      title={ui("What it can use")}
     >
       {apps.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't check whether each app is ready for you. Reload the page.
+          {ui(
+            "Couldn't check whether each app is ready for you. Reload the page.",
+          )}
         </p>
       ) : null}
       {count === 0 ? (
-        <PageEmpty icon={IconApps} title="No apps yet">
+        <PageEmpty icon={IconApps} title={ui("No apps yet")}>
           {mine
-            ? "Turn one on under Your apps, or ask an admin. Until then this Bot can only talk with you."
-            : "An admin has to add them. Until then this Bot can only talk with you."}
+            ? ui(
+                "Turn one on under Your apps, or ask an admin. Until then this Bot can only talk with you.",
+              )
+            : ui(
+                "An admin has to add them. Until then this Bot can only talk with you.",
+              )}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -458,7 +484,9 @@ function Granted({ agentId, mine }: { agentId: string; mine: boolean }) {
                   <ItemDescription>{skill.summary}</ItemDescription>
                 </ItemContent>
                 <ItemActions>
-                  <span className="text-muted-foreground text-sm">Skill</span>
+                  <span className="text-muted-foreground text-sm">
+                    {ui("Skill")}
+                  </span>
                 </ItemActions>
               </Item>
             </Fragment>
@@ -475,9 +503,10 @@ function toolList(labels: string[]): string {
 }
 
 function ToolCount({ count }: { count: number }) {
+  useLocale();
   return (
     <span className="text-muted-foreground text-sm tabular-nums">
-      {count} {count === 1 ? "tool" : "tools"}
+      {count} {count === 1 ? ui("tool") : ui("tools")}
     </span>
   );
 }
@@ -498,10 +527,13 @@ function ManageLink({
   appKey: string;
   title: string;
 }) {
+  useLocale();
   const paths = useManagePaths();
   return (
     <Button
-      aria-label={`Manage ${title} on this Bot`}
+      aria-label={ui("Manage {{value0}} on this Bot", {
+        value0: String(title),
+      })}
       render={<Link {...paths.pluginBot(appKey, agentId)} />}
       size="icon-sm"
       variant="ghost"

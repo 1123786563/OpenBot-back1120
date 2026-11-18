@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { pluginKeys } from "@/lib/plugins/queries";
@@ -47,7 +48,7 @@ export function cancelAppAccessRequestMutationOptions(
         "request",
         {
           method: "DELETE",
-          fallback: "That request could not be withdrawn.",
+          fallback: ui("That request could not be withdrawn."),
         },
       ),
     onSettled: () => refresh(queryClient),
@@ -76,7 +77,7 @@ export function approveAppAccessRequestMutationOptions(
         {
           method: "POST",
           ...(variables.refs ? { body: { refs: variables.refs } } : {}),
-          fallback: "That request could not be approved.",
+          fallback: ui("That request could not be approved."),
         },
       );
       return response.json();
@@ -103,7 +104,10 @@ export function approveBotAppMutationOptions(queryClient: QueryClient) {
     }> => {
       const response = await client(
         `/api/plugins/for/${encodeURIComponent(variables.agentId)}/apps/${encodeURIComponent(variables.app)}/approve`,
-        { method: "POST", fallback: "Couldn't turn that app on. Try again." },
+        {
+          method: "POST",
+          fallback: ui("Couldn't turn that app on. Try again."),
+        },
       );
       return response.json();
     },
@@ -122,7 +126,7 @@ export async function giveBotApp(variables: {
 }): Promise<{ granted: string[] }> {
   const response = await client(
     `/api/plugins/for/${encodeURIComponent(variables.agentId)}/apps/${encodeURIComponent(variables.app)}/give`,
-    { method: "POST", fallback: "Couldn't give that app to this Bot." },
+    { method: "POST", fallback: ui("Couldn't give that app to this Bot.") },
   );
   return response.json();
 }
@@ -144,7 +148,7 @@ export function takeBackBotAppMutationOptions(queryClient: QueryClient) {
     }): Promise<{ revoked: string[] }> => {
       const response = await client(
         `/api/plugins/for/${encodeURIComponent(variables.agentId)}/apps/${encodeURIComponent(variables.app)}/give`,
-        { method: "DELETE", fallback: "Couldn't take that app back." },
+        { method: "DELETE", fallback: ui("Couldn't take that app back.") },
       );
       return response.json();
     },
@@ -161,7 +165,10 @@ export function dismissAppAccessRequestMutationOptions(
       client(
         `/api/plugins/access-requests/${encodeURIComponent(id)}/dismiss`,
         "request",
-        { method: "POST", fallback: "That request could not be dismissed." },
+        {
+          method: "POST",
+          fallback: ui("That request could not be dismissed."),
+        },
       ),
     onSettled: () => refresh(queryClient),
   });

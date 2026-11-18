@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { type SetupChecklist, setupKeys } from "./queries";
@@ -14,7 +15,7 @@ export function recheckSetupMutationOptions(queryClient: QueryClient) {
     mutationFn: (): Promise<SetupChecklist> =>
       client("/api/setup/check", "checklist", {
         method: "POST",
-        fallback: "Couldn't check your setup.",
+        fallback: ui("Couldn't check your setup."),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: setupKeys.all }),
   });

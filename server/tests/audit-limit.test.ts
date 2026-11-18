@@ -86,7 +86,7 @@ describe("audit-events limit validation", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: PAGE_LIMIT_ERROR,
     });
   });

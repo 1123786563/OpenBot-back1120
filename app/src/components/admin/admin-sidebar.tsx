@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowLeft,
   IconBrain,
@@ -51,92 +52,128 @@ const GROUPS: {
   }[];
 }[] = [
   {
-    label: "What Bots can reach",
+    get label() {
+      return ui("What Bots can reach");
+    },
     items: [
       {
-        title: "Credentials",
+        get title() {
+          return ui("Credentials");
+        },
         icon: IconKey,
         linkOptions: { to: "/admin/credentials" },
       },
       {
-        title: "Boundaries",
+        get title() {
+          return ui("Boundaries");
+        },
         icon: IconShieldCheck,
         linkOptions: { to: "/admin/boundaries" },
       },
       {
-        title: "Approvals",
+        get title() {
+          return ui("Approvals");
+        },
         icon: IconChecks,
         linkOptions: { to: "/admin/approvals" },
       },
       {
-        title: "Computers",
+        get title() {
+          return ui("Computers");
+        },
         icon: IconDeviceDesktop,
         linkOptions: { to: "/admin/computers" },
       },
     ],
   },
   {
-    label: "What Bots can do",
+    get label() {
+      return ui("What Bots can do");
+    },
     items: [
       {
-        title: "Plugins",
+        get title() {
+          return ui("Plugins");
+        },
         icon: IconPuzzle,
         linkOptions: { to: "/admin/plugins" },
       },
       {
-        title: "Providers",
+        get title() {
+          return ui("Providers");
+        },
         icon: IconBrain,
         linkOptions: { to: "/admin/providers" },
       },
       {
-        title: "Skills",
+        get title() {
+          return ui("Skills");
+        },
         icon: IconSlash,
         linkOptions: { to: "/admin/skills" },
       },
       {
-        title: "Automatic learning",
+        get title() {
+          return ui("Automatic learning");
+        },
         icon: IconBulb,
         linkOptions: { to: "/admin/learning" },
       },
       {
-        title: "Check-ins",
+        get title() {
+          return ui("Check-ins");
+        },
         icon: IconRadar,
         linkOptions: { to: "/admin/proactive" },
       },
       {
-        title: "UI components",
+        get title() {
+          return ui("UI components");
+        },
         icon: IconLayoutGrid,
         linkOptions: { to: "/admin/components" },
       },
       {
-        title: "Playground",
+        get title() {
+          return ui("Playground");
+        },
         icon: IconCode,
         linkOptions: { to: "/admin/playground" },
       },
     ],
   },
   {
-    label: "Who can get in",
+    get label() {
+      return ui("Who can get in");
+    },
     items: [
       {
-        title: "People",
+        get title() {
+          return ui("People");
+        },
         icon: IconUsers,
         linkOptions: { to: "/admin/people" },
       },
       {
-        title: "Permissions",
+        get title() {
+          return ui("Permissions");
+        },
         icon: IconLockAccess,
         linkOptions: { to: "/admin/permissions" },
       },
       {
-        title: "Identity providers",
+        get title() {
+          return ui("Identity providers");
+        },
         icon: IconBuildingBank,
         linkOptions: { to: "/admin/identity-providers" },
       },
     ],
   },
   {
-    label: "What happened",
+    get label() {
+      return ui("What happened");
+    },
     items: [
       {
         title: managePaths("team").auditLabel,
@@ -144,7 +181,9 @@ const GROUPS: {
         linkOptions: { to: "/admin/audit" },
       },
       {
-        title: "What would happen",
+        get title() {
+          return ui("What would happen");
+        },
         icon: IconZoomQuestion,
         linkOptions: { to: "/admin/what-if" },
       },
@@ -155,6 +194,7 @@ const GROUPS: {
 export function AdminSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
+  useLocale();
   return (
     <Sidebar variant="inset" {...props}>
       {/*
@@ -173,7 +213,7 @@ export function AdminSidebar({
               render={(props) => (
                 <Link {...appLinkOptions} {...props}>
                   <IconArrowLeft className="mr-2 h-4 w-4" />
-                  Back to app
+                  {ui("Back to app")}
                 </Link>
               )}
             />
@@ -196,7 +236,7 @@ export function AdminSidebar({
                     activeProps={{ className: "bg-foreground/5" }}
                     {...props}
                   >
-                    Overview
+                    {ui("Overview")}
                   </Link>
                 )}
               />

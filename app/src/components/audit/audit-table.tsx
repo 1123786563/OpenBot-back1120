@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -79,9 +80,15 @@ const UNDRAWN = new Set(["search", "startedBy"]);
 const INITIAL_SORT: SortingState = [{ id: "when", desc: true }];
 
 const OUTCOME_LABEL: Record<AuditOutcome, string> = {
-  allowed: "Allowed",
-  refused: "Blocked",
-  "did-not-happen": "Did not happen",
+  get allowed() {
+    return ui("Allowed");
+  },
+  get refused() {
+    return ui("Blocked");
+  },
+  get "did-not-happen"() {
+    return ui("Did not happen");
+  },
 };
 
 /**
@@ -89,9 +96,24 @@ const OUTCOME_LABEL: Record<AuditOutcome, string> = {
  * act on the rows already loaded.
  */
 const FACETS = [
-  { id: "mark", title: "Outcome" },
-  { id: "bot", title: "Bot" },
-  { id: "startedBy", title: "Started by" },
+  {
+    id: "mark",
+    get title() {
+      return ui("Outcome");
+    },
+  },
+  {
+    id: "bot",
+    get title() {
+      return ui("Bot");
+    },
+  },
+  {
+    id: "startedBy",
+    get title() {
+      return ui("Started by");
+    },
+  },
 ] as const;
 
 export function AuditTable({
@@ -128,12 +150,13 @@ export function AuditTable({
     filters: React.ReactNode;
   }) => React.ReactNode;
 }) {
+  const interfaceLocale = useLocale();
   const [sorting, setSorting] = useState<SortingState>(INITIAL_SORT);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const columns = useMemo(
-    () => auditColumns(nameFor, storedNames, deploymentName, rowAction),
-    [nameFor, storedNames, deploymentName, rowAction],
-  );
+  const columns = useMemo(() => {
+    void interfaceLocale;
+    return auditColumns(nameFor, storedNames, deploymentName, rowAction);
+  }, [nameFor, storedNames, deploymentName, rowAction, interfaceLocale]);
   const table = useTable({
     features,
     columns,
@@ -246,8 +269,8 @@ export function AuditTable({
       </Table>
       {events.length > 0 && rows.length === 0 ? (
         <div className="px-4">
-          <PageEmpty icon={IconSearch} title="No matches">
-            Nothing loaded matches this search and these filters.
+          <PageEmpty icon={IconSearch} title={ui("No matches")}>
+            {ui("Nothing loaded matches this search and these filters.")}
           </PageEmpty>
           {footer}
         </div>
@@ -292,6 +315,7 @@ function Facet({
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
+  useLocale();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -305,7 +329,7 @@ function Facet({
           <span className="ml-1 rounded-sm bg-muted px-1 font-normal text-xs">
             {selected.length === 1
               ? selected[0]
-              : `${selected.length} selected`}
+              : ui("{{value0}} selected", { value0: String(selected.length) })}
           </span>
         ) : null}
       </DropdownMenuTrigger>
@@ -332,7 +356,7 @@ function Facet({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onChange([])}>
-              Clear filter
+              {ui("Clear filter")}
             </DropdownMenuItem>
           </>
         ) : null}
@@ -353,12 +377,23 @@ function countLabel(
   const noun = loaded === 1 ? "event" : "events";
   if (moreToLoad) {
     return shown === loaded
-      ? `Newest ${loaded} ${noun}`
-      : `${shown} of the newest ${loaded} ${noun}`;
+      ? ui("Newest {{value0}} {{value1}}", {
+          value0: String(loaded),
+          value1: String(noun),
+        })
+      : ui("{{value0}} of the newest {{value1}} {{value2}}", {
+          value0: String(shown),
+          value1: String(loaded),
+          value2: String(noun),
+        });
   }
   return shown === loaded
     ? `${loaded} ${noun}`
-    : `${shown} of ${loaded} ${noun}`;
+    : ui("{{value0}} of {{value1}} {{value2}}", {
+        value0: String(shown),
+        value1: String(loaded),
+        value2: String(noun),
+      });
 }
 
 function auditColumns(
@@ -372,7 +407,7 @@ function auditColumns(
       id: "mark",
       accessorFn: (event) => OUTCOME_LABEL[outcomeOf(event)],
       filterFn: anyOf,
-      header: () => <span className="sr-only">Outcome</span>,
+      header: () => <span className="sr-only">{ui("Outcome")}</span>,
       cell: ({ row }) => (
         <span
           aria-hidden
@@ -395,14 +430,14 @@ function auditColumns(
             onClick={column.getToggleSortingHandler()}
             type="button"
           >
-            When
+            {ui("When")}
             {sorted === "asc" ? (
               <IconArrowUp className="size-3.5" />
             ) : (
               <IconArrowDown className="size-3.5" />
             )}
             <span className="sr-only">
-              {sorted === "asc" ? ", oldest first" : ", newest first"}
+              {sorted === "asc" ? ui(", oldest first") : ui(", newest first")}
             </span>
           </button>
         );

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -31,7 +32,14 @@ import {
 import { useManagePaths } from "@/lib/manage-paths";
 
 /** Without `items` the trigger draws the raw value, so the type read "model" in lower case. */
-const KIND_LABEL = { model: "Model", connector: "Connector" } as const;
+const KIND_LABEL = {
+  get model() {
+    return ui("Model");
+  },
+  get connector() {
+    return ui("Connector");
+  },
+} as const;
 
 /**
  * Adding a credential, on a screen of its own rather than in a dialog over the list.
@@ -42,6 +50,7 @@ const KIND_LABEL = { model: "Model", connector: "Connector" } as const;
  * room, a back button and a URL that can be linked to, as Linear does for its API keys.
  */
 export function NewCredentialPage() {
+  useLocale();
   const paths = useManagePaths();
   const back = {
     label: paths.credentialsLabel,
@@ -71,8 +80,11 @@ export function NewCredentialPage() {
   return (
     <PageShell
       backButton={back}
-      description={`Save a credential for ${paths.deploymentName}. You won’t be able to view the secret after saving it.`}
-      title="Add credential"
+      description={ui(
+        "Save a credential for {{value0}}. You won’t be able to view the secret after saving it.",
+        { value0: String(paths.deploymentName) },
+      )}
+      title={ui("Add credential")}
     >
       <form
         noValidate
@@ -88,7 +100,7 @@ export function NewCredentialPage() {
                 render={(props) => <Link {...props} {...paths.credentials()} />}
                 variant="outline"
               >
-                Cancel
+                {ui("Cancel")}
               </Button>
               <form.Subscribe
                 selector={(state) => [state.canSubmit, state.isSubmitting]}
@@ -101,8 +113,8 @@ export function NewCredentialPage() {
                     type="submit"
                   >
                     {isSubmitting || createCredential.isPending
-                      ? "Saving…"
-                      : "Save credential"}
+                      ? ui("Saving…")
+                      : ui("Save credential")}
                   </Button>
                 )}
               </form.Subscribe>
@@ -116,9 +128,11 @@ export function NewCredentialPage() {
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Type</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{ui("Type")}</FieldLabel>
                     <FieldDescription>
-                      A model provider's key, or one a connector signs in with.
+                      {ui(
+                        "A model provider's key, or one a connector signs in with.",
+                      )}
                     </FieldDescription>
                     <Select
                       items={KIND_LABEL}
@@ -136,8 +150,10 @@ export function NewCredentialPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="model">Model</SelectItem>
-                          <SelectItem value="connector">Connector</SelectItem>
+                          <SelectItem value="model">{ui("Model")}</SelectItem>
+                          <SelectItem value="connector">
+                            {ui("Connector")}
+                          </SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
@@ -154,7 +170,9 @@ export function NewCredentialPage() {
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Provider</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>
+                      {ui("Provider")}
+                    </FieldLabel>
                     <Input
                       aria-invalid={isInvalid}
                       id={field.name}
@@ -163,7 +181,7 @@ export function NewCredentialPage() {
                       onChange={(event) =>
                         field.handleChange(event.target.value)
                       }
-                      placeholder="OpenAI"
+                      placeholder={ui("OpenAI")}
                       value={field.state.value}
                     />
                     {isInvalid ? (
@@ -179,9 +197,11 @@ export function NewCredentialPage() {
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Key ID</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{ui("Key ID")}</FieldLabel>
                     <FieldDescription>
-                      Tells this key apart from others for the same provider.
+                      {ui(
+                        "Tells this key apart from others for the same provider.",
+                      )}
                     </FieldDescription>
                     <Input
                       aria-invalid={isInvalid}
@@ -191,7 +211,7 @@ export function NewCredentialPage() {
                       onChange={(event) =>
                         field.handleChange(event.target.value)
                       }
-                      placeholder="production"
+                      placeholder={ui("production")}
                       value={field.state.value}
                     />
                     {isInvalid ? (
@@ -207,7 +227,7 @@ export function NewCredentialPage() {
                   field.state.meta.isTouched && !field.state.meta.isValid;
                 return (
                   <Field data-invalid={isInvalid}>
-                    <FieldLabel htmlFor={field.name}>Secret</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>{ui("Secret")}</FieldLabel>
                     <Input
                       aria-invalid={isInvalid}
                       autoComplete="off"
@@ -247,15 +267,16 @@ export function NewCredentialPage() {
             {([kind, provider, keyId]) =>
               liveCredentialFor(credentials.data, kind, provider, keyId) ? (
                 <p className="mt-5 text-amber-600 text-sm dark:text-amber-500">
-                  This key already has an active credential. Saving replaces it
-                  and revokes the old one.
+                  {ui(
+                    "This key already has an active credential. Saving replaces it and revokes the old one.",
+                  )}
                 </p>
               ) : null
             }
           </form.Subscribe>
           {createCredential.error ? (
             <p className="mt-5 text-destructive text-sm" role="alert">
-              Couldn't save the credential. Try again.
+              {ui("Couldn't save the credential. Try again.")}
             </p>
           ) : null}
         </PageCard>

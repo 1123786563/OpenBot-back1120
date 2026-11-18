@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -306,7 +307,7 @@ test("a rule that doesn't compile says why under it, and isn't replayed as one t
     .setup({ document })
     .type(view.getByLabelText("Rule"), 'elemnt.name == "Submit"');
 
-  expect((await view.findByRole("alert")).textContent).toBe(why);
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(why);
   expect(view.queryByText(/recorded actions/)).toBeNull();
 });
 

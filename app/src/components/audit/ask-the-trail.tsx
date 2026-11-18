@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconAlertTriangle,
   IconFilter,
@@ -29,6 +30,7 @@ export function AskTheTrail({
 }: {
   onAnswer: (answer: AuditAnswer & { question: string }) => void;
 }) {
+  useLocale();
   const [text, setText] = useState("");
   const [asking, setAsking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function AskTheTrail({
           <IconSparkles />
         </InputGroupAddon>
         <InputGroupInput
-          aria-label="Ask about the audit trail"
+          aria-label={ui("Ask about the audit trail")}
           maxLength={QUESTION_LIMIT}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -69,7 +71,9 @@ export function AskTheTrail({
             if (event.key === "Enter" && isComposing(event))
               event.preventDefault();
           }}
-          placeholder="Ask what Bots did, like “Gmail changes by a routine last week”"
+          placeholder={ui(
+            "Ask what Bots did, like “Gmail changes by a routine last week”",
+          )}
           value={text}
         />
         <InputGroupAddon align="inline-end">
@@ -79,7 +83,7 @@ export function AskTheTrail({
             type="submit"
             variant="default"
           >
-            {asking ? "Asking…" : "Ask"}
+            {asking ? ui("Asking…") : ui("Ask")}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -111,6 +115,7 @@ export function AuditAnswerNote({
   /** Whether the chips have changed since the answer arrived. */
   edited: boolean;
 }) {
+  useLocale();
   return (
     <div className="flex max-w-3xl flex-col gap-1.5 text-sm">
       {answer.answerable === "no" ? (
@@ -119,7 +124,11 @@ export function AuditAnswerNote({
           data-audit-unanswered
         >
           <IconInfoCircle className="mt-0.5 size-4 shrink-0" />
-          <span>The trail can't answer this. {answer.unanswered}</span>
+          <span>
+            {uiNodes("The trail can't answer this. {{slot0}}", [
+              answer.unanswered,
+            ])}
+          </span>
         </p>
       ) : (
         <>
@@ -130,7 +139,9 @@ export function AuditAnswerNote({
             >
               <IconFilter className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <span>
-                <span className="font-medium">What the filters show: </span>
+                <span className="font-medium">
+                  {ui("What the filters show:")}{" "}
+                </span>
                 <span className="text-muted-foreground">{answer.reading}</span>
               </span>
             </p>
@@ -141,13 +152,18 @@ export function AuditAnswerNote({
               data-audit-unanswered
             >
               <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span>The rows answer part of this. {answer.unanswered}</span>
+              <span>
+                {uiNodes("The rows answer part of this. {{slot0}}", [
+                  answer.unanswered,
+                ])}
+              </span>
             </p>
           ) : null}
           {edited ? (
             <p className="text-muted-foreground">
-              You've changed the filters since. The reading above is for the
-              filters as answered.
+              {ui(
+                "You've changed the filters since. The reading above is for the filters as answered.",
+              )}
             </p>
           ) : null}
         </>

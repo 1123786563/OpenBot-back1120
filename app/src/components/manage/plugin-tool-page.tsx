@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconBolt, IconPlugOff, IconTool } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -42,6 +43,7 @@ export function PluginToolPage({
   pluginKey: string;
   toolName: string;
 }) {
+  useLocale();
   // Routines is every Bot's, in every edition: there is no switch to take it from one.
   const alwaysOn = key === ALWAYS_ON_APP;
   const paths = useManagePaths();
@@ -75,13 +77,13 @@ export function PluginToolPage({
   const tool = server?.tools.find((row) => row.name === toolName);
 
   const back = {
-    label: server?.title ?? "Plugin",
+    label: server?.title ?? ui("Plugin"),
     linkProps: paths.plugin(key),
   };
 
   /* Nothing rather than a placeholder, so no sentence asserts anything while the fetch is open. */
   if (plugins.isPending) {
-    return <PageShell title="Tool">{null}</PageShell>;
+    return <PageShell title={ui("Tool")}>{null}</PageShell>;
   }
 
   /*
@@ -94,7 +96,7 @@ export function PluginToolPage({
     return (
       <PageShell backButton={back} title={toolName}>
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load plugins. Reload the page.
+          {ui("Couldn't load plugins. Reload the page.")}
         </p>
       </PageShell>
     );
@@ -104,7 +106,7 @@ export function PluginToolPage({
     return (
       <PageShell
         backButton={back}
-        description="This connector has no tool with that name."
+        description={ui("This connector has no tool with that name.")}
         title={toolName}
       >
         {/*
@@ -113,11 +115,13 @@ export function PluginToolPage({
          */}
         <PageEmpty
           icon={server ? IconTool : IconPlugOff}
-          title={server ? "Tool not found" : "This connector is off"}
+          title={server ? ui("Tool not found") : ui("This connector is off")}
         >
           {server
-            ? "It may have been removed since the tool list was last refreshed."
-            : "Turn it on to see its tools."}
+            ? ui(
+                "It may have been removed since the tool list was last refreshed.",
+              )
+            : ui("Turn it on to see its tools.")}
         </PageEmpty>
       </PageShell>
     );
@@ -141,7 +145,7 @@ export function PluginToolPage({
   return (
     <PageShell
       backButton={back}
-      description={tool.description || "This tool has no description."}
+      description={tool.description || ui("This tool has no description.")}
       title={toolName}
     >
       {error ? (
@@ -153,10 +157,14 @@ export function PluginToolPage({
       <PageSection
         description={
           tool.effect === "write"
-            ? "This tool changes something at the vendor. Boundaries about writes apply to it."
-            : "This tool only reads. Boundaries about writes don't apply to it."
+            ? ui(
+                "This tool changes something at the vendor. Boundaries about writes apply to it.",
+              )
+            : ui(
+                "This tool only reads. Boundaries about writes don't apply to it.",
+              )
         }
-        title="What it does"
+        title={ui("What it does")}
       >
         <PageRows>
           {/*
@@ -166,10 +174,11 @@ export function PluginToolPage({
            */}
           <Item size="sm">
             <ItemContent>
-              <ItemTitle>Effect</ItemTitle>
+              <ItemTitle>{ui("Effect")}</ItemTitle>
               <ItemDescription>
-                Set by the connector, not the tool's name. Anything unknown
-                counts as a write.
+                {ui(
+                  "Set by the connector, not the tool's name. Anything unknown counts as a write.",
+                )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
@@ -180,7 +189,7 @@ export function PluginToolPage({
                     : "text-muted-foreground text-xs"
                 }
               >
-                {tool.effect === "write" ? "changes things" : "reads"}
+                {tool.effect === "write" ? ui("changes things") : ui("reads")}
               </span>
             </ItemActions>
           </Item>
@@ -188,12 +197,14 @@ export function PluginToolPage({
       </PageSection>
 
       <PageSection
-        description="A Bot can call this tool only while its switch is on. Turning it off applies from the next call."
-        title="Bots"
+        description={ui(
+          "A Bot can call this tool only while its switch is on. Turning it off applies from the next call.",
+        )}
+        title={ui("Bots")}
       >
         {bots.length === 0 ? (
-          <PageEmpty icon={IconBolt} title="No Bots yet">
-            Create one to give it this tool.
+          <PageEmpty icon={IconBolt} title={ui("No Bots yet")}>
+            {ui("Create one to give it this tool.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -205,12 +216,17 @@ export function PluginToolPage({
                     <ItemContent>
                       <ItemTitle>{bot.name}</ItemTitle>
                       <ItemDescription>
-                        {bot.hidden ? "Hidden from your roster. " : ""}
+                        {bot.hidden ? ui("Hidden from your roster. ") : ""}
                         {held
                           ? canCallBack(bot)
-                            ? `Can call this tool. Every call is still checked against boundaries and logged in ${paths.auditLabel}.`
-                            : "Allowed, but this Bot has no callback token. Every call is refused. Issue one on its page, or set AGENT_TOOL_TOKEN."
-                          : "Can't call this tool. The Bot never sees it."}
+                            ? ui(
+                                "Can call this tool. Every call is still checked against boundaries and logged in {{value0}}.",
+                                { value0: String(paths.auditLabel) },
+                              )
+                            : ui(
+                                "Allowed, but this Bot has no callback token. Every call is refused. Issue one on its page, or set AGENT_TOOL_TOKEN.",
+                              )
+                          : ui("Can't call this tool. The Bot never sees it.")}
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
@@ -222,11 +238,14 @@ export function PluginToolPage({
                       {alwaysOn ? (
                         // Refused one Bot at a time by the server: Routines is every Bot's.
                         <span className="text-muted-foreground text-xs">
-                          Always on
+                          {ui("Always on")}
                         </span>
                       ) : (
                         <Switch
-                          aria-label={`Let ${bot.name} call ${toolName}`}
+                          aria-label={ui("Let {{value0}} call {{value1}}", {
+                            value0: String(bot.name),
+                            value1: String(toolName),
+                          })}
                           checked={held}
                           disabled={
                             setGrant.isPending &&

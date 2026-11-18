@@ -373,7 +373,7 @@ describe("the network allowlist in English", () => {
       },
     );
     expect(broken.status).toBe(400);
-    expect(await broken.json()).toEqual({
+    expect(await broken.json()).toMatchObject({
       error: '"my_tools.corp.example" is not a domain.',
     });
 
@@ -446,7 +446,7 @@ describe("the network allowlist in English", () => {
       authoring: { source: "model", text: "" },
     });
     expect(refused.status).toBe(400);
-    expect(await refused.json()).toEqual({
+    expect(await refused.json()).toMatchObject({
       error:
         'authoring must be { source: "english", text } with text of at most 2000 characters.',
     });

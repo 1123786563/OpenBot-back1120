@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -15,6 +16,7 @@ export type RoutineRecord = {
   /** Which Bot carries it out, so a Bot's own dialog can show only its routines. */
   agentId: string;
   schedule: string;
+  scheduleZhCN?: string;
   timezone: string;
   instruction: string;
   /** What the person called it, or null when they named it nothing: then its schedule heads the row. */
@@ -81,7 +83,7 @@ export function routineRunsQueryOptions(id: string) {
     queryKey: routineKeys.runs(id),
     queryFn: (): Promise<RoutineRunRecord[]> =>
       client(`/api/routines/${encodeURIComponent(id)}/runs`, "runs", {
-        fallback: "This routine's runs could not be loaded.",
+        fallback: ui("This routine's runs could not be loaded."),
       }),
     // A run in flight settles within minutes; poll so Running turns into its outcome.
     refetchInterval: 5_000,
@@ -99,7 +101,7 @@ export function routinesQueryOptions() {
     queryKey: routineKeys.list(),
     queryFn: async (): Promise<RoutinesPage> => {
       const response = await client("/api/routines", {
-        fallback: "Your routines could not be loaded.",
+        fallback: ui("Your routines could not be loaded."),
       });
       const body = (await response.json()) as Partial<RoutinesPage>;
       return {

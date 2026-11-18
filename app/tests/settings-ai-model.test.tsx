@@ -1,3 +1,4 @@
+import { LanguageProvider } from "@/lib/i18n/provider";
 /**
  * Settings → General's AI model, from the report: somebody on OpenBot Desktop 1.0.0 could not find
  * which AI provider they had signed in with, or change it.
@@ -70,9 +71,11 @@ function renderGeneral() {
   const Page = GeneralRoute.options.component as ComponentType;
   return render(
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <Page />
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <Page />
+        </ThemeProvider>
+      </LanguageProvider>
     </QueryClientProvider>,
   );
 }

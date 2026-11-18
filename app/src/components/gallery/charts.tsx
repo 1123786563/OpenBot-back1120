@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale, localeFormatter } from "@/lib/i18n";
 import {
   useCallback,
   useContext,
@@ -97,6 +98,7 @@ function namedSources(sources: unknown): { title: string; url?: string }[] {
 
 /** The line under a chart that says where its figures came from. Nothing when nobody said. */
 function Sources({ basis, sources, asOf: when }: Provenance) {
+  useLocale();
   const named = namedSources(sources);
   const unchecked = basis === "own-knowledge";
   const asOf = typeof when === "string" ? when.trim() : "";
@@ -105,13 +107,13 @@ function Sources({ basis, sources, asOf: when }: Provenance) {
     <p className="mt-3 text-xs text-muted-foreground">
       {unchecked ? (
         <span className="text-amber-700 dark:text-amber-400">
-          From the Bot's own knowledge. Not checked against a source.
+          {ui("From the Bot's own knowledge. Not checked against a source.")}
         </span>
       ) : null}
       {named.length > 0 ? (
         <>
           {unchecked ? " · " : null}
-          {"Sources: "}
+          {ui("Sources: ")}
           {byPosition(named).map(({ item: entry, key }, index) => (
             <span key={key}>
               {index > 0 ? ", " : null}
@@ -134,7 +136,7 @@ function Sources({ basis, sources, asOf: when }: Provenance) {
       {asOf ? (
         <>
           {unchecked || named.length > 0 ? " · " : null}
-          {`As of ${asOf}`}
+          {ui("As of {{value0}}", { value0: String(asOf) })}
         </>
       ) : null}
     </p>
@@ -155,17 +157,20 @@ function isValue(value: unknown): value is number {
 function formatNumber(value: unknown, compact = false): string {
   if (!isValue(value)) return "";
   // "14K", never "14,…": a figure cut short is a wrong number, and a shorter one is still right.
-  if (compact) return COMPACT.format(value);
+  if (compact) return COMPACT().format(value);
   if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    return value.toLocaleString(getLocale(), { maximumFractionDigits: 0 });
   }
   return String(Math.round(value * 100) / 100);
 }
 
-const COMPACT = new Intl.NumberFormat(undefined, {
-  notation: "compact",
-  maximumSignificantDigits: 2,
-});
+const COMPACT = localeFormatter(
+  (locale) =>
+    new Intl.NumberFormat(locale, {
+      notation: "compact",
+      maximumSignificantDigits: 2,
+    }),
+);
 
 /**
  * Whether any bar's exact figure is wider than its bar, measured from an unseen copy of each one.
@@ -175,6 +180,7 @@ const COMPACT = new Intl.NumberFormat(undefined, {
  * nothing overflows and the exact figures stay.
  */
 function useCompactFigures(row: HTMLElement | null): boolean {
+  useLocale();
   const [compact, setCompact] = useState(false);
   const measure = useCallback(() => {
     const figures = row?.querySelectorAll<HTMLElement>("[data-exact-figure]");
@@ -208,6 +214,7 @@ function useCompactFigures(row: HTMLElement | null): boolean {
  * for good.
  */
 function Empty() {
+  useLocale();
   const arriving = useContext(GalleryStreamingContext);
   if (arriving) {
     return (
@@ -217,18 +224,19 @@ function Empty() {
         role="status"
         style={{ height: HEIGHT }}
       >
-        <span className="tool-line-running">Drawing the chart…</span>
+        <span className="tool-line-running">{ui("Drawing the chart…")}</span>
       </p>
     );
   }
   return (
     <p className="py-10 text-center text-sm text-muted-foreground">
-      There is no data to chart.
+      {ui("There is no data to chart.")}
     </p>
   );
 }
 
 function Legend({ items }: { items: { label: string; colour: string }[] }) {
+  useLocale();
   return (
     <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
       {byPosition(items).map(({ item, key }) => (
@@ -266,6 +274,7 @@ type BarPoint = { label?: string; value?: number; link?: string };
  * One series, so one colour: a colour per bar would say the bars are different kinds of thing.
  */
 function RankedBars({ points, max }: { points: BarPoint[]; max: number }) {
+  useLocale();
   // Keyed by where each point arrived, so a bar keeps its node as it moves into its place.
   const ranked = byPosition(points).sort(
     (a, b) =>
@@ -337,6 +346,7 @@ export function BarChartCard({
   points: given,
   ...origin
 }: Partial<z.infer<typeof BarChartProps>>) {
+  useLocale();
   const points = given ?? [];
   const max = Math.max(
     ...points.map((entry) => (isValue(entry.value) ? entry.value : 0)),
@@ -430,6 +440,7 @@ export function PieChartCard({
   points: given,
   ...origin
 }: Partial<z.infer<typeof PieChartProps>>) {
+  useLocale();
   const points = given ?? [];
   const size = 160;
   const stroke = 28;
@@ -543,6 +554,7 @@ function Plot({
 }: { labels: string[]; series: { name: string; values: number[] }[] } & {
   filled: boolean;
 }) {
+  useLocale();
   const width = 520;
   const height = HEIGHT;
   const pad = { top: 8, right: 8, bottom: 18, left: 8 };
@@ -625,6 +637,7 @@ function Plot({
 }
 
 export function LineChartCard(args: Partial<LineArgs>) {
+  useLocale();
   const labels = args.labels ?? [];
   const series = (args.series ?? []).map((line) => ({
     name: line.name ?? "",
@@ -645,6 +658,7 @@ export function LineChartCard(args: Partial<LineArgs>) {
 export const AreaChartProps = LineChartProps;
 
 export function AreaChartCard(args: Partial<LineArgs>) {
+  useLocale();
   const labels = args.labels ?? [];
   const series = (args.series ?? []).map((line) => ({
     name: line.name ?? "",
@@ -684,6 +698,7 @@ export function ProgressChartCard({
   points: given,
   ...origin
 }: Partial<z.infer<typeof ProgressChartProps>>) {
+  useLocale();
   const points = given ?? [];
   return (
     <GalleryFrame caption={caption} title={title}>
@@ -734,58 +749,117 @@ export function ProgressChartCard({
 export const GALLERY: GalleryComponent[] = [
   {
     name: "showBarChart",
-    title: "Bar chart",
+    get title() {
+      return ui("Bar chart");
+    },
     kind: "chart",
-    summary: "Compares a few named things, such as teams or months, as bars.",
-    description:
-      "Show values as a bar chart. Use when comparing a handful of named things, teams, months, categories. Not for a trend over time, which is showLineChart. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.",
+    get summary() {
+      return ui(
+        "Compares a few named things, such as teams or months, as bars.",
+      );
+    },
+    get description() {
+      return "Show values as a bar chart. Use when comparing a handful of named things, teams, months, categories. Not for a trend over time, which is showLineChart. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.";
+    },
     parameters: BarChartProps,
     Component: BarChartCard as GalleryComponent["Component"],
     preview: {
       basis: "given",
-      title: "Revenue by team",
-      caption: "Sales leads, and Engineering is closing the gap.",
+      get title() {
+        return ui("Revenue by team");
+      },
+      get caption() {
+        return ui("Sales leads, and Engineering is closing the gap.");
+      },
       points: [
-        { label: "Sales", value: 120 },
-        { label: "Engineering", value: 80 },
-        { label: "Support", value: 45 },
+        {
+          get label() {
+            return ui("Sales");
+          },
+          value: 120,
+        },
+        {
+          get label() {
+            return ui("Engineering");
+          },
+          value: 80,
+        },
+        {
+          get label() {
+            return ui("Support");
+          },
+          value: 45,
+        },
       ],
     },
     confirmation: "The bar chart is now on screen for the person.",
   },
   {
     name: "showPieChart",
-    title: "Donut chart",
+    get title() {
+      return ui("Donut chart");
+    },
     kind: "chart",
-    summary: "Shows how a whole splits into parts, as a donut with a legend.",
-    description:
-      "Show how a whole is divided, as a donut with a legend. Use only when the parts sum to something meaningful, and prefer a bar chart above about six slices. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.",
+    get summary() {
+      return ui(
+        "Shows how a whole splits into parts, as a donut with a legend.",
+      );
+    },
+    get description() {
+      return "Show how a whole is divided, as a donut with a legend. Use only when the parts sum to something meaningful, and prefer a bar chart above about six slices. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.";
+    },
     parameters: PieChartProps,
     Component: PieChartCard as GalleryComponent["Component"],
     preview: {
       basis: "given",
-      title: "Where the month went",
+      get title() {
+        return ui("Where the month went");
+      },
       points: [
-        { label: "Build", value: 48 },
-        { label: "Support", value: 26 },
-        { label: "Meetings", value: 26 },
+        {
+          get label() {
+            return ui("Build");
+          },
+          value: 48,
+        },
+        {
+          get label() {
+            return ui("Support");
+          },
+          value: 26,
+        },
+        {
+          get label() {
+            return ui("Meetings");
+          },
+          value: 26,
+        },
       ],
     },
     confirmation: "The donut chart is now on screen for the person.",
   },
   {
     name: "showLineChart",
-    title: "Line chart",
+    get title() {
+      return ui("Line chart");
+    },
     kind: "chart",
-    summary: "Shows how one or more values change over time.",
-    description:
-      "Show one or more series over an ordered axis, usually time. Every series must have one value per label.",
+    get summary() {
+      return ui("Shows how one or more values change over time.");
+    },
+    get description() {
+      return "Show one or more series over an ordered axis, usually time. Every series must have one value per label.";
+    },
     parameters: LineChartProps,
     Component: LineChartCard as GalleryComponent["Component"],
     preview: {
       basis: "given",
-      title: "Signups",
-      caption: "Six weeks, one release.",
+      get title() {
+        return ui("Signups");
+      },
+      get caption() {
+        return ui("Six weeks, one release.");
+      },
       labels: ["W1", "W2", "W3", "W4", "W5", "W6"],
       series: [{ name: "Signups", values: [120, 180, 160, 240, 300, 420] }],
     },
@@ -793,18 +867,28 @@ export const GALLERY: GalleryComponent[] = [
   },
   {
     name: "showAreaChart",
-    title: "Area chart",
+    get title() {
+      return ui("Area chart");
+    },
     kind: "chart",
-    summary:
-      "Shows how totals build up over time, with the area under each line filled.",
-    description:
-      "The same as showLineChart with the area under each line filled. Use for volume or accumulation rather than for a rate.",
+    get summary() {
+      return ui(
+        "Shows how totals build up over time, with the area under each line filled.",
+      );
+    },
+    get description() {
+      return "The same as showLineChart with the area under each line filled. Use for volume or accumulation rather than for a rate.";
+    },
     parameters: AreaChartProps,
     Component: AreaChartCard as GalleryComponent["Component"],
     preview: {
       basis: "given",
-      title: "Storage used",
-      caption: "Growing steadily since the migration.",
+      get title() {
+        return ui("Storage used");
+      },
+      get caption() {
+        return ui("Growing steadily since the migration.");
+      },
       labels: ["Jan", "Feb", "Mar", "Apr", "May"],
       series: [{ name: "TB", values: [12, 19, 26, 31, 44] }],
     },
@@ -812,21 +896,43 @@ export const GALLERY: GalleryComponent[] = [
   },
   {
     name: "showProgress",
-    title: "Progress against target",
+    get title() {
+      return ui("Progress against target");
+    },
     kind: "chart",
-    summary:
-      "Shows how close each value is to its target, such as budget spent or work done.",
-    description:
-      "Show values against their targets as progress bars. Use for 'are we there yet' questions, budget spent against budget, done against planned. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.",
+    get summary() {
+      return ui(
+        "Shows how close each value is to its target, such as budget spent or work done.",
+      );
+    },
+    get description() {
+      return "Show values against their targets as progress bars. Use for 'are we there yet' questions, budget spent against budget, done against planned. A point may link to the page its figure came from, such as the record or the search, when you have that address; never make one up.";
+    },
     parameters: ProgressChartProps,
     Component: ProgressChartCard as GalleryComponent["Component"],
     preview: {
       basis: "given",
-      title: "Migration to the new runtime",
-      caption: "Two services left.",
+      get title() {
+        return ui("Migration to the new runtime");
+      },
+      get caption() {
+        return ui("Two services left.");
+      },
       points: [
-        { label: "Services moved", value: 18, target: 20 },
-        { label: "Tests ported", value: 240, target: 240 },
+        {
+          get label() {
+            return ui("Services moved");
+          },
+          value: 18,
+          target: 20,
+        },
+        {
+          get label() {
+            return ui("Tests ported");
+          },
+          value: 240,
+          target: 240,
+        },
       ],
     },
     confirmation: "The progress chart is now on screen for the person.",

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useContext, useState } from "react";
 import { z } from "zod";
 import type { GalleryComponent } from "@/lib/copilot/gallery-registry";
@@ -64,6 +65,7 @@ function withoutArrivingRow(props: Record<string, unknown>): {
 
 /** A real table: header buttons sort while the native row/column relationships stay intact. */
 export function DataTable(props: Record<string, unknown>) {
+  useLocale();
   const [sort, setSort] = useState<{
     column: number;
     ascending: boolean;
@@ -76,11 +78,12 @@ export function DataTable(props: Record<string, unknown>) {
   if (!parsed.success) {
     // Only a table still being written is waited for. Once its arguments are final, nothing more
     // is coming, and waiting would last for good.
-    if (!streaming) return <FailedCard reason={UNREADABLE} title={TITLE} />;
+    if (!streaming)
+      return <FailedCard reason={ui(UNREADABLE)} title={ui(TITLE)} />;
     return (
-      <GalleryFrame title="Table">
+      <GalleryFrame title={ui("Table")}>
         <p className="text-sm text-muted-foreground">
-          Waiting for complete table data…
+          {ui("Waiting for complete table data…")}
         </p>
       </GalleryFrame>
     );
@@ -106,19 +109,22 @@ export function DataTable(props: Record<string, unknown>) {
       caption={caption}
       action={
         <Badge>
-          {rows.length} {rows.length === 1 ? "row" : "rows"}
+          {rows.length} {rows.length === 1 ? ui("row") : ui("rows")}
         </Badge>
       }
     >
       <section
         className="overflow-x-auto rounded-lg border border-border focus-visible:outline-2 focus-visible:outline-ring"
-        aria-label={`${title} table, scroll for more columns`}
+        aria-label={ui("{{value0}} table, scroll for more columns", {
+          value0: String(title),
+        })}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: Overflow regions need keyboard focus to scroll in Safari; the region has an accessible name.
         tabIndex={0}
       >
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">
-            {title}. Select a column heading to sort.
+            {title}
+            {ui(". Select a column heading to sort.")}
           </caption>
           <thead className="bg-muted/50 text-xs text-muted-foreground">
             <tr>
@@ -181,7 +187,7 @@ export function DataTable(props: Record<string, unknown>) {
                         >
                           —
                         </span>
-                        <span className="sr-only">Empty</span>
+                        <span className="sr-only">{ui("Empty")}</span>
                       </>
                     ) : typeof row.cells[index] === "string" ? (
                       <GalleryMarkdown>{row.cells[index]}</GalleryMarkdown>
@@ -209,7 +215,7 @@ export function DataTable(props: Record<string, unknown>) {
                   colSpan={columns.length}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
-                  No rows to show.
+                  {ui("No rows to show.")}
                 </td>
               </tr>
             )}
@@ -219,8 +225,13 @@ export function DataTable(props: Record<string, unknown>) {
       {rows.length > 1 && (
         <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
           {sort
-            ? `Sorted by ${columns[sort.column]}, ${sort.ascending ? "ascending" : "descending"}.`
-            : "Select a column heading to sort."}
+            ? ui("Sorted by {{value0}}, {{value1}}.", {
+                value0: String(columns[sort.column]),
+                value1: String(
+                  sort.ascending ? ui("ascending") : ui("descending"),
+                ),
+              })
+            : ui("Select a column heading to sort.")}
         </p>
       )}
     </GalleryFrame>
@@ -232,16 +243,24 @@ export const GALLERY: GalleryComponent[] = [
     name: "showTable",
     title: TITLE,
     kind: "card",
-    summary:
-      "Shows a table you can sort by any column, for comparing records side by side.",
-    description:
-      "Show a sortable table to compare records, plans, or other structured facts. Use when there are enough rows or fields that a Markdown list would be hard to compare. Supply up to eight columns and 100 rows, with exactly one cell per column. Use numbers for quantities so sorting is numeric. Show only data you have; do not invent rows.",
+    get summary() {
+      return ui(
+        "Shows a table you can sort by any column, for comparing records side by side.",
+      );
+    },
+    get description() {
+      return "Show a sortable table to compare records, plans, or other structured facts. Use when there are enough rows or fields that a Markdown list would be hard to compare. Supply up to eight columns and 100 rows, with exactly one cell per column. Use numbers for quantities so sorting is numeric. Show only data you have; do not invent rows.";
+    },
     parameters: DataTableProps,
     Component: DataTable,
     confirmation: "The sortable table is now on screen for the person.",
     preview: {
-      title: "Team capacity",
-      caption: "Three teams, one shared launch. Hours available this week.",
+      get title() {
+        return ui("Team capacity");
+      },
+      get caption() {
+        return ui("Three teams, one shared launch. Hours available this week.");
+      },
       columns: ["Team", "Available hours", "Focus"],
       rows: [
         { cells: ["Product", 24, "Customer onboarding"] },

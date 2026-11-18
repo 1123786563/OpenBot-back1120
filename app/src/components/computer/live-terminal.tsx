@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -90,6 +91,7 @@ export function LiveTerminal({
   retryKey = 0,
   ref,
 }: Props) {
+  useLocale();
   const host = useRef<HTMLElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const drivingRef = useRef(driving);
@@ -256,8 +258,8 @@ export function LiveTerminal({
     <section
       aria-label={
         driving
-          ? "The Bot's terminal. You have control. Type here."
-          : "The Bot's terminal"
+          ? ui("The Bot's terminal. You have control. Type here.")
+          : ui("The Bot's terminal")
       }
       className="h-full w-full"
       data-live={live ? "" : undefined}

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageRows, PageSection } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -19,28 +21,31 @@ import { clearTeamBotConsentsMutationOptions } from "@/lib/team-bots";
  * which is the question every other row on Approvals answers, not a connection of its own.
  */
 export function TeamBotConsents() {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const clear = useMutation(clearTeamBotConsentsMutationOptions());
   if (personal) return null;
   return (
     <PageSection
-      description="A Bot shared with you uses its owner's apps. It uses yours only where you said yes in a conversation."
-      title="Shared Bots"
+      description={ui(
+        "A Bot shared with you uses its owner's apps. It uses yours only where you said yes in a conversation.",
+      )}
+      title={ui("Shared Bots")}
     >
       {clear.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {clear.error.message}
+          {<ErrorDetails error={clear.error} />}
         </p>
       ) : null}
       <PageRows>
         <Item size="sm">
           <ItemContent>
-            <ItemTitle>Apps you let shared Bots use</ItemTitle>
+            <ItemTitle>{ui("Apps you let shared Bots use")}</ItemTitle>
             <ItemDescription>
               {clear.isSuccess
-                ? "Reset. Each shared Bot will ask again."
-                : "Forget every answer, so each shared Bot asks again."}
+                ? ui("Reset. Each shared Bot will ask again.")
+                : ui("Forget every answer, so each shared Bot asks again.")}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
@@ -50,7 +55,7 @@ export function TeamBotConsents() {
               size="sm"
               variant="outline"
             >
-              Reset
+              {ui("Reset")}
             </Button>
           </ItemActions>
         </Item>

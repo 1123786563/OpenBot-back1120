@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   OpenGenerativeUIActivityRenderer,
   useFrontendTool,
@@ -33,6 +34,7 @@ import {
  * render published runtime markup in the SDK sandbox.
  */
 export function SandboxedTools() {
+  const interfaceLocale = useLocale();
   // The grants of the Bot on screen, for the cards drawn in its conversation. Fetched only once a
   // surface has declared its Bot; the placeholder is not one the server knows, and asking would 404
   // on every poll.
@@ -41,13 +43,12 @@ export function SandboxedTools() {
   const { data: granted } = useQuery(agentComponentsQueryOptions(declared));
   // Each one offered to the run of a Bot holding it, never by what the screen shows; see
   // `bot-offer.ts`.
-  const offered = useMemo(
-    () =>
-      Object.fromEntries(
-        (published ?? []).map((component) => [component.name, heldComponent]),
-      ),
-    [published],
-  );
+  const offered = useMemo(() => {
+    void interfaceLocale;
+    return Object.fromEntries(
+      (published ?? []).map((component) => [component.name, heldComponent]),
+    );
+  }, [published, interfaceLocale]);
   useOfferedTo(offered);
 
   const held = new Map(
@@ -88,6 +89,7 @@ function SandboxedTool({
   component: PublishedSandboxed;
   description: string | undefined;
 }) {
+  useLocale();
   const [refusals, setRefusals] = useState<Map<string, string>>(new Map());
   const isHeld = description !== undefined;
   const botOf = useBotOfCall();
@@ -125,7 +127,9 @@ function SandboxedTool({
 
       // Wait for complete arguments because sandbox source is injected once per keyed instance.
       if (props.status !== "complete") {
-        return <ToolLine label="Drawing" detail={component.name} running />;
+        return (
+          <ToolLine label={ui("Drawing")} detail={component.name} running />
+        );
       }
 
       return (

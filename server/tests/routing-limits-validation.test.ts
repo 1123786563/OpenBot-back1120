@@ -61,7 +61,7 @@ describe("POST /api/route text cap", () => {
       body: JSON.stringify({ text: "x".repeat(10001) }),
     });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "A message of at most 10000 characters is required.",
     });
     expect(calls).toEqual([]);

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import type { GrantSetCheck } from "./translate";
@@ -65,7 +66,9 @@ export function appGrantsReplayQueryOptions(
           {
             method: "POST",
             body: { grants },
-            fallback: "Couldn't test these actions against recent activity.",
+            fallback: ui(
+              "Couldn't test these actions against recent activity.",
+            ),
           },
         )
       ).json(),

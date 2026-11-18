@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconBrandGithub, IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment, useId, useState } from "react";
@@ -42,6 +44,7 @@ import { queryClient } from "@/query-client";
  * inputs, so it is a dialog opened from the section's action.
  */
 export function GithubSources() {
+  useLocale();
   const bindings = useQuery(githubBindingsQueryOptions());
   const remove = useMutation(removeGithubBindingMutationOptions(queryClient));
   const [adding, setAdding] = useState(false);
@@ -50,16 +53,17 @@ export function GithubSources() {
     <PageSection
       action={
         <Button onClick={() => setAdding(true)} size="sm" variant="ghost">
-          <IconPlus />
-          Add a repository
+          {uiNodes("{{slot0}}Add a repository", [<IconPlus key="slot0" />])}
         </Button>
       }
-      description="Add a repository here, then add a webhook in GitHub with the address below and the same secret. Its events, like issues.opened, can then start work on a goal."
-      title="Repositories"
+      description={ui(
+        "Add a repository here, then add a webhook in GitHub with the address below and the same secret. Its events, like issues.opened, can then start work on a goal.",
+      )}
+      title={ui("Repositories")}
     >
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {bindings.isPending || !bindings.data ? null : bindings.data.length ===
@@ -67,14 +71,13 @@ export function GithubSources() {
         <PageEmpty
           action={
             <Button onClick={() => setAdding(true)} size="sm" variant="outline">
-              <IconPlus />
-              Add a repository
+              {uiNodes("{{slot0}}Add a repository", [<IconPlus key="slot0" />])}
             </Button>
           }
           icon={IconBrandGithub}
-          title="No repositories yet"
+          title={ui("No repositories yet")}
         >
-          Repositories you add show up here with their webhook address.
+          {ui("Repositories you add show up here with their webhook address.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -98,7 +101,7 @@ export function GithubSources() {
                     size="sm"
                     variant="outline"
                   >
-                    Disconnect
+                    {ui("Disconnect")}
                   </Button>
                 </ItemActions>
               </Item>
@@ -115,6 +118,7 @@ export function GithubSources() {
  * A repository and the webhook secret GitHub will sign its events with.
  */
 function AddRepositoryDialog({ onClose }: { onClose: () => void }) {
+  useLocale();
   const formId = useId();
   const [repository, setRepository] = useState("");
   const [secret, setSecret] = useState("");
@@ -123,9 +127,9 @@ function AddRepositoryDialog({ onClose }: { onClose: () => void }) {
     <Dialog onOpenChange={(next) => !next && onClose()} open>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add a repository</DialogTitle>
+          <DialogTitle>{ui("Add a repository")}</DialogTitle>
           <DialogDescription>
-            Use the same secret when you add the webhook in GitHub.
+            {ui("Use the same secret when you add the webhook in GitHub.")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4">
@@ -150,20 +154,20 @@ function AddRepositoryDialog({ onClose }: { onClose: () => void }) {
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor={`${formId}-repository`}>
-                  Repository
+                  {ui("Repository")}
                 </FieldLabel>
                 <Input
                   autoFocus
                   id={`${formId}-repository`}
                   onChange={(event) => setRepository(event.target.value)}
-                  placeholder="owner/repository"
+                  placeholder={ui("owner/repository")}
                   required
                   value={repository}
                 />
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${formId}-secret`}>
-                  Webhook secret
+                  {ui("Webhook secret")}
                 </FieldLabel>
                 <Input
                   autoComplete="new-password"
@@ -178,13 +182,13 @@ function AddRepositoryDialog({ onClose }: { onClose: () => void }) {
           </form>
           {create.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {create.error.message}
+              {<ErrorDetails error={create.error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={create.isPending}
@@ -192,7 +196,7 @@ function AddRepositoryDialog({ onClose }: { onClose: () => void }) {
             size="sm"
             type="submit"
           >
-            Connect events
+            {ui("Connect events")}
           </Button>
         </DialogFooter>
       </DialogContent>

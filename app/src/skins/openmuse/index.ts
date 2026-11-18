@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { Skin } from "../types";
 import { OpenMuseFrame } from "./frame";
 import { ActivityScreen } from "./screens/activity";
@@ -13,8 +14,11 @@ import { IdeasScreen } from "./screens/ideas";
 export const openmuse: Skin = {
   id: "openmuse",
   name: "OpenFuse",
-  description:
-    "One Bot at the centre of a phone-shaped column, with five tabs.",
+  get description() {
+    return ui(
+      "One Bot at the centre of a phone-shaped column, with five tabs.",
+    );
+  },
   Frame: OpenMuseFrame,
   screens: {
     activity: ActivityScreen,

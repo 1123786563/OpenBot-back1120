@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   LearningProposal,
   LearningRunSummary,
@@ -85,6 +86,7 @@ export function savedToLearning(stopped: Stopped | undefined): boolean {
  * (a notification, where they allowed them) when they are looking at something else.
  */
 export function useLearningNext(stopped: Stopped) {
+  useLocale();
   const since = stopped.stoppedAt;
   const [started, setStarted] = useState<{ from: string | null } | null>(null);
   // How often the review is read again, set from what the last read said (below).
@@ -221,6 +223,7 @@ function notificationsAllowed() {
  * page is open: a skill that was already there when it opened is on the page.
  */
 function useSkillNotice(title: string, next: LearningNext) {
+  useLocale();
   const seen = useRef<string | null>(null);
   const skill =
     next.kind === "learned" || next.kind === "proposed"
@@ -235,13 +238,13 @@ function useSkillNotice(title: string, next: LearningNext) {
     try {
       new Notification(
         next.kind === "learned"
-          ? `Your Bots learned “${title}”`
-          : `A skill from “${title}” is ready to review`,
+          ? ui("Your Bots learned “{{title}}”", { title })
+          : ui("A skill from “{{title}}” is ready to review", { title }),
         {
           body:
             next.kind === "learned"
-              ? "Open Teach a Bot to try it."
-              : "Review it in Settings, Learning.",
+              ? ui("Open Teach a Bot to try it.")
+              : ui("Review it in Settings, Learning."),
           tag: `openbot-learned-${skill}`,
         },
       );
@@ -261,36 +264,42 @@ export function learningNextWords(
   const { next, canReview, autoApprove } = learning;
   if (next.kind === "learned")
     return {
-      heading: "Your Bots learned it",
+      heading: ui("Your Bots learned it"),
       sentence: `Your Bots can do “${title}” now. Try it, or ask any Bot to do it.`,
     };
   if (next.kind === "proposed")
     return canReview
       ? {
-          heading: "Your new skill is ready to review",
+          heading: ui("Your new skill is ready to review"),
           sentence: `Learning made a skill from “${title}”. Approve it in Settings, Learning, then ask any Bot to do it.`,
         }
       : {
-          heading: "Your new skill is waiting for an admin",
+          heading: ui("Your new skill is waiting for an admin"),
           sentence: `Learning made a skill from “${title}”. Once an admin approves it, ask any Bot to do it.`,
         };
   if (next.kind === "model" || next.kind === "off")
     return {
-      heading: `Saved “${title}”`,
-      sentence:
+      heading: ui("Saved “{{value0}}”", { value0: String(title) }),
+      sentence: ui(
         "Your recording is kept. OpenBot learns a skill from it once Learning can run.",
+      ),
     };
   if (!canReview)
     return {
-      heading: `Saved “${title}”`,
-      sentence:
+      heading: ui("Saved “{{value0}}”", { value0: String(title) }),
+      sentence: ui(
         "OpenBot learns a skill from it, and an admin reviews it. Once it's approved, ask any Bot to do it.",
+      ),
     };
   return {
-    heading: `Saved “${title}”`,
+    heading: ui("Saved “{{value0}}”", { value0: String(title) }),
     sentence: autoApprove
-      ? "OpenBot learns a skill from it, and you'll find it in Settings, Learning. Once it's learned, ask any Bot to do it."
-      : "OpenBot learns a skill from it, and you'll see it in Settings, Learning to review. Once you approve it, ask any Bot to do it.",
+      ? ui(
+          "OpenBot learns a skill from it, and you'll find it in Settings, Learning. Once it's learned, ask any Bot to do it.",
+        )
+      : ui(
+          "OpenBot learns a skill from it, and you'll see it in Settings, Learning to review. Once you approve it, ask any Bot to do it.",
+        ),
   };
 }
 
@@ -310,6 +319,7 @@ export function LearningNextRow({
   /** Another way on beside the row's own action: See your skills, where the row is the whole of the next step. */
   more?: ReactNode;
 }) {
+  useLocale();
   const { next, canReview, learnError } = learning;
   const learnNow = canReview ? (
     <Button
@@ -317,7 +327,7 @@ export function LearningNextRow({
       size="sm"
       variant="outline"
     >
-      Learn now
+      {ui("Learn now")}
     </Button>
   ) : null;
   let icon = <IconSparkles />;
@@ -332,7 +342,7 @@ export function LearningNextRow({
       sentence = next.skill.description;
       action = (
         <Button size="sm" render={<Link to="/" search={{ ask: title }} />}>
-          Try it
+          {ui("Try it")}
         </Button>
       );
       break;
@@ -341,7 +351,7 @@ export function LearningNextRow({
       sentence = next.skill.description;
       action = canReview ? (
         <Button size="sm" variant="outline" render={<Link to={YOUR_SKILLS} />}>
-          Review
+          {ui("Review")}
         </Button>
       ) : null;
       break;
@@ -433,6 +443,7 @@ export function LearningNextRow({
  * See your skills beside its action. Record another is the toolbar's Record.
  */
 export function LearningNextNotice({ stopped }: { stopped: Stopped }) {
+  useLocale();
   const learning = useLearningNext(stopped);
   if (!learning.loaded) return null;
   const { sentence } = learningNextWords(learning, stopped.title);
@@ -451,7 +462,7 @@ export function LearningNextNotice({ stopped }: { stopped: Stopped }) {
             variant="outline"
             render={<Link to={YOUR_SKILLS} />}
           >
-            See your skills
+            {ui("See your skills")}
           </Button>
         }
       />

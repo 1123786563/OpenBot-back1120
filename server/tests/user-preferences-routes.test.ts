@@ -39,6 +39,23 @@ function fixture() {
 }
 
 const path = "/api/settings/preferences";
+
+test("language is account-scoped, rejects unsupported values and preserves other preferences", async () => {
+  const { appFor } = fixture();
+  expect(
+    (await appFor("alice").request(path, patch({ language: "zh-CN" }))).status,
+  ).toBe(200);
+  expect(
+    (await (await appFor("alice").request(path)).json()).preferences,
+  ).toMatchObject({ language: "zh-CN", skin: "openbot", proactive: "on" });
+  expect(
+    (await (await appFor("bob").request(path)).json()).preferences.language,
+  ).toBe("system");
+  for (const language of ["fr", "zh", null, 42])
+    expect(
+      (await appFor("alice").request(path, patch({ language }))).status,
+    ).toBe(400);
+});
 function patch(body: unknown) {
   return {
     method: "PATCH",
@@ -52,6 +69,7 @@ test("preferences default to thread and persist separately for each authenticate
   const alice = appFor("alice");
   expect(await (await alice.request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "thread",
       selfHostBannerDismissed: false,
       narration: null,
@@ -66,6 +84,7 @@ test("preferences default to thread and persist separately for each authenticate
   expect(saved.status).toBe(200);
   expect(await (await appFor("alice").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "agent",
       selfHostBannerDismissed: false,
       narration: null,
@@ -75,6 +94,7 @@ test("preferences default to thread and persist separately for each authenticate
   });
   expect(await (await appFor("bob").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "thread",
       selfHostBannerDismissed: false,
       narration: null,
@@ -134,6 +154,7 @@ test("saves the self-host banner dismissal without touching message list emphasi
   expect(saved.status).toBe(200);
   expect(await (await appFor("alice").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "agent",
       selfHostBannerDismissed: true,
       narration: null,
@@ -143,6 +164,7 @@ test("saves the self-host banner dismissal without touching message list emphasi
   });
   expect(await (await appFor("bob").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "thread",
       selfHostBannerDismissed: false,
       narration: null,
@@ -164,6 +186,7 @@ test("keeps the person's narration choice without touching the others, and start
   expect(saved.status).toBe(200);
   expect(await (await appFor("alice").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "agent",
       selfHostBannerDismissed: false,
       narration: "on",
@@ -188,6 +211,7 @@ test("saves the skin on the account without touching the other preferences", asy
   expect(saved.status).toBe(200);
   expect(await saved.json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "agent",
       selfHostBannerDismissed: false,
       narration: null,
@@ -198,6 +222,7 @@ test("saves the skin on the account without touching the other preferences", asy
   // Another browser signed in as Alice reads the same skin; Bob keeps the default.
   expect(await (await appFor("alice").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "agent",
       selfHostBannerDismissed: false,
       narration: null,
@@ -238,6 +263,7 @@ test("check-ins start on, and a person's off is kept without touching the others
   expect(saved.status).toBe(200);
   expect(await (await appFor("alice").request(path)).json()).toEqual({
     preferences: {
+      language: "system",
       messageListEmphasis: "thread",
       selfHostBannerDismissed: false,
       narration: null,

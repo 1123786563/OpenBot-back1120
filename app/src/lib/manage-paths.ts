@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { linkOptions } from "@tanstack/react-router";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
@@ -14,7 +15,7 @@ export function managePaths(edition: "team" | "personal") {
   if (edition === "personal") {
     return {
       /** What the list of apps is called where a back button names it. */
-      pluginsLabel: "Connections",
+      pluginsLabel: ui("Connections"),
       plugins: () => linkOptions({ to: "/connections" }),
       plugin: (key: string) =>
         linkOptions({ to: "/connections/$key", params: { key } }),
@@ -35,7 +36,7 @@ export function managePaths(edition: "team" | "personal") {
       skill: (slug: string) =>
         linkOptions({ to: "/settings/skills/$slug", params: { slug } }),
       // Under Settings, and linked from Connections beside the apps that use them.
-      credentialsLabel: "Keys",
+      credentialsLabel: ui("Keys"),
       credentials: () => linkOptions({ to: "/settings/credentials" }),
       newCredential: () => linkOptions({ to: "/settings/credentials/new" }),
       computers: () => linkOptions({ to: "/settings/computer" }),
@@ -45,7 +46,7 @@ export function managePaths(edition: "team" | "personal") {
        * Admin, where an admin reviews everybody's Bots for policy. Two names, each kept the same
        * everywhere in its edition, so a page never reads "Audit" under a sidebar entry "Activity".
        */
-      auditLabel: "Activity",
+      auditLabel: ui("Activity"),
       audit: () => linkOptions({ to: "/settings/activity" }),
       /*
        * What a sentence calls the product itself. The person running OpenBot alone reads its name;
@@ -58,7 +59,7 @@ export function managePaths(edition: "team" | "personal") {
     };
   }
   return {
-    pluginsLabel: "Plugins",
+    pluginsLabel: ui("Plugins"),
     plugins: () => linkOptions({ to: "/admin/plugins" }),
     plugin: (key: string) =>
       linkOptions({ to: "/admin/plugins/$key", params: { key } }),
@@ -80,13 +81,13 @@ export function managePaths(edition: "team" | "personal") {
     newSkill: () => linkOptions({ to: "/admin/skills/new" }),
     skill: (slug: string) =>
       linkOptions({ to: "/admin/skills/$slug", params: { slug } }),
-    credentialsLabel: "Credentials",
+    credentialsLabel: ui("Credentials"),
     credentials: () => linkOptions({ to: "/admin/credentials" }),
     newCredential: () => linkOptions({ to: "/admin/credentials/new" }),
     computers: () => linkOptions({ to: "/admin/computers" }),
-    auditLabel: "Audit",
+    auditLabel: ui("Audit"),
     audit: () => linkOptions({ to: "/admin/audit" }),
-    deploymentName: "this deployment",
+    deploymentName: ui("this deployment"),
     edition: "team" as const,
   };
 }
@@ -139,6 +140,7 @@ export function personalAdminRedirect(pathname: string): string {
  * deployment from before the switch has.
  */
 export function useManagePaths(): ManagePaths {
+  useLocale();
   const { data } = useQuery(deploymentCapabilitiesQueryOptions());
   return managePaths(data?.edition ?? "team");
 }

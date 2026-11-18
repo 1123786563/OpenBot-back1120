@@ -1,3 +1,5 @@
+import { ui, useLocale } from "@/lib/i18n";
+import { ErrorDetails } from "@/lib/i18n/errors";
 import { IconChevronRight, type IconProps, IconX } from "@tabler/icons-react";
 import * as React from "react";
 import { BrandName } from "@/components/edition/brand-name";
@@ -66,6 +68,7 @@ export function MuseButton({
   MuseButtonLook & {
     icon?: MuseIcon;
   }) {
+  useLocale();
   return (
     <Button
       className={cn(museButtonClass({ primary, small, danger }), className)}
@@ -99,6 +102,7 @@ export function MuseLinkButton({
     children?: React.ReactNode;
   }>;
 }) {
+  useLocale();
   return React.cloneElement(render, {
     className: cn(museButtonClass({ primary, small, danger }), className),
     children: (
@@ -118,6 +122,7 @@ export function RoundButton({
   children,
   ...props
 }: React.ComponentProps<"button"> & { icon: MuseIcon; label: string }) {
+  useLocale();
   return (
     <button
       aria-label={label}
@@ -158,6 +163,7 @@ export function IconTile({
   accent?: boolean;
   className?: string;
 }) {
+  useLocale();
   return (
     <span
       aria-hidden="true"
@@ -200,6 +206,7 @@ export function LinkRow({
   render: React.ComponentProps<typeof Item>["render"];
   trailing?: React.ReactNode;
 }) {
+  useLocale();
   return (
     <Item
       className="flex-nowrap gap-3.5 rounded-[10px] border-0 px-0 py-[13px] hover:bg-transparent active:bg-[var(--openmuse-pressed)] [a]:hover:bg-transparent"
@@ -242,6 +249,7 @@ export function MuseEmpty({
   detail: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  useLocale();
   return (
     <div className="flex flex-col items-center gap-[13px] p-10 text-center">
       <IconTile accent icon={icon} size={55} />
@@ -255,23 +263,26 @@ export function MuseEmpty({
 }
 
 export function ErrorNotice({ error }: { error?: string | null }) {
+  useLocale();
   if (!error) return null;
   return (
     <div
       className="my-2.5 rounded-[14px] bg-[var(--openmuse-danger-tint)] p-4 text-[15px] text-destructive leading-[23px]"
       role="alert"
     >
-      {error}
+      <ErrorDetails error={error} />
     </div>
   );
 }
 
 export function Divider({ className }: { className?: string }) {
+  useLocale();
   return <div className={cn("h-px bg-border", className)} />;
 }
 
 /** A coloured status dot, as on OpenMuse's Tracking and Goals headings. */
 export function StatusDot({ tone }: { tone: "green" | "blue" }) {
+  useLocale();
   return (
     <span
       aria-hidden="true"
@@ -303,6 +314,7 @@ export function MuseSheet({
   onClose: () => void;
   bodyRef?: React.Ref<HTMLDivElement>;
 }) {
+  useLocale();
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
       <DialogContent
@@ -331,7 +343,7 @@ export function MuseSheet({
               </DialogDescription>
             ) : null}
           </div>
-          <RoundButton icon={IconX} label="Close" onClick={onClose} />
+          <RoundButton icon={IconX} label={ui("Close")} onClick={onClose} />
         </div>
         <div
           className="min-h-0 flex-1 overflow-y-auto p-5 min-[600px]:p-6"
@@ -352,6 +364,7 @@ export function MuseScreen({
   title: string;
   children: React.ReactNode;
 }) {
+  useLocale();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="px-[22px] pb-7 min-[900px]:px-[42px]">

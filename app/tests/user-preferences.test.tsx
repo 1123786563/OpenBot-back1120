@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -86,7 +87,7 @@ test("shows loading and read errors without enabling a save", async () => {
   pending.resolve(
     Response.json({ error: "Storage unavailable" }, { status: 503 }),
   );
-  expect((await view.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
     "Storage unavailable",
   );
   expect(view.getByRole("button", { name: "Try again" })).toBeTruthy();

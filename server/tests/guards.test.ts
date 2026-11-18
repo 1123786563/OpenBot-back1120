@@ -37,7 +37,7 @@ describe("server authorization", () => {
     const response = await app.request("http://openbot.local/api/me");
 
     expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Authentication required.",
     });
   });
@@ -50,7 +50,7 @@ describe("server authorization", () => {
     const response = await app.request("http://openbot.local/api/admin/status");
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Only an admin can do this.",
     });
   });

@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import {
   AUDIT_EFFECT_WORDS,
   AUDIT_EFFECTS,
@@ -63,9 +64,24 @@ export type ChipFilters = AuditFilters & { outcome?: AuditOutcome[] };
 type ChipKey = keyof ChipFilters;
 
 const OUTCOMES: { value: AuditOutcome; label: string }[] = [
-  { value: "allowed", label: "Allowed" },
-  { value: "refused", label: "Blocked" },
-  { value: "did-not-happen", label: "Did not happen" },
+  {
+    value: "allowed",
+    get label() {
+      return ui("Allowed");
+    },
+  },
+  {
+    value: "refused",
+    get label() {
+      return ui("Blocked");
+    },
+  },
+  {
+    value: "did-not-happen",
+    get label() {
+      return ui("Did not happen");
+    },
+  },
 ];
 
 const OUTCOME_TYPES: Record<
@@ -145,15 +161,34 @@ const STARTED_BY: Record<string, string> = {
 
 /** Groups of event types an admin adds by name, from the lists the saved views are built from. */
 const TYPE_GROUPS: { label: string; types: readonly string[] }[] = [
-  { label: "Blocked", types: REFUSED_EVENT_TYPES },
-  { label: "Did not happen", types: DID_NOT_HAPPEN_EVENT_TYPES },
   {
-    label: "App calls",
+    get label() {
+      return ui("Blocked");
+    },
+    types: REFUSED_EVENT_TYPES,
+  },
+  {
+    get label() {
+      return ui("Did not happen");
+    },
+    types: DID_NOT_HAPPEN_EVENT_TYPES,
+  },
+  {
+    get label() {
+      return ui("App calls");
+    },
     types: ["mcp.call_succeeded", "mcp.call_failed", "mcp.call_rejected"],
   },
-  { label: "Computer actions", types: COMPUTER_ACTION_EVENT_TYPES },
   {
-    label: "Approvals",
+    get label() {
+      return ui("Computer actions");
+    },
+    types: COMPUTER_ACTION_EVENT_TYPES,
+  },
+  {
+    get label() {
+      return ui("Approvals");
+    },
     types: [
       "approval.evaluated",
       "approval.person_decided",
@@ -163,7 +198,7 @@ const TYPE_GROUPS: { label: string; types: readonly string[] }[] = [
 ];
 
 /** One event type in words: the same words the reading is given (`auditTypeWords`). */
-const typeWords = auditTypeWords;
+const typeWords = (type: string) => auditTypeWords(type, ui);
 
 /** Several values in one chip: the first two, then how many more. */
 function some(values: string[]): string {
@@ -173,7 +208,7 @@ function some(values: string[]): string {
 }
 
 const dateWords = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, {
+  new Intl.DateTimeFormat(getLocale(), {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -198,7 +233,7 @@ function appName(key: string, names: Names): string {
   return (
     names.labels.apps[key] ??
     names.vocabulary?.apps.find((app) => app.key === key)?.name ??
-    connectorName(key)
+    connectorName(key, ui)
   );
 }
 
@@ -222,13 +257,40 @@ export function chipText(
 ): string {
   switch (key) {
     case "outcome":
-      return `Outcome: ${some((filters.outcome ?? []).map((value) => OUTCOMES.find((entry) => entry.value === value)?.label ?? value))}`;
+      return ui("Outcome: {{value0}}", {
+        value0: String(
+          some(
+            (filters.outcome ?? []).map(
+              (value) =>
+                OUTCOMES.find((entry) => entry.value === value)?.label ?? value,
+            ),
+          ),
+        ),
+      });
     case "bot":
-      return `Bot: ${some(botsOf(filters.bot).map((id) => names.labels.bots[id] ?? (names.nameFor(id) || id)))}`;
+      return ui("Bot: {{value0}}", {
+        value0: String(
+          some(
+            botsOf(filters.bot).map(
+              (id) => names.labels.bots[id] ?? (names.nameFor(id) || id),
+            ),
+          ),
+        ),
+      });
     case "actorUserId":
-      return `Person: ${personName(filters.actorUserId as string, names)}`;
+      return ui("Person: {{value0}}", {
+        value0: String(personName(filters.actorUserId as string, names)),
+      });
     case "initiatorKind":
-      return `Started by: ${some((filters.initiatorKind ?? []).map((kind) => STARTED_BY[kind] ?? kind))}`;
+      return ui("Started by: {{value0}}", {
+        value0: String(
+          some(
+            (filters.initiatorKind ?? []).map(
+              (kind) => STARTED_BY[kind] ?? kind,
+            ),
+          ),
+        ),
+      });
     case "eventType": {
       const types = filters.eventType ?? [];
       const group = TYPE_GROUPS.find(
@@ -236,22 +298,49 @@ export function chipText(
           entry.types.length === types.length &&
           entry.types.every((type) => types.includes(type)),
       );
-      return `Type: ${group?.label ?? some(types.map(typeWords))}`;
+      return ui("Type: {{value0}}", {
+        value0: String(group?.label ?? some(types.map(typeWords))),
+      });
     }
     case "app":
-      return `App: ${some((filters.app ?? []).map((key) => appName(key, names)))}`;
+      return ui("App: {{value0}}", {
+        value0: String(
+          some((filters.app ?? []).map((key) => appName(key, names))),
+        ),
+      });
     case "tool":
-      return `Tool: ${some((filters.tool ?? []).map(humanise))}`;
+      return ui("Tool: {{value0}}", {
+        value0: String(some((filters.tool ?? []).map(humanise))),
+      });
     case "effect":
-      return `Effect: ${AUDIT_EFFECT_WORDS[filters.effect as AuditEffect] ?? filters.effect}`;
+      return ui("Effect: {{value0}}", {
+        value0: String(
+          ui(AUDIT_EFFECT_WORDS[filters.effect as AuditEffect]) ??
+            filters.effect,
+        ),
+      });
     case "intent":
-      return `Action: ${some((filters.intent ?? []).map((intent) => AUDIT_INTENT_WORDS[intent] ?? intent))}`;
+      return ui("Action: {{value0}}", {
+        value0: String(
+          some(
+            (filters.intent ?? []).map(
+              (intent) => ui(AUDIT_INTENT_WORDS[intent]) ?? intent,
+            ),
+          ),
+        ),
+      });
     case "rule":
-      return `Rule: ${ruleName(filters.rule as string, names)}`;
+      return ui("Rule: {{value0}}", {
+        value0: String(ruleName(filters.rule as string, names)),
+      });
     case "from":
-      return `After: ${dateWords(filters.from as string)}`;
+      return ui("After: {{value0}}", {
+        value0: String(dateWords(filters.from as string)),
+      });
     case "to":
-      return `Before: ${dateWords(filters.to as string)}`;
+      return ui("Before: {{value0}}", {
+        value0: String(dateWords(filters.to as string)),
+      });
   }
 }
 
@@ -304,6 +393,7 @@ function FilterOptions({
   onChange: (next: ChipFilters) => void;
   names: Names;
 }) {
+  useLocale();
   const vocabulary = names.vocabulary;
   const tick = (key: ListKey, value: string, label: string) => (
     <DropdownMenuCheckboxItem
@@ -331,7 +421,7 @@ function FilterOptions({
   );
   const loading = (
     <DropdownMenuLabel className="font-normal text-muted-foreground">
-      {vocabulary ? "Nothing to choose yet" : "Loading…"}
+      {vocabulary ? ui("Nothing to choose yet") : ui("Loading…")}
     </DropdownMenuLabel>
   );
 
@@ -392,14 +482,14 @@ function FilterOptions({
         "effect",
         AUDIT_EFFECTS.map((effect) => ({
           value: effect,
-          label: AUDIT_EFFECT_WORDS[effect],
+          label: ui(AUDIT_EFFECT_WORDS[effect]),
         })),
       );
     case "intent":
       return (
         <>
           {AUDIT_INTENTS.map((intent) =>
-            tick("intent", intent, AUDIT_INTENT_WORDS[intent]),
+            tick("intent", intent, ui(AUDIT_INTENT_WORDS[intent])),
           )}
         </>
       );
@@ -420,18 +510,42 @@ function FilterOptions({
 }
 
 const FILTER_TITLES: Record<ChipKey, string> = {
-  outcome: "Outcome",
-  bot: "Bot",
-  initiatorKind: "Started by",
-  actorUserId: "Person",
-  eventType: "Type",
-  app: "App",
-  tool: "Tool",
-  effect: "Effect",
-  intent: "Action",
-  rule: "Rule",
-  from: "After",
-  to: "Before",
+  get outcome() {
+    return ui("Outcome");
+  },
+  get bot() {
+    return ui("Bot");
+  },
+  get initiatorKind() {
+    return ui("Started by");
+  },
+  get actorUserId() {
+    return ui("Person");
+  },
+  get eventType() {
+    return ui("Type");
+  },
+  get app() {
+    return ui("App");
+  },
+  get tool() {
+    return ui("Tool");
+  },
+  get effect() {
+    return ui("Effect");
+  },
+  get intent() {
+    return ui("Action");
+  },
+  get rule() {
+    return ui("Rule");
+  },
+  get from() {
+    return ui("After");
+  },
+  get to() {
+    return ui("Before");
+  },
 };
 
 /** The menu a chip opens: change what it holds, or take it off. */
@@ -448,10 +562,11 @@ function Chip({
   onOpen: () => void;
   names: Names;
 }) {
+  useLocale();
   const text = chipText(filterKey, filters, names);
   const remove = (
     <Button
-      aria-label={`Remove ${text}`}
+      aria-label={ui("Remove {{value0}}", { value0: String(text) })}
       className="-ml-1 rounded-l-none text-muted-foreground hover:text-foreground"
       onClick={() => onChange(without(filters, filterKey))}
       size="icon-sm"
@@ -517,6 +632,7 @@ function DateFilter({
   trigger: ReactElement;
   children: ReactNode;
 }) {
+  useLocale();
   const [value, setValue] = useState(localInput(filters[filterKey]));
   const id = `audit-filter-${filterKey}`;
   return (
@@ -541,7 +657,7 @@ function DateFilter({
           }}
         >
           <label className="font-medium text-sm" htmlFor={id}>
-            {filterKey === "from" ? "Events after" : "Events before"}
+            {filterKey === "from" ? ui("Events after") : ui("Events before")}
           </label>
           <Input
             id={id}
@@ -551,7 +667,7 @@ function DateFilter({
           />
           <div>
             <Button size="sm" type="submit">
-              Apply
+              {ui("Apply")}
             </Button>
           </div>
         </form>
@@ -562,9 +678,24 @@ function DateFilter({
 
 const HOUR = 3_600_000;
 const SINCE: { label: string; hours: number }[] = [
-  { label: "Last 24 hours", hours: 24 },
-  { label: "Last 7 days", hours: 24 * 7 },
-  { label: "Last 30 days", hours: 24 * 30 },
+  {
+    get label() {
+      return ui("Last 24 hours");
+    },
+    hours: 24,
+  },
+  {
+    get label() {
+      return ui("Last 7 days");
+    },
+    hours: 24 * 7,
+  },
+  {
+    get label() {
+      return ui("Last 30 days");
+    },
+    hours: 24 * 30,
+  },
 ];
 
 /**
@@ -586,6 +717,7 @@ export function AuditFilterChips({
   vocabulary: AuditVocabulary | undefined;
   nameFor: (botId: string) => string;
 }) {
+  useLocale();
   const names: Names = { labels, vocabulary, nameFor };
   const present = (Object.keys(FILTER_TITLES) as ChipKey[]).filter((key) => {
     const value = filters[key];
@@ -618,7 +750,7 @@ export function AuditFilterChips({
           }
         >
           <IconCirclePlus />
-          Add filter
+          {ui("Add filter")}
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-auto min-w-52">
           {addable.map((key) => (
@@ -651,7 +783,7 @@ export function AuditFilterChips({
           ))}
           {!filters.from ? (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Time</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{ui("Time")}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-auto min-w-44">
                 {SINCE.map((since) => (
                   <DropdownMenuItem
@@ -681,7 +813,7 @@ export function AuditFilterChips({
           size="sm"
           variant="ghost"
         >
-          Clear filters
+          {ui("Clear filters")}
         </Button>
       ) : null}
     </>

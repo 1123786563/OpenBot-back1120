@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconShare } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment } from "react";
@@ -34,6 +36,7 @@ const WHY: Record<SharedUseRequestReason, string> = {
  * for anyone else, or when nothing is waiting.
  */
 export function SharedUseRequests() {
+  useLocale();
   const queryClient = useQueryClient();
   const me = useQuery(currentUserQueryOptions()).data;
   const isAdmin = me?.role === "admin";
@@ -42,10 +45,10 @@ export function SharedUseRequests() {
   if (!isAdmin || !requests.data?.length) return null;
 
   return (
-    <PageSection title="Shared account requests">
+    <PageSection title={ui("Shared account requests")}>
       {decide.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {decide.error.message}
+          {<ErrorDetails error={decide.error} />}
         </p>
       ) : null}
       <PageRows>
@@ -58,20 +61,26 @@ export function SharedUseRequests() {
               </ItemMedia>
               <ItemContent>
                 <ItemTitle className="line-clamp-none">
-                  {request.botName} wants the shared {request.title} account
+                  {uiNodes("{{slot0}}wants the shared {{slot1}}account", [
+                    request.botName,
+                    request.title,
+                  ])}
                 </ItemTitle>
                 <ItemDescription className="line-clamp-none">
                   {WHY[request.reason as SharedUseRequestReason] ??
                     request.reason}
                 </ItemDescription>
                 <p className="text-sm">
-                  Now:{" "}
-                  {request.current
-                    ? describeApproval(request.current)
-                    : "Not approved"}
+                  {uiNodes("Now: {{slot0}}", [
+                    request.current
+                      ? describeApproval(request.current)
+                      : ui("Not approved"),
+                  ])}
                 </p>
                 <p className="text-sm">
-                  Asked: {describeApproval(request.proposed)}
+                  {uiNodes("Asked: {{slot0}}", [
+                    describeApproval(request.proposed),
+                  ])}
                 </p>
               </ItemContent>
               <ItemFooter className="justify-start">
@@ -82,7 +91,7 @@ export function SharedUseRequests() {
                   }
                   size="sm"
                 >
-                  Approve
+                  {ui("Approve")}
                 </Button>
                 <Button
                   disabled={decide.isPending}
@@ -92,7 +101,7 @@ export function SharedUseRequests() {
                   size="sm"
                   variant="outline"
                 >
-                  Decline
+                  {ui("Decline")}
                 </Button>
               </ItemFooter>
             </Item>

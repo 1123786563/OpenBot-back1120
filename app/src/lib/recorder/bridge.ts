@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   RECORDER_STORE_IDS,
   recorderStorePage,
@@ -176,9 +177,16 @@ const CONNECT_REFUSAL_FALLBACK =
 /** The Recorder takes only so many connects from one OpenBot in ten minutes; its refusal says how long is left. */
 function throttledSentence(retryAfterMs: number | undefined): string {
   const lead = "Too many connect requests in a short time.";
-  if (retryAfterMs === undefined) return `${lead} Try again in a few minutes.`;
+  if (retryAfterMs === undefined)
+    return ui("{{value0}} Try again in a few minutes.", {
+      value0: String(lead),
+    });
   const minutes = Math.max(1, Math.ceil(retryAfterMs / 60_000));
-  return `${lead} Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`;
+  return ui("{{value0}} Try again in {{value1}} {{value2}}.", {
+    value0: String(lead),
+    value1: String(minutes),
+    value2: String(minutes === 1 ? ui("minute") : ui("minutes")),
+  });
 }
 
 /** What a refused `openbot.connect` says to the person, wherever they asked to connect this browser. */

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconLayoutSidebar } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChannelItemContent } from "@/components/app-sidebar/channel-item-content";
@@ -24,6 +26,7 @@ import {
 } from "@/lib/settings/message-list";
 
 export function MessageListPreference() {
+  useLocale();
   const preferences = useUserPreferences();
   const queryClient = useQueryClient();
   const save = useMutation(
@@ -40,9 +43,9 @@ export function MessageListPreference() {
           <IconLayoutSidebar />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>Message list emphasis</ItemTitle>
+          <ItemTitle>{ui("Message list emphasis")}</ItemTitle>
           <ItemDescription>
-            Choose which line stands out in the sidebar.
+            {ui("Choose which line stands out in the sidebar.")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -55,18 +58,18 @@ export function MessageListPreference() {
               }
             }}
           >
-            <SelectTrigger aria-label="Message list emphasis">
+            <SelectTrigger aria-label={ui("Message list emphasis")}>
               <SelectValue>
                 {emphasis
                   ? emphasis === "agent"
-                    ? "Bot name"
-                    : "Conversation title"
-                  : "Loading…"}
+                    ? ui("Bot name")
+                    : ui("Conversation title")
+                  : ui("Loading…")}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="thread">Conversation title</SelectItem>
-              <SelectItem value="agent">Bot name</SelectItem>
+              <SelectItem value="thread">{ui("Conversation title")}</SelectItem>
+              <SelectItem value="agent">{ui("Bot name")}</SelectItem>
             </SelectContent>
           </Select>
         </ItemActions>
@@ -74,38 +77,38 @@ export function MessageListPreference() {
       {preferences.isError ? (
         <div className="px-3 pb-3">
           <p role="alert" className="text-sm text-destructive">
-            {preferences.error.message}
+            {<ErrorDetails error={preferences.error} />}
           </p>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => void preferences.refetch()}
           >
-            Try again
+            {ui("Try again")}
           </Button>
         </div>
       ) : null}
       {save.isError ? (
         <p role="alert" className="px-3 pb-3 text-sm text-destructive">
-          {save.error.message}
+          {<ErrorDetails error={save.error} />}
         </p>
       ) : null}
       {save.isPending ? (
         <p role="status" className="px-3 text-sm text-muted-foreground">
-          Saving…
+          {ui("Saving…")}
         </p>
       ) : null}
       {emphasis ? (
         <div className="flex justify-center px-6 pt-3 pb-6">
           <figure
-            aria-label="Message list preview"
+            aria-label={ui("Message list preview")}
             className="flex h-16 w-full max-w-xs items-center rounded-lg border border-border bg-sidebar px-3"
           >
             <ChannelItemContent
               participantIds={["message-list-preview"]}
               name="General Assistant"
-              title="Plan next week"
-              lastMessageAt="2h"
+              title={ui("Plan next week")}
+              lastMessageAt={ui("2h")}
               emphasis={emphasis}
             />
           </figure>

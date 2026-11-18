@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 
@@ -62,7 +63,9 @@ async function signInOptions(): Promise<SignInOptions> {
   // returns without a key quietly yields undefined: the screen would say no provider is configured
   // while the server was saying it has one.
   const body = (await (
-    await client("/api/capabilities", { fallback: "Could not load sign-in" })
+    await client("/api/capabilities", {
+      fallback: ui("Could not load sign-in"),
+    })
   ).json()) as {
     authProviders?: AuthProviderId[];
     ssoConfigured?: boolean;

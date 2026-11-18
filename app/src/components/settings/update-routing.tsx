@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconRoute } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
@@ -41,29 +42,66 @@ export const CHANNEL_SETUP_DOCS =
 
 const KIND_LABEL: Record<UpdateKind, { title: string; description: string }> = {
   progress: {
-    title: "Progress",
-    description: "Replies and results from work you weren't watching.",
+    get title() {
+      return ui("Progress");
+    },
+    get description() {
+      return ui("Replies and results from work you weren't watching.");
+    },
   },
   decision: {
-    title: "Decisions",
-    description: "Approvals a Bot needs before it acts.",
+    get title() {
+      return ui("Decisions");
+    },
+    get description() {
+      return ui("Approvals a Bot needs before it acts.");
+    },
   },
   question: {
-    title: "Questions",
-    description: "Things a Bot asked you and is waiting on.",
+    get title() {
+      return ui("Questions");
+    },
+    get description() {
+      return ui("Things a Bot asked you and is waiting on.");
+    },
   },
   attention: {
-    title: "Something needs you",
-    description:
-      "What your Bots' check-ins found, at most once an hour, every Bot in one message.",
+    get title() {
+      return ui("Something needs you");
+    },
+    get description() {
+      return ui(
+        "What your Bots' check-ins found, at most once an hour, every Bot in one message.",
+      );
+    },
   },
 };
 
 const TRANSPORTS: { id: UpdateTransport; label: string }[] = [
-  { id: "push", label: "Push" },
-  { id: "slack", label: "Slack" },
-  { id: "teams", label: "Microsoft Teams" },
-  { id: "sms", label: "SMS" },
+  {
+    id: "push",
+    get label() {
+      return ui("Push");
+    },
+  },
+  {
+    id: "slack",
+    get label() {
+      return ui("Slack");
+    },
+  },
+  {
+    id: "teams",
+    get label() {
+      return ui("Microsoft Teams");
+    },
+  },
+  {
+    id: "sms",
+    get label() {
+      return ui("SMS");
+    },
+  },
 ];
 
 /**
@@ -71,6 +109,7 @@ const TRANSPORTS: { id: UpdateTransport; label: string }[] = [
  * a given Bot sends is that Bot's own Notifications setting, on its page.
  */
 export function UpdateRoutingSection() {
+  useLocale();
   const routing = useQuery(updateRoutingQueryOptions());
   const reach = useQuery(deliveryQueryOptions());
   const save = useMutation(setUpdateRoutingMutationOptions(queryClient));
@@ -111,14 +150,16 @@ export function UpdateRoutingSection() {
       // Said only above the switches: above the empty state it would point at nothing to choose.
       description={
         choosing
-          ? "Choose where to receive each type of update when you’re away. All updates remain available in the web app."
+          ? ui(
+              "Choose where to receive each type of update when you’re away. All updates remain available in the web app.",
+            )
           : undefined
       }
-      title="Where updates go"
+      title={ui("Where updates go")}
     >
       {routing.isPending || reach.isPending ? null : routing.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load where your updates go. Reload the page.
+          {ui("Couldn't load where your updates go. Reload the page.")}
         </p>
       ) : shown.length === 0 ? (
         <PageEmpty
@@ -133,18 +174,24 @@ export function UpdateRoutingSection() {
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                How to set them up
+                {ui("How to set them up")}
               </a>
             ) : undefined
           }
           icon={IconRoute}
-          title="Updates stay in OpenBot"
+          title={ui("Updates stay in OpenBot")}
         >
           {desktop
-            ? "Push, Slack, Microsoft Teams and text messages need OpenBot running on a server."
+            ? ui(
+                "Push, Slack, Microsoft Teams and text messages need OpenBot running on a server.",
+              )
             : setsUp
-              ? "Push, Slack, Microsoft Teams and text messages show up here once they're set up where OpenBot runs."
-              : "Push, Slack, Microsoft Teams and text messages show up here once your admin sets them up."}
+              ? ui(
+                  "Push, Slack, Microsoft Teams and text messages show up here once they're set up where OpenBot runs.",
+                )
+              : ui(
+                  "Push, Slack, Microsoft Teams and text messages show up here once your admin sets them up.",
+                )}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -172,7 +219,10 @@ export function UpdateRoutingSection() {
                         key={transport.id}
                       >
                         <Switch
-                          aria-label={`${KIND_LABEL[kind].title} by ${transport.label}`}
+                          aria-label={ui("{{value0}} by {{value1}}", {
+                            value0: String(KIND_LABEL[kind].title),
+                            value1: String(transport.label),
+                          })}
                           checked={
                             configured(transport.id) && allowed(transport.id)
                           }

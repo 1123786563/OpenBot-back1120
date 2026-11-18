@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconAlertTriangle, IconCircleCheck } from "@tabler/icons-react";
 import type { WrittenRule } from "@/components/boundaries/describe-rule";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,8 @@ export function ReadingStatus({
    */
   edited: string | null;
 }) {
+  useLocale();
+
   return (
     <div className="flex flex-col gap-2 text-sm" role="status">
       <div className={cn("flex flex-col gap-2", edited && "opacity-60")}>
@@ -95,19 +98,23 @@ export function RuleReading({
   /** The rule in the field now. */
   rule: string;
 }) {
+  useLocale();
+
   const edited = rule.trim() !== written.rule.trim();
   return (
     <ReadingStatus
       check={written.compile}
       edited={
         edited
-          ? "You've changed the rule since it was written. The check and the reading above are for the written rule, not your edit."
+          ? ui(
+              "You've changed the rule since it was written. The check and the reading above are for the written rule, not your edit.",
+            )
           : null
       }
       explanation={written.explanation}
-      failed="Doesn't compile, so OpenBot won't save it."
-      heading="What this rule does"
-      passed="Compiles. OpenBot can check it on every action."
+      failed={ui("Doesn't compile, so OpenBot won't save it.")}
+      heading={ui("What this rule does")}
+      passed={ui("Compiles. OpenBot can check it on every action.")}
       warning={written.warning}
     />
   );

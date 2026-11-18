@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { client } from "@/lib/client";
 import type { CapabilityKey } from "@/lib/enterprise/queries";
 
@@ -53,8 +54,9 @@ export async function translateCapabilityChanges(
     {
       method: "POST",
       body: { text },
-      fallback:
+      fallback: ui(
         "Couldn't write the changes. Try again, or set the switches by hand.",
+      ),
     },
   );
   return (await response.json()) as CapabilityTranslation;

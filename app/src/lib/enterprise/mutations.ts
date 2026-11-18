@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { agentKeys } from "@/lib/agents/queries";
 import { client } from "@/lib/client";
@@ -124,7 +125,7 @@ export function terminateMemberComputersMutationOptions() {
           `/api/admin/enterprise/people/${userId}/terminate-computers`,
           {
             method: "POST",
-            fallback: "Could not stop that person's computers",
+            fallback: ui("Could not stop that person's computers"),
           },
         )
       ).json(),
@@ -137,7 +138,7 @@ export function terminateInactiveComputersMutationOptions() {
       (
         await client("/api/admin/enterprise/computers/terminate-inactive", {
           method: "POST",
-          fallback: "Could not sweep inactive computers",
+          fallback: ui("Could not sweep inactive computers"),
         })
       ).json(),
   });

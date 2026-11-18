@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import type { ApprovalRuleInput } from "@/lib/approvals";
 import { client } from "@/lib/client";
@@ -82,7 +83,7 @@ export function approvalRulesBacktestQueryOptions(
         await client("/api/approvals/team/rules/backtest", {
           method: "POST",
           body: { rules },
-          fallback: "The rules could not be tested against history.",
+          fallback: ui("The rules could not be tested against history."),
         })
       ).json(),
     retry: false,

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { BrowserApiState } from "@openbot/shared/openbot-browser";
 import { IconArrowLeft, IconPlayerRecordFilled } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
@@ -57,6 +58,7 @@ function rememberIntroduced() {
  * another, and once it is saved, what Learning does with it next (`SavedStep`). The introduction shows until the person has saved a recording, and Back always reaches it.
  */
 export function TeachSteps({ state }: { state: BrowserApiState }) {
+  useLocale();
   const choice = useNarrationChoice();
   const recording = useRecording(state, choice, {}, { opens: true });
   const show = useMutation(openBrowserMutationOptions(queryClient));
@@ -88,9 +90,11 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
   if (shown === 1) {
     body = (
       <Slide
-        title="Do it once, and your Bots learn it"
-        description="Do a task in your browser as you always would. The Recorder follows each step, and your Bots learn to do it for you."
-        action={<Button onClick={() => setStep(2)}>Continue</Button>}
+        title={ui("Do it once, and your Bots learn it")}
+        description={ui(
+          "Do a task in your browser as you always would. The Recorder follows each step, and your Bots learn to do it for you.",
+        )}
+        action={<Button onClick={() => setStep(2)}>{ui("Continue")}</Button>}
       >
         <RecorderIllustration />
       </Slide>
@@ -98,12 +102,14 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
   } else if (shown === 2) {
     body = (
       <Slide
-        title="Name the task"
-        description="Say what you're about to do. Your Bots use the name to know when to do it."
+        title={ui("Name the task")}
+        description={ui(
+          "Say what you're about to do. Your Bots use the name to know when to do it.",
+        )}
         onBack={() => setStep(1)}
         action={
           <Button disabled={!named} form="teach-a-bot-name" type="submit">
-            Continue
+            {ui("Continue")}
           </Button>
         }
       >
@@ -113,7 +119,7 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
             render={
               <form
                 id="teach-a-bot-name"
-                aria-label="Name the task"
+                aria-label={ui("Name the task")}
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (named) setStep(3);
@@ -126,11 +132,11 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
             </ItemMedia>
             <ItemContent>
               <Input
-                aria-label="Task name"
+                aria-label={ui("Task name")}
                 autoFocus
                 maxLength={200}
                 onChange={(event) => recording.setTitle(event.target.value)}
-                placeholder="Like Submit an expense report"
+                placeholder={ui("Like Submit an expense report")}
                 value={recording.title}
               />
             </ItemContent>
@@ -147,8 +153,10 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
   } else if (live) {
     body = (
       <Slide
-        title="Recording in your browser"
-        description="Do the task in your browser. When you're done, press Stop at the top of the tab and save."
+        title={ui("Recording in your browser")}
+        description={ui(
+          "Do the task in your browser. When you're done, press Stop at the top of the tab and save.",
+        )}
       >
         <PageRows className="mt-0 w-full max-w-md shadow-lg">
           <RecordingRow
@@ -160,7 +168,7 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
                 size="sm"
                 variant="outline"
               >
-                Show browser
+                {ui("Show browser")}
               </Button>
             }
           />
@@ -176,8 +184,10 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
   } else if (named) {
     body = (
       <Slide
-        title="Do it in your browser"
-        description="Recording starts as your browser opens. When you're done, press Stop at the top of the tab and save."
+        title={ui("Do it in your browser")}
+        description={ui(
+          "Recording starts as your browser opens. When you're done, press Stop at the top of the tab and save.",
+        )}
         onBack={() => setStep(2)}
       >
         <div className="flex h-40 w-full max-w-md flex-col items-center justify-center gap-3 rounded-xl border border-foreground/20 border-dashed bg-background/50">
@@ -185,11 +195,12 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
             disabled={recording.starting}
             onClick={() => void recording.record()}
           >
-            {recording.starting ? "Opening…" : OPEN_AND_RECORD}
+            {recording.starting ? ui("Opening…") : ui(OPEN_AND_RECORD)}
           </Button>
           <span className="max-w-[90%] truncate rounded-full bg-background px-3 py-1 text-muted-foreground text-xs shadow-sm">
-            “{recording.title.trim()}” · Narration{" "}
-            {choice.narration === "on" ? "on" : "off"}
+            “{recording.title.trim()}
+            {ui("” · Narration")}{" "}
+            {choice.narration === "on" ? ui("on") : ui("off")}
           </span>
         </div>
       </Slide>
@@ -200,13 +211,23 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
     const stopped = recording.stopped;
     body = (
       <Slide
-        title={stopped.discarded ? "Recording discarded" : "Recording finished"}
+        title={
+          stopped.discarded
+            ? ui("Recording discarded")
+            : ui("Recording finished")
+        }
         description={
           stopped.discarded
-            ? "Nothing more is sent. Record the task again whenever you're ready."
-            : "Record another task, or the same one again, to teach your Bots more."
+            ? ui(
+                "Nothing more is sent. Record the task again whenever you're ready.",
+              )
+            : ui(
+                "Record another task, or the same one again, to teach your Bots more.",
+              )
         }
-        action={<Button onClick={() => setStep(2)}>Record another</Button>}
+        action={
+          <Button onClick={() => setStep(2)}>{ui("Record another")}</Button>
+        }
       >
         <PageRows className="mt-0 w-full max-w-md shadow-lg">
           <StoppedRow stopped={stopped} />
@@ -216,7 +237,7 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
   }
 
   return (
-    <section aria-label="Teach a Bot" className="mt-6">
+    <section aria-label={ui("Teach a Bot")} className="mt-6">
       <div className="teach-stage relative flex min-h-[26rem] flex-col overflow-hidden rounded-2xl">
         <StepDots step={shown} />
         {body}
@@ -233,6 +254,7 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
 
 /** Where the person is among the three steps. Decorative: each step's heading says what it is. */
 function StepDots({ step }: { step: Step }) {
+  useLocale();
   return (
     <div
       aria-hidden="true"
@@ -263,6 +285,7 @@ function SavedStep({
   stopped: Stopped;
   another: () => void;
 }) {
+  useLocale();
   const learning = useLearningNext(stopped);
   const { heading, sentence } = learningNextWords(learning, stopped.title);
   const learned = learning.next.kind === "learned";
@@ -273,10 +296,10 @@ function SavedStep({
       action={
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" render={<Link to={YOUR_SKILLS} />}>
-            See your skills
+            {ui("See your skills")}
           </Button>
           <Button variant={learned ? "outline" : "default"} onClick={another}>
-            Record another
+            {ui("Record another")}
           </Button>
         </div>
       }
@@ -308,6 +331,7 @@ function Slide({
   onBack?: () => void;
   children: ReactNode;
 }) {
+  useLocale();
   return (
     <>
       {onBack ? (
@@ -317,8 +341,7 @@ function Slide({
           size="sm"
           variant="ghost"
         >
-          <IconArrowLeft />
-          Back
+          {uiNodes("{{slot0}}Back", [<IconArrowLeft key="slot0" />])}
         </Button>
       ) : null}
       <div className="flex flex-1 items-center justify-center px-6 pt-12 pb-4">
@@ -344,6 +367,7 @@ function Slide({
  * what it shows.
  */
 function RecorderIllustration() {
+  useLocale();
   return (
     <div aria-hidden="true" className="relative w-full max-w-sm select-none">
       <div className="overflow-hidden rounded-xl bg-card shadow-xl">
@@ -352,35 +376,39 @@ function RecorderIllustration() {
           <span className="size-2 rounded-full bg-foreground/15" />
           <span className="size-2 rounded-full bg-foreground/15" />
           <span className="ml-2 flex-1 truncate rounded-md bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
-            expenses.example.com/new
+            {ui("expenses.example.com/new")}
           </span>
         </div>
         <div className="mx-auto flex w-max items-center gap-2 rounded-b-lg border border-t-0 px-2.5 py-1 text-[11px] font-medium">
           <span className="size-1.5 rounded-full bg-destructive motion-safe:animate-pulse" />
-          Recording
-          <span className="rounded border px-1.5 text-[10px]">Stop</span>
+          {ui("Recording")}
+          <span className="rounded border px-1.5 text-[10px]">
+            {ui("Stop")}
+          </span>
         </div>
         <div className="space-y-1.5 px-4 pt-2 pb-4 text-[11px]">
           <div className="h-1.5 w-2/5 rounded-full bg-muted" />
           <div className="flex justify-between rounded-md border px-2 py-1">
-            <span className="text-muted-foreground">Amount</span>
+            <span className="text-muted-foreground">{ui("Amount")}</span>
             <span className="teach-type font-medium">42.50</span>
           </div>
           <div className="flex justify-between rounded-md border px-2 py-1">
-            <span className="text-muted-foreground">Category</span>
-            <span className="teach-type teach-delay-1 font-medium">Travel</span>
+            <span className="text-muted-foreground">{ui("Category")}</span>
+            <span className="teach-type teach-delay-1 font-medium">
+              {ui("Travel")}
+            </span>
           </div>
           <span className="inline-block rounded-md bg-foreground px-2.5 py-1 text-background">
-            Submit
+            {ui("Submit")}
           </span>
         </div>
       </div>
       <div className="absolute top-14 -right-6 w-36 space-y-1 rounded-lg bg-card p-2 text-[10px] text-muted-foreground shadow-lg sm:-right-28">
         {[
-          "Opened expenses",
-          "Typed Amount",
-          "Chose Travel",
-          "Clicked Submit",
+          ui("Opened expenses"),
+          ui("Typed Amount"),
+          ui("Chose Travel"),
+          ui("Clicked Submit"),
         ].map((step, index) => (
           <div
             key={step}

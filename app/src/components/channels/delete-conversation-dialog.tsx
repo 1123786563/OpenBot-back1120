@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ export function DeleteConversationDialog({
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const deleteChannel = useMutation(deleteChannelMutationOptions(queryClient));
   const { reset } = deleteChannel;
@@ -59,19 +62,21 @@ export function DeleteConversationDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete {name}?</DialogTitle>
+          <DialogTitle>
+            {ui("Delete")} {name}?
+          </DialogTitle>
           <DialogDescription>
-            It disappears for everyone in the conversation.
+            {ui("It disappears for everyone in the conversation.")}
           </DialogDescription>
         </DialogHeader>
         {deleteChannel.error ? (
           <p className="text-destructive text-sm">
-            {deleteChannel.error.message}
+            {<ErrorDetails error={deleteChannel.error} />}
           </p>
         ) : null}
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} size="sm" variant="ghost">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={deleteChannel.isPending}
@@ -81,7 +86,7 @@ export function DeleteConversationDialog({
             size="sm"
             variant="destructive"
           >
-            {deleteChannel.isPending ? "Deleting…" : "Delete"}
+            {deleteChannel.isPending ? ui("Deleting…") : ui("Delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

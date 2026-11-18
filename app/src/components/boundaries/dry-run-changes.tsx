@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconDeviceDesktop, IconPlug } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import {
@@ -64,6 +65,7 @@ export function DryRunChanges({
   total: number;
   verdict: string;
 }) {
+  useLocale();
   if (changes.length === 0) return null;
   return (
     <ReplayRows
@@ -72,8 +74,8 @@ export function DryRunChanges({
         event: auditRowOf(change),
         media:
           change.kind === "app"
-            ? { icon: <IconPlug />, label: "App call" }
-            : { icon: <IconDeviceDesktop />, label: "Computer action" },
+            ? { icon: <IconPlug />, label: ui("App call") }
+            : { icon: <IconDeviceDesktop />, label: ui("Computer action") },
         verdict,
       }))}
       total={total}
@@ -107,6 +109,7 @@ export function ReplayRows({
   /** The count over everything scanned, said under the rows when the list is capped below it. */
   total: number;
 }) {
+  useLocale();
   const nameFor = useBotNames();
   return (
     <>
@@ -160,7 +163,7 @@ export function ReplayRows({
       </PageRows>
       {total > rows.length ? (
         <p className="mt-2 text-muted-foreground text-xs">
-          Showing the first {rows.length} of {total}.
+          {ui("Showing the first")} {rows.length} {ui("of")} {total}.
         </p>
       ) : null}
     </>

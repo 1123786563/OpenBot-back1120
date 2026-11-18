@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import {
@@ -46,7 +47,7 @@ export function waitingOnYou(bot: BotAttention): number {
 }
 
 const count = (total: number, one: string, many: string) =>
-  `${total} ${total === 1 ? one : many}`;
+  ui(`{{count}} ${total === 1 ? one : many}`, { count: total });
 
 /** What the badge says, in words, for the row's accessible name and its tooltip. */
 export function attentionSummary(bot: BotAttention): string {
@@ -70,7 +71,7 @@ export function attentionSummary(bot: BotAttention): string {
     parts.push(count(bot.tasks.ready, "task to review", "tasks to review"));
   if (bot.tasks.failed)
     parts.push(count(bot.tasks.failed, "failed task", "failed tasks"));
-  if (bot.unread) parts.push(`${bot.unread} unread`);
+  if (bot.unread) parts.push(ui("{{count}} unread", { count: bot.unread }));
   return parts.join(", ");
 }
 
@@ -107,20 +108,23 @@ export function pingNotice(
   });
   if (once.length === 0)
     return {
-      title: "Something needs you",
-      body: "Open Bots to see what's waiting.",
+      title: ui("Something needs you"),
+      body: ui("Open Bots to see what's waiting."),
     };
   const lines = once.slice(0, PING_LISTED).map((item) => {
     const bot = botName(item.agentId);
     return bot ? `${bot}: ${item.title}` : item.title;
   });
   const more = once.length - PING_LISTED;
-  const body = [...lines, ...(more > 0 ? [`and ${more} more`] : [])].join("\n");
+  const body = [
+    ...lines,
+    ...(more > 0 ? [ui("and {{count}} more", { count: more })] : []),
+  ].join("\n");
   return {
     title:
       once.length === 1
-        ? "One thing needs you"
-        : `${once.length} things need you`,
+        ? ui("One thing needs you")
+        : ui("{{value0}} things need you", { value0: String(once.length) }),
     body:
       body.length > PING_BODY_LIMIT
         ? `${body.slice(0, PING_BODY_LIMIT - 1).trimEnd()}…`
@@ -148,6 +152,7 @@ export function noticePath(bot: BotAttention): string {
  * the person hears about items at most once an hour, folded across their Bots.
  */
 function useAttentionNotifications(bots: BotAttention[] | undefined) {
+  useLocale();
   const seen = useRef<Map<string, number> | null>(null);
   // Asks OpenBot Desktop now, while OpenBot is in front, so its answer is in before anything needs
   // the person.
@@ -170,7 +175,7 @@ function useAttentionNotifications(bots: BotAttention[] | undefined) {
       if (!allowed || inSight()) return;
       for (const bot of rose)
         showNotice({
-          title: `${bot.name} needs you`,
+          title: ui("{{value0}} needs you", { value0: String(bot.name) }),
           body: attentionSummary(bot),
           // The conversation's tag when it waits in one: its reply notice, if any, is replaced by this.
           tag: bot.waitingIn
@@ -195,6 +200,7 @@ function usePingNotifications(
   lastPingId: string | null | undefined,
   bots: BotAttention[] | undefined,
 ) {
+  useLocale();
   // Read only when a ping arrives: the badge has no other use for the list, so it does not poll it.
   const suggestions = useQuery({
     ...proactiveSuggestionsQueryOptions(),
@@ -240,6 +246,7 @@ function usePingNotifications(
  * Renders nothing when nothing is waiting, so a quiet day costs the sidebar nothing.
  */
 export function BotsNavBadge() {
+  useLocale();
   const attention = useQuery(botAttentionQueryOptions());
   const lastPing = useQuery(lastPingQueryOptions());
   useAttentionNotifications(attention.data);
@@ -249,7 +256,10 @@ export function BotsNavBadge() {
   if (waiting > 0) {
     return (
       <span
-        aria-label={`${waiting} ${waiting === 1 ? "thing needs" : "things need"} you`}
+        aria-label={ui("{{value0}} {{value1}} you", {
+          value0: String(waiting),
+          value1: String(waiting === 1 ? "thing needs" : "things need"),
+        })}
         className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground tabular-nums"
         role="img"
       >
@@ -262,8 +272,8 @@ export function BotsNavBadge() {
       <span
         aria-label={
           bots.some((bot) => bot.unread > 0)
-            ? "Unread messages"
-            : "Your check-ins found something"
+            ? ui("Unread messages")
+            : ui("Your check-ins found something")
         }
         className="ml-auto size-2 rounded-full bg-primary"
         role="img"

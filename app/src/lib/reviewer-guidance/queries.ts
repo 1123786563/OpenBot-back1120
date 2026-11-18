@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -57,7 +58,7 @@ export const reviewerGuidanceQueryOptions = () =>
     queryKey: reviewerGuidanceKeys.saved,
     queryFn: (): Promise<string | null> =>
       client("/api/approvals/team/guidance", "guidance", {
-        fallback: "Couldn't load the guidance for auto-review.",
+        fallback: ui("Couldn't load the guidance for auto-review."),
       }),
   });
 
@@ -68,7 +69,7 @@ export const guidanceBacktestPreviewQueryOptions = () =>
     queryFn: async (): Promise<GuidanceBacktestPreview> =>
       (
         await client("/api/approvals/team/guidance/backtest", {
-          fallback: "Couldn't count the requests to test against.",
+          fallback: ui("Couldn't count the requests to test against."),
         })
       ).json(),
   });

@@ -363,7 +363,7 @@ describe("POST /api/approvals/team/rules/translate", () => {
     const response = await translate(app, "Ask before any Bot sends email");
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "OpenBot needs a model key to write rules from a description. Add one on the Credentials page, or add the rule by hand.",
     });
@@ -397,7 +397,7 @@ describe("POST /api/approvals/team/rules/translate", () => {
       const { app } = appFor({});
       const response = await translate(app, text);
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
+      expect(await response.json()).toMatchObject({
         error: "Describe the rule in a sentence first.",
       });
       expect(mock.getRequests()).toHaveLength(0);

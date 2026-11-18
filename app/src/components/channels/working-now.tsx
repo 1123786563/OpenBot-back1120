@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { Link } from "@tanstack/react-router";
 import { ChannelAvatar } from "@/components/channels/avatar";
 import { untitledLine } from "@/lib/channels/label";
@@ -17,6 +18,7 @@ export function WorkingNow({
 }: {
   channels: ChannelSummary[] | undefined;
 }) {
+  useLocale();
   const working = channels?.find((channel) => channel.busy);
   if (!working) return null;
   const title = working.summary || untitledLine(working) || "New conversation";
@@ -34,14 +36,14 @@ export function WorkingNow({
         <ChannelAvatar participantIds={working.agentIds} size={28} typing />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate font-medium text-sm">
-            {working.name} is working
+            {uiNodes("{{slot0}}is working", [working.name])}
           </span>
           <span className="truncate text-muted-foreground text-xs">
             {title}
           </span>
         </span>
         <span className="shrink-0 rounded-full border bg-background px-3 py-1 font-medium text-xs">
-          Open
+          {ui("Open")}
         </span>
       </Link>
     </div>

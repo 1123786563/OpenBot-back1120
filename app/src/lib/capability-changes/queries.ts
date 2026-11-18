@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import type { AuditEvent } from "@/components/audit/audit-cells";
 import { client } from "@/lib/client";
@@ -87,7 +88,7 @@ export function capabilityChangesPreviewQueryOptions(
         await client("/api/admin/enterprise/capabilities/preview", {
           method: "POST",
           body: { changes },
-          fallback: "Couldn't work out who these changes affect.",
+          fallback: ui("Couldn't work out who these changes affect."),
         })
       ).json(),
     retry: false,

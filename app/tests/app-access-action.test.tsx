@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -432,7 +433,7 @@ test("the server's refusal of a request is drawn beside the button", async () =>
   fireEvent.click(
     await view.findByRole("button", { name: "Request access to Gmail" }),
   );
-  expect((await view.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
     "Gmail is ready to use.",
   );
 });
@@ -616,7 +617,7 @@ test("an admin's press that cannot be carried out says what is missing", async (
   fireEvent.click(
     await view.findByRole("button", { name: "Give Gmail to Expenses" }),
   );
-  expect((await view.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
     "Gmail has no tools to give yet.",
   );
 });

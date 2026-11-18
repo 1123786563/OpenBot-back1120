@@ -267,7 +267,9 @@ describe("the personal edition without OpenBot Desktop", () => {
       headers: { "content-type": "application/json" },
     });
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: NO_DESKTOP_HOST });
+    expect(await response.json()).toMatchObject({
+      error: NO_DESKTOP_HOST,
+    });
     expect(broker.statusFor(person.id).pending).toEqual([]);
   });
 

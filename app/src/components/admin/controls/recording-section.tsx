@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { IconChartBar, IconTerminal2 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageEmpty, PageRows } from "@/components/layout/page-shell";
@@ -16,10 +17,13 @@ import { ControlsSection } from "./controls-section";
 
 /** Admin, Audit: Action Recording, its recent commands, and the OpenTelemetry export. */
 export function RecordingSection() {
+  useLocale();
   return (
     <ControlsSection
-      description="Set OTEL_EXPORTER_OTLP_ENDPOINT to stream audit events and Bot actions to your OpenTelemetry collector or SIEM. They are tagged openbot.surface."
-      title="Recording and export"
+      description={ui(
+        "Set OTEL_EXPORTER_OTLP_ENDPOINT to stream audit events and Bot actions to your OpenTelemetry collector or SIEM. They are tagged openbot.surface.",
+      )}
+      title={ui("Recording and export")}
     >
       {({ data, setSetting, saving }) => (
         <>
@@ -29,16 +33,19 @@ export function RecordingSection() {
                 <IconTerminal2 />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Action Recording</ItemTitle>
+                <ItemTitle>{ui("Action Recording")}</ItemTitle>
                 <ItemDescription>
                   {data.settings.actionRecording
-                    ? `Shell commands Bots run are recorded with secrets removed, and kept ${data.actionRecordRetentionDays} days.`
-                    : "Off. Commands show in Audit only."}
+                    ? ui(
+                        "Shell commands Bots run are recorded with secrets removed, and kept {{value0}} days.",
+                        { value0: String(data.actionRecordRetentionDays) },
+                      )
+                    : ui("Off. Commands show in Audit only.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Switch
-                  aria-label="Action Recording"
+                  aria-label={ui("Action Recording")}
                   checked={data.settings.actionRecording}
                   disabled={saving}
                   onCheckedChange={(checked) =>
@@ -53,16 +60,18 @@ export function RecordingSection() {
                 <IconChartBar />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>OpenTelemetry export</ItemTitle>
+                <ItemTitle>{ui("OpenTelemetry export")}</ItemTitle>
                 <ItemDescription>
                   {data.otel.configured
-                    ? "Exporting over OTLP/HTTP."
-                    : "Not set up. Set OTEL_EXPORTER_OTLP_ENDPOINT on the server."}
+                    ? ui("Exporting over OTLP/HTTP.")
+                    : ui(
+                        "Not set up. Set OTEL_EXPORTER_OTLP_ENDPOINT on the server.",
+                      )}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <span className="text-muted-foreground text-sm">
-                  {data.otel.configured ? "On" : "Off"}
+                  {data.otel.configured ? ui("On") : ui("Off")}
                 </span>
               </ItemActions>
             </Item>
@@ -75,16 +84,19 @@ export function RecordingSection() {
 }
 
 function RecordedActions() {
+  useLocale();
   const actions = useQuery(actionRecordsQueryOptions());
   if (actions.isPending) return null;
   if (actions.error)
     return (
       <p className="mt-4 text-destructive text-sm" role="alert">
-        Couldn't load recorded actions. Reload the page.
+        {ui("Couldn't load recorded actions. Reload the page.")}
       </p>
     );
   if (actions.data.length === 0)
-    return <PageEmpty icon={IconTerminal2} title="No commands recorded yet" />;
+    return (
+      <PageEmpty icon={IconTerminal2} title={ui("No commands recorded yet")} />
+    );
   return (
     <PageRows>
       {actions.data.map((action, index) => (
@@ -97,10 +109,12 @@ function RecordedActions() {
               </ItemTitle>
               <ItemDescription>
                 {action.surface === "local"
-                  ? "Member's machine"
-                  : `Bot ${action.botId ?? "?"}`}{" "}
+                  ? ui("Member's machine")
+                  : ui("Bot {{value0}}", {
+                      value0: String(action.botId ?? "?"),
+                    })}{" "}
                 · {action.outcome} ·{" "}
-                {new Date(action.createdAt).toLocaleString()}
+                {new Date(action.createdAt).toLocaleString(getLocale())}
               </ItemDescription>
             </ItemContent>
           </Item>

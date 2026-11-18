@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconListCheck } from "@tabler/icons-react";
 import { BotActivitySections } from "@/components/bot-profile/activity";
 import { BotNeedsYou } from "@/components/needs-you/board";
@@ -9,9 +10,10 @@ import { MuseEmpty, MuseScreen } from "../ui";
  * finished. Both are OpenBot's own sections from the Bot's page, under OpenMuse's title.
  */
 export function ActivityScreen() {
+  useLocale();
   const { bot } = useMuse();
   return (
-    <MuseScreen title="Activity">
+    <MuseScreen title={ui("Activity")}>
       {bot ? (
         <div className="[&>section:first-child]:mt-0">
           <BotNeedsYou agentId={bot.id} />
@@ -25,11 +27,12 @@ export function ActivityScreen() {
 }
 
 export function NoBot() {
+  useLocale();
   return (
     <MuseEmpty
-      detail="Create one with New Bot on the Bots page."
+      detail={ui("Create one with New Bot on the Bots page.")}
       icon={IconListCheck}
-      title="No Bots yet"
+      title={ui("No Bots yet")}
     />
   );
 }

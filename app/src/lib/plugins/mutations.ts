@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { desktopConsentQuery } from "@/lib/desktop/shell";
@@ -124,7 +125,7 @@ export function grantPlugin(variables: {
       agentId: variables.agentId,
       ...(variables.approval ? { approval: variables.approval } : {}),
     },
-    fallback: "Couldn't change that Bot.",
+    fallback: ui("Couldn't change that Bot."),
   });
 }
 
@@ -159,7 +160,7 @@ export async function accountModePreview(
     {
       method: "PUT",
       body: { mode, confirm: false },
-      fallback: "What the switch would change could not be read.",
+      fallback: ui("What the switch would change could not be read."),
     },
   );
   return ((await response.json()) as { preview: AccountModePreview }).preview;
@@ -187,7 +188,7 @@ export function setAccountModeMutationOptions(queryClient: QueryClient) {
             confirm: true,
             ...(variables.approvals ? { approvals: variables.approvals } : {}),
           },
-          fallback: "The switch did not finish, and nothing was changed.",
+          fallback: ui("The switch did not finish, and nothing was changed."),
         },
       );
     },
@@ -210,7 +211,7 @@ export function setOwnerGrantsMutationOptions(queryClient: QueryClient) {
         {
           method: "PUT",
           body: { ownerGrants: variables.ownerGrants },
-          fallback: "Couldn't change who can give this app.",
+          fallback: ui("Couldn't change who can give this app."),
         },
       );
     },
@@ -238,7 +239,7 @@ export function setPluginGrantMutationOptions(queryClient: QueryClient) {
       }
       await client(
         `/api/plugins/grants?kind=${variables.kind}&ref=${encodeURIComponent(variables.ref)}&agentId=${encodeURIComponent(variables.agentId)}`,
-        { method: "DELETE", fallback: "Couldn't change that Bot." },
+        { method: "DELETE", fallback: ui("Couldn't change that Bot.") },
       );
     },
     onSettled: () => invalidatePlugins(queryClient),
@@ -288,7 +289,7 @@ export function enableComposioAppMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: input,
-          fallback: "That app could not be added.",
+          fallback: ui("That app could not be added."),
         },
       );
       return server.id;
@@ -349,7 +350,7 @@ export function saveSkillMutationOptions(queryClient: QueryClient) {
          * The server refuses for reasons a form cannot check — a slug somebody else already owns is
          * the common one — and paraphrasing that would throw away the only part worth reading.
          */
-        fallback: "Couldn't save the skill.",
+        fallback: ui("Couldn't save the skill."),
       }),
     onSettled: () => invalidatePlugins(queryClient),
   });
@@ -381,7 +382,7 @@ export function registerOAuthClientMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: { clientId: input.clientId, clientSecret: input.clientSecret },
-          fallback: "That OAuth client could not be registered.",
+          fallback: ui("That OAuth client could not be registered."),
         },
       );
     },
@@ -531,7 +532,7 @@ export function confirmBrokeredConnectionMutationOptions(
     ): Promise<BrokeredConnectionConfirmation> => {
       const response = await client(
         `/api/plugins/servers/${encodeURIComponent(serverId)}/connection/confirm`,
-        { method: "POST", fallback: "Couldn't confirm that connection." },
+        { method: "POST", fallback: ui("Couldn't confirm that connection.") },
       );
       return response.json();
     },
@@ -553,7 +554,7 @@ export function disconnectBrokeredMutationOptions(queryClient: QueryClient) {
         `/api/plugins/servers/${encodeURIComponent(serverId)}/connection`,
         {
           method: "DELETE",
-          fallback: "Couldn't disconnect that account.",
+          fallback: ui("Couldn't disconnect that account."),
         },
       );
     },
@@ -589,7 +590,7 @@ export function disconnectBrokeredAccountMutationOptions(
     mutationFn: async (variables: { serverId: string; accountId: string }) => {
       await client(
         `/api/plugins/servers/${encodeURIComponent(variables.serverId)}/accounts/${encodeURIComponent(variables.accountId)}`,
-        { method: "DELETE", fallback: "Couldn't disconnect that account." },
+        { method: "DELETE", fallback: ui("Couldn't disconnect that account.") },
       );
     },
     onSettled: () => invalidatePlugins(queryClient),
@@ -725,7 +726,7 @@ export function connectBrokeredWithFieldsMutationOptions(
           {
             method: "POST",
             body: { values: variables.values },
-            fallback: "Couldn't connect that account.",
+            fallback: ui("Couldn't connect that account."),
           },
         );
         return response.json();
@@ -777,7 +778,7 @@ export function recheckBrokeredConnectionMutationOptions(
     mutationFn: async (serverId: string): Promise<BrokeredKeyCheck> => {
       const response = await client(
         `/api/plugins/servers/${encodeURIComponent(serverId)}/connection/recheck`,
-        { method: "POST", fallback: "Couldn't check that connection." },
+        { method: "POST", fallback: ui("Couldn't check that connection.") },
       );
       return response.json();
     },

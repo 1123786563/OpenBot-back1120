@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { appToolName } from "@openbot/shared/tool-name";
 
 /**
@@ -18,11 +19,12 @@ export function SkippedToolsNotice({
   names: readonly string[];
   serverId?: string;
 }) {
+  useLocale();
   if (names.length === 0) return null;
   if (serverId !== undefined) {
     const words = names.map(
       (name) =>
-        appToolName(serverId, name.replace(/[^A-Za-z0-9_-]+/g, "_")).label,
+        appToolName(serverId, name.replace(/[^A-Za-z0-9_-]+/g, "_"), ui).label,
     );
     return (
       <p
@@ -30,8 +32,13 @@ export function SkippedToolsNotice({
         role="status"
       >
         {names.length === 1
-          ? "Your Bots can't use one action this app lists, because of how it's named: "
-          : `Your Bots can't use ${names.length} actions this app lists, because of how they're named: `}
+          ? ui(
+              "Your Bots can't use one action this app lists, because of how it's named: ",
+            )
+          : ui(
+              "Your Bots can't use {{value0}} actions this app lists, because of how they're named: ",
+              { value0: String(names.length) },
+            )}
         {words.join(", ")}.
       </p>
     );
@@ -42,8 +49,13 @@ export function SkippedToolsNotice({
       role="status"
     >
       {names.length === 1
-        ? "One action this app lists was left out, because a tool name may only use letters, digits, underscores and hyphens: "
-        : `${names.length} actions this app lists were left out, because a tool name may only use letters, digits, underscores and hyphens: `}
+        ? ui(
+            "One action this app lists was left out, because a tool name may only use letters, digits, underscores and hyphens: ",
+          )
+        : ui(
+            "{{value0}} actions this app lists were left out, because a tool name may only use letters, digits, underscores and hyphens: ",
+            { value0: String(names.length) },
+          )}
       {names.map((name, index) => (
         <span key={name}>
           {index > 0 ? ", " : null}

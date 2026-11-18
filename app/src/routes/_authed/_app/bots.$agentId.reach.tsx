@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { BotSubpage } from "@/components/bot-profile/bot-subpage";
 import { ReachingYou } from "@/components/delivery/reaching-you";
@@ -7,12 +8,15 @@ export const Route = createFileRoute("/_authed/_app/bots/$agentId/reach")({
 });
 
 function ReachPage() {
+  useLocale();
   const { agentId } = Route.useParams();
   return (
     <BotSubpage
       agentId={agentId}
-      description="Continue a conversation with this Bot in Slack, Microsoft Teams, or by text message."
-      title="Reaching you"
+      description={ui(
+        "Continue a conversation with this Bot in Slack, Microsoft Teams, or by text message.",
+      )}
+      title={ui("Reaching you")}
     >
       {(agent) => <ReachingYou agentId={agent.id} />}
     </BotSubpage>

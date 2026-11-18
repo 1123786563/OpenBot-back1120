@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -26,6 +27,7 @@ function OpenDotsPage({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  useLocale();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto" data-opendots-page>
       <div className="mx-auto w-full max-w-[1090px] px-[54px] pt-16 pb-9 max-[1150px]:px-8 max-[1150px]:pt-[45px] max-md:px-[22px] max-md:pt-[38px]">
@@ -51,10 +53,13 @@ function OpenDotsPage({
 
 /** Routines: what each Bot does on a schedule, as OpenBot's routines list. */
 export function RoutinesScreen() {
+  useLocale();
   return (
     <OpenDotsPage
-      description="What your Bots do on a schedule. Ask a Bot to set one up. Pause, run or delete one here."
-      title="Routines"
+      description={ui(
+        "What your Bots do on a schedule. Ask a Bot to set one up. Pause, run or delete one here.",
+      )}
+      title={ui("Routines")}
     >
       <RoutinesList embedded />
     </OpenDotsPage>
@@ -66,14 +71,15 @@ export function RoutinesScreen() {
  * offered, as the screen route does for a screen this skin doesn't have (see `offersMemory`).
  */
 export function MemoriesScreen() {
+  useLocale();
   const capabilities = useQuery(deploymentCapabilitiesQueryOptions());
   if (capabilities.isPending) return null;
   if (!offersMemory(capabilities.data)) return <Navigate replace to="/" />;
   return (
     <OpenDotsPage
       action={<RememberFact />}
-      description="What your Bots know about you."
-      title="Memories"
+      description={ui("What your Bots know about you.")}
+      title={ui("Memories")}
     >
       <MemoryList />
     </OpenDotsPage>

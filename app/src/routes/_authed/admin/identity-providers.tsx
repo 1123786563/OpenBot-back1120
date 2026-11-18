@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconBuildingBank, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -55,6 +57,7 @@ const EMPTY = {
 };
 
 function IdentityProvidersPage() {
+  useLocale();
   const providers = useQuery(identityProviderListQueryOptions());
   const register = useMutation(
     registerIdentityProviderMutationOptions(queryClient),
@@ -103,15 +106,19 @@ function IdentityProvidersPage() {
     <PageShell
       action={
         <Button onClick={() => setOpen(true)} size="lg">
-          Add a provider
+          {ui("Add a provider")}
         </Button>
       }
-      description="Configure your company’s SAML or OpenID Connect provider. Email domains determine which provider people use to sign in."
-      title="Identity providers"
+      description={ui(
+        "Configure your company’s SAML or OpenID Connect provider. Email domains determine which provider people use to sign in.",
+      )}
+      title={ui("Identity providers")}
     >
       <PageSection
-        description="Google, Microsoft and Okta are set in the environment. They don't show here."
-        title="Registered"
+        description={ui(
+          "Google, Microsoft and Okta are set in the environment. They don't show here.",
+        )}
+        title={ui("Registered")}
       >
         {failure ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
@@ -120,19 +127,19 @@ function IdentityProvidersPage() {
         ) : null}
         {providers.isPending ? null : providers.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load identity providers. Reload the page.
+            {ui("Couldn't load identity providers. Reload the page.")}
           </p>
         ) : providers.data?.length === 0 ? (
           <PageEmpty
             action={
               <Button onClick={() => setOpen(true)} size="sm" variant="outline">
-                Add a provider
+                {ui("Add a provider")}
               </Button>
             }
             icon={IconBuildingBank}
-            title="No identity providers yet"
+            title={ui("No identity providers yet")}
           >
-            Use the metadata from your identity team.
+            {ui("Use the metadata from your identity team.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -156,8 +163,7 @@ function IdentityProvidersPage() {
                       size="sm"
                       variant="destructive"
                     >
-                      <IconTrash />
-                      Remove
+                      {uiNodes("{{slot0}}Remove", [<IconTrash key="slot0" />])}
                     </Button>
                   </ItemActions>
                 </Item>
@@ -172,7 +178,7 @@ function IdentityProvidersPage() {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add an identity provider</DialogTitle>
+            <DialogTitle>{ui("Add an identity provider")}</DialogTitle>
           </DialogHeader>
           <DialogBody className="mt-4 space-y-4 overflow-y-auto">
             {/* The submit button is in the footer and reaches this form by id, so DialogBody stays a
@@ -195,38 +201,39 @@ function IdentityProvidersPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="providerId">Name</Label>
+                <Label htmlFor="providerId">{ui("Name")}</Label>
                 <Input
                   id="providerId"
                   onChange={(event) =>
                     setDraft({ ...draft, providerId: event.target.value })
                   }
-                  placeholder="acme-okta"
+                  placeholder={ui("acme-okta")}
                   required
                   value={draft.providerId}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="domain">Email domain</Label>
+                <Label htmlFor="domain">{ui("Email domain")}</Label>
                 <Input
                   id="domain"
                   onChange={(event) =>
                     setDraft({ ...draft, domain: event.target.value })
                   }
-                  placeholder="acme.com"
+                  placeholder={ui("acme.com")}
                   required
                   value={draft.domain}
                 />
                 {/* Said out loud because it is the field that decides who this applies to. */}
                 <p className="text-muted-foreground text-xs">
-                  Anybody with an address at this domain signs in here. Separate
-                  several with commas.
+                  {ui(
+                    "Anybody with an address at this domain signs in here. Separate several with commas.",
+                  )}
                 </p>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="issuer">Issuer</Label>
+                <Label htmlFor="issuer">{ui("Issuer")}</Label>
                 <Input
                   id="issuer"
                   onChange={(event) =>
@@ -242,7 +249,7 @@ function IdentityProvidersPage() {
               {draft.protocol === "saml" ? (
                 <>
                   <div className="space-y-1.5">
-                    <Label htmlFor="entryPoint">Sign-on URL</Label>
+                    <Label htmlFor="entryPoint">{ui("Sign-on URL")}</Label>
                     <Input
                       id="entryPoint"
                       onChange={(event) =>
@@ -255,28 +262,29 @@ function IdentityProvidersPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="metadata">Metadata XML</Label>
+                    <Label htmlFor="metadata">{ui("Metadata XML")}</Label>
                     <Textarea
                       className="font-mono text-xs"
                       id="metadata"
                       onChange={(event) =>
                         setDraft({ ...draft, metadata: event.target.value })
                       }
-                      placeholder="<EntityDescriptor …>"
+                      placeholder={ui("<EntityDescriptor …>")}
                       required
                       rows={6}
                       value={draft.metadata}
                     />
                     <p className="text-muted-foreground text-xs">
-                      The file from your identity team. It includes the signing
-                      certificate.
+                      {ui(
+                        "The file from your identity team. It includes the signing certificate.",
+                      )}
                     </p>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="space-y-1.5">
-                    <Label htmlFor="clientId">Client ID</Label>
+                    <Label htmlFor="clientId">{ui("Client ID")}</Label>
                     <Input
                       id="clientId"
                       onChange={(event) =>
@@ -287,7 +295,7 @@ function IdentityProvidersPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="clientSecret">Client secret</Label>
+                    <Label htmlFor="clientSecret">{ui("Client secret")}</Label>
                     <Input
                       id="clientSecret"
                       onChange={(event) =>
@@ -308,7 +316,7 @@ function IdentityProvidersPage() {
               */}
             {register.error ? (
               <p className="text-destructive text-sm" role="alert">
-                {register.error.message}
+                {<ErrorDetails error={register.error} />}
               </p>
             ) : null}
           </DialogBody>
@@ -319,7 +327,7 @@ function IdentityProvidersPage() {
               type="button"
               variant="outline"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={register.isPending}
@@ -327,7 +335,7 @@ function IdentityProvidersPage() {
               size="sm"
               type="submit"
             >
-              {register.isPending ? "Adding…" : "Add"}
+              {register.isPending ? ui("Adding…") : ui("Add")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconCircleMinus,
   IconCirclePlus,
@@ -60,8 +62,8 @@ const plural = (count: number, one: string, many = `${one}s`) =>
 
 /** What an action does, in the words the page's own sections use. */
 function kindOf(action: Pick<ChangedAction, "effect" | "destructive">) {
-  if (action.destructive) return "Destroys things";
-  return action.effect === "read" ? "Only reads" : "Changes things";
+  if (action.destructive) return ui("Destroys things");
+  return action.effect === "read" ? ui("Only reads") : ui("Changes things");
 }
 
 /**
@@ -74,13 +76,13 @@ export function changeHeadline(changes: {
 }): string {
   const { added, removed } = changes;
   if (added.length === 0 && removed.length === 0)
-    return "This is what the Bot has now. There's nothing to save.";
+    return ui("This is what the Bot has now. There's nothing to save.");
   const parts = [
     removed.length > 0 ? `turns off ${plural(removed.length, "action")}` : null,
     added.length > 0 ? `turns on ${plural(added.length, "action")}` : null,
   ].filter(Boolean);
   const sentence = parts.join(" and ");
-  return `Saving ${sentence}.`;
+  return ui("Saving {{value0}}.", { value0: String(sentence) });
 }
 
 /**
@@ -100,7 +102,9 @@ export function replayHeadline(report: AppGrantReplay): string {
       : null,
   ].filter(Boolean) as string[];
   if (parts.length === 0)
-    return "Turns off nothing it used, and turns on no write it hasn't used.";
+    return ui(
+      "Turns off nothing it used, and turns on no write it hasn't used.",
+    );
   const sentence =
     parts.length > 1
       ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
@@ -111,7 +115,7 @@ export function replayHeadline(report: AppGrantReplay): string {
 /** What was replayed, under the headline. */
 export function replayWords(report: AppGrantReplay, appTitle: string): string {
   return [
-    "Replayed over its last ",
+    ui("Replayed over its last "),
     report.runs > 0 ? `${plural(report.runs, "run")} and ` : "",
     `${plural(report.calls, "call")} to ${appTitle}`,
     report.since ? `, the oldest ${relativeTime(report.since)}.` : ".",
@@ -132,6 +136,7 @@ function ActionRows<T extends ChangedAction>({
   verdict: string;
   verdictClassName: string;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const shown = open ? actions : actions.slice(0, SHOWN);
   return (
@@ -173,7 +178,9 @@ function ActionRows<T extends ChangedAction>({
             type="button"
             variant="ghost"
           >
-            {open ? "Show fewer" : `Show all ${actions.length}`}
+            {open
+              ? ui("Show fewer")
+              : ui("Show all {{value0}}", { value0: String(actions.length) })}
           </Button>
         </div>
       ) : null}
@@ -211,6 +218,7 @@ export function DescribeGrants({
    */
   sharedNeeded: SharedUseApproval | null;
 }) {
+  useLocale();
   const [written, setWritten] = useState<WrittenGrants | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -281,7 +289,7 @@ export function DescribeGrants({
               type="button"
               variant="outline"
             >
-              Discard
+              {ui("Discard")}
             </Button>
             <Button
               disabled={!ready || save.isPending}
@@ -289,7 +297,7 @@ export function DescribeGrants({
               size="sm"
               type="button"
             >
-              {save.isPending ? "Saving…" : "Save changes"}
+              {save.isPending ? ui("Saving…") : ui("Save changes")}
             </Button>
           </>
         ) : undefined
@@ -297,11 +305,18 @@ export function DescribeGrants({
     >
       <FieldGroup>
         <DescribeField
-          action="Choose actions"
-          description={`Say in a sentence what ${botName} may do in ${appTitle}, and your model picks the actions. A second reading that never sees your words says what they allow.`}
+          action={ui("Choose actions")}
+          description={ui(
+            "Say in a sentence what {{value0}} may do in {{value1}}, and your model picks the actions. A second reading that never sees your words says what they allow.",
+            { value0: String(botName), value1: String(appTitle) },
+          )}
           id="app-grants-english"
-          label={`Describe what ${botName} can do`}
-          placeholder="Reads everything and writes drafts, but never sends or deletes"
+          label={ui("Describe what {{value0}} can do", {
+            value0: String(botName),
+          })}
+          placeholder={ui(
+            "Reads everything and writes drafts, but never sends or deletes",
+          )}
           write={async (described) => {
             const translation = await translateAppGrants({
               agentId,
@@ -324,27 +339,33 @@ export function DescribeGrants({
             check={written.check}
             edited={null}
             explanation={written.explanation}
-            failed="These actions don't check, so OpenBot won't save them."
-            heading={`What this lets ${botName} do`}
+            failed={ui(
+              "These actions don't check, so OpenBot won't save them.",
+            )}
+            heading={ui("What this lets {{value0}} do", {
+              value0: String(botName),
+            })}
             passed={`Checks. Every action is one ${appTitle} offers.`}
             warning={written.warning}
           />
         ) : null}
         {checked && preview.error ? (
           <p className="text-destructive text-sm" role="alert">
-            {preview.error.message}
+            {<ErrorDetails error={preview.error} />}
           </p>
         ) : null}
         {checked && changes ? (
           <Field aria-labelledby="app-grants-changes" aria-live="polite">
-            <FieldLabel id="app-grants-changes">What changes</FieldLabel>
+            <FieldLabel id="app-grants-changes">
+              {ui("What changes")}
+            </FieldLabel>
             <FieldDescription>{changeHeadline(changes)}</FieldDescription>
             {changes.removed.length > 0 ? (
               <ActionRows
                 actions={changes.removed}
                 icon={<IconCircleMinus />}
                 note={kindOf}
-                verdict="Turns off"
+                verdict={ui("Turns off")}
                 verdictClassName={TURNS_OFF}
               />
             ) : null}
@@ -353,7 +374,7 @@ export function DescribeGrants({
                 actions={changes.added}
                 icon={<IconCirclePlus />}
                 note={kindOf}
-                verdict="Turns on"
+                verdict={ui("Turns on")}
                 verdictClassName={TURNS_ON}
               />
             ) : null}
@@ -369,7 +390,7 @@ export function DescribeGrants({
       </FieldGroup>
       {save.error ? (
         <p className="mt-5 text-destructive text-sm" role="alert">
-          {save.error.message}
+          {<ErrorDetails error={save.error} />}
         </p>
       ) : null}
       {/*
@@ -380,7 +401,10 @@ export function DescribeGrants({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Let {botName} use the shared {appTitle} account?
+              {uiNodes("Let {{slot0}}use the shared {{slot1}}account?", [
+                botName,
+                appTitle,
+              ])}
             </DialogTitle>
           </DialogHeader>
           <DialogBody className="mt-4">
@@ -388,7 +412,7 @@ export function DescribeGrants({
           </DialogBody>
           {save.error ? (
             <p className="mt-4 text-destructive text-sm" role="alert">
-              {save.error.message}
+              {<ErrorDetails error={save.error} />}
             </p>
           ) : null}
           <DialogFooter className="mt-4">
@@ -397,14 +421,14 @@ export function DescribeGrants({
               size="sm"
               variant="outline"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={save.isPending}
               onClick={() => commit(approval)}
               size="sm"
             >
-              {save.isPending ? "Saving…" : "Allow and save"}
+              {save.isPending ? ui("Saving…") : ui("Allow and save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -423,23 +447,40 @@ function RecentUse({
   appTitle: string;
   botName: string;
 }) {
+  useLocale();
   return (
     <Field aria-labelledby="app-grants-replay" aria-live="polite">
       <FieldLabel id="app-grants-replay">
-        On {botName}'s recent activity
+        {ui("On")} {botName}
+        {ui("'s recent activity")}
       </FieldLabel>
       {report === null ? (
         <FieldDescription>
-          OpenBot keeps no activity it can read here, so there's nothing to test
-          against.
+          {ui(
+            "OpenBot keeps no activity it can read here, so there's nothing to test against.",
+          )}
         </FieldDescription>
       ) : report.calls === 0 ? (
         <FieldDescription>
           {report.runs > 0
-            ? `${botName} hasn't used ${appTitle} in its last ${plural(report.runs, "run")}, so there's nothing to test against.`
-            : `${botName} hasn't used ${appTitle} yet, so there's nothing to test against.`}
+            ? ui(
+                "{{value0}} hasn't used {{value1}} in its last {{value2}}, so there's nothing to test against.",
+                {
+                  value0: String(botName),
+                  value1: String(appTitle),
+                  value2: String(plural(report.runs, "run")),
+                },
+              )
+            : ui(
+                "{{value0}} hasn't used {{value1}} yet, so there's nothing to test against.",
+                { value0: String(botName), value1: String(appTitle) },
+              )}
           {report.addedUnusedWrites.length > 0
-            ? ` This turns on ${plural(report.addedUnusedWrites.length, "write")} it has never used.`
+            ? ui(" This turns on {{value0}} it has never used.", {
+                value0: String(
+                  plural(report.addedUnusedWrites.length, "write"),
+                ),
+              })
             : ""}
         </FieldDescription>
       ) : (
@@ -457,7 +498,7 @@ function RecentUse({
               note={(action) =>
                 `Called ${plural(action.calls, "time")}, last ${relativeTime(action.lastCalled)}.`
               }
-              verdict="Turns off"
+              verdict={ui("Turns off")}
               verdictClassName={TURNS_OFF}
             />
           ) : null}
@@ -468,7 +509,7 @@ function RecentUse({
               note={(action) =>
                 `Refused ${plural(action.calls, "time")} because it didn't have it, last ${relativeTime(action.lastCalled)}.`
               }
-              verdict="Turns on"
+              verdict={ui("Turns on")}
               verdictClassName={TURNS_ON}
             />
           ) : null}
@@ -476,14 +517,19 @@ function RecentUse({
       )}
       {report && report.calls > 0 && report.addedUnusedWrites.length > 0 ? (
         <FieldDescription>
-          {`Writes it has never used: ${report.addedUnusedWrites
-            .slice(0, 5)
-            .map((action) => action.name)
-            .join(", ")}${
-            report.addedUnusedWrites.length > 5
-              ? ` and ${report.addedUnusedWrites.length - 5} more`
-              : ""
-          }.`}
+          {ui("Writes it has never used: {{value0}}{{value1}}.", {
+            value0: String(
+              report.addedUnusedWrites
+                .slice(0, 5)
+                .map((action) => action.name)
+                .join(", "),
+            ),
+            value1: String(
+              report.addedUnusedWrites.length > 5
+                ? ` and ${report.addedUnusedWrites.length - 5} more`
+                : "",
+            ),
+          })}
         </FieldDescription>
       ) : null}
     </Field>

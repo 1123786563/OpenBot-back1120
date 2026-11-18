@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconBook, IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/_authed/_app/bots/")({
 });
 
 function BotsPage() {
+  useLocale();
   const { new: creating } = Route.useSearch();
   const navigate = Route.useNavigate();
   const personal =
@@ -44,16 +46,15 @@ function BotsPage() {
           size="sm"
           variant="ghost"
         >
-          <IconPlus />
-          New Bot
+          {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
         </Button>
       }
       description={
         personal
-          ? "Your Bots for everyday work."
-          : "Manage your Bots and access those shared with you."
+          ? ui("Your Bots for everyday work.")
+          : ui("Manage your Bots and access those shared with you.")
       }
-      title="Bots"
+      title={ui("Bots")}
     >
       <BotRoster />
       {personal ? <WhatYourBotsKnow /> : null}
@@ -88,17 +89,18 @@ function BotsPage() {
  * (see `offersMemory`).
  */
 function WhatYourBotsKnow() {
+  useLocale();
   return (
-    <PageSection title="What your Bots know">
+    <PageSection title={ui("What your Bots know")}>
       <PageRows>
         <Item render={<Link to="/capabilities/skills" />} size="sm">
           <ItemMedia variant="icon">
             <IconBook />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Skills</ItemTitle>
+            <ItemTitle>{ui("Skills")}</ItemTitle>
             <ItemDescription>
-              Step-by-step instructions you wrote or your Bots learned.
+              {ui("Step-by-step instructions you wrote or your Bots learned.")}
             </ItemDescription>
           </ItemContent>
           <ItemActions>

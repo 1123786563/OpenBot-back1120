@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconShare } from "@tabler/icons-react";
 import { PageRows } from "@/components/layout/page-shell";
 import {
@@ -13,10 +14,13 @@ import { ControlsSection } from "./controls-section";
 
 /** Admin, Automatic learning: whether people may open their recorded Skills to every Bot. */
 export function SkillSharingSection() {
+  useLocale();
   return (
     <ControlsSection
-      description="Each person's recordings teach Skills in their own Learning space, and those Skills reach the Bots that person uses. A shared Skill puts its person's recorded and narrated text in front of everybody's Bots."
-      title="Sharing"
+      description={ui(
+        "Each person's recordings teach Skills in their own Learning space, and those Skills reach the Bots that person uses. A shared Skill puts its person's recorded and narrated text in front of everybody's Bots.",
+      )}
+      title={ui("Sharing")}
     >
       {({ data, setSetting, saving }) => (
         <PageRows>
@@ -25,16 +29,20 @@ export function SkillSharingSection() {
               <IconShare />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Skill sharing</ItemTitle>
+              <ItemTitle>{ui("Skill sharing")}</ItemTitle>
               <ItemDescription className="line-clamp-none">
                 {data.settings.skillSharing
-                  ? "People may open their Skills to every Bot in Settings, Learning."
-                  : "Off. Each person's Skills reach only the Bots they use, even Skills they opened before."}
+                  ? ui(
+                      "People may open their Skills to every Bot in Settings, Learning.",
+                    )
+                  : ui(
+                      "Off. Each person's Skills reach only the Bots they use, even Skills they opened before.",
+                    )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Skill sharing"
+                aria-label={ui("Skill sharing")}
                 checked={data.settings.skillSharing}
                 disabled={saving}
                 onCheckedChange={(checked) =>

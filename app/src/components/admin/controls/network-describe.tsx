@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, localeFormatter } from "@/lib/i18n";
 import { IconWorld, IconWorldOff } from "@tabler/icons-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -39,13 +41,16 @@ export function DescribeAllowlist({
 }: {
   onWritten: (written: WrittenAllowlist) => void;
 }) {
+  useLocale();
   return (
     <DescribeField
-      action="Write list"
-      description="Say in a sentence where Bots may connect, and your model writes the list. A second reading that never sees your words says what becomes reachable."
+      action={ui("Write list")}
+      description={ui(
+        "Say in a sentence where Bots may connect, and your model writes the list. A second reading that never sees your words says what becomes reachable.",
+      )}
       id="network-description-english"
-      label="Describe the allowlist"
-      placeholder="Only Salesforce and Google Workspace"
+      label={ui("Describe the allowlist")}
+      placeholder={ui("Only Salesforce and Google Workspace")}
       write={async (described) => {
         const translation = await translateNetworkAllowlist(described);
         onWritten({ ...translation, text: described });
@@ -67,18 +72,21 @@ export function AllowlistReading({
   written: WrittenAllowlist;
   edited: boolean;
 }) {
+  useLocale();
   return (
     <ReadingStatus
       check={written.check}
       edited={
         edited
-          ? "You've changed the list since it was written. The check and the reading above are for the written list, not your edit."
+          ? ui(
+              "You've changed the list since it was written. The check and the reading above are for the written list, not your edit.",
+            )
           : null
       }
       explanation={written.explanation}
-      failed="Some entries aren't valid, so OpenBot won't save the list."
-      heading="What becomes reachable"
-      passed="Every entry is valid. Bot computers can enforce this list."
+      failed={ui("Some entries aren't valid, so OpenBot won't save the list.")}
+      heading={ui("What becomes reachable")}
+      passed={ui("Every entry is valid. Bot computers can enforce this list.")}
       points={written.reachable}
       warning={written.warning}
     />
@@ -99,6 +107,7 @@ export function AllowlistPreview({
   /** The policy as the dialog holds it, or null when there is nothing to compare yet. */
   candidate: NetworkCandidate | null;
 }) {
+  useLocale();
   // Settled by its contents, so a new object holding the same list is not a new replay.
   const key = candidate ? JSON.stringify(candidate) : null;
   const [settledKey, setSettledKey] = useState(key);
@@ -135,36 +144,40 @@ export function AllowlistPreview({
       aria-live="polite"
       className="flex w-full min-w-0 flex-col gap-2 *:w-full"
     >
-      <FieldLabel id="network-preview">On recent page visits</FieldLabel>
+      <FieldLabel id="network-preview">
+        {ui("On recent page visits")}
+      </FieldLabel>
       {preview.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {preview.error.message}
+          {<ErrorDetails error={preview.error} />}
         </p>
       ) : (
         <ReplayAnswer report={preview.data} />
       )}
       <FieldDescription>
-        Only page visits are recorded. Connections a Bot's computer makes in
-        other ways, such as from its shell or a page's own requests, aren't
-        recorded, so they aren't counted here.
+        {ui(
+          "Only page visits are recorded. Connections a Bot's computer makes in other ways, such as from its shell or a page's own requests, aren't recorded, so they aren't counted here.",
+        )}
       </FieldDescription>
     </fieldset>
   );
 }
 
 function ReplayAnswer({ report }: { report: NetworkReplayReport }) {
+  useLocale();
   if (report.scanned === 0)
     return (
       <FieldDescription>
-        No page visits recorded yet. You'll see what this list blocks once Bots
-        have opened pages.
+        {ui(
+          "No page visits recorded yet. You'll see what this list blocks once Bots have opened pages.",
+        )}
       </FieldDescription>
     );
   if (report.covered === 0)
     return (
       <FieldDescription>
-        None of the last {report.scanned} page visits were by Bots this policy
-        applies to.
+        {ui("None of the last")} {report.scanned}{" "}
+        {ui("page visits were by Bots this policy applies to.")}
       </FieldDescription>
     );
   const blocked = report.hosts.filter((host) => host.change === "block");
@@ -177,8 +190,8 @@ function ReplayAnswer({ report }: { report: NetworkReplayReport }) {
           <HostRows hosts={[...blocked, ...allowed]} />
           {report.sites > report.hosts.length ? (
             <p className="mt-2 text-muted-foreground text-xs">
-              Showing the {report.hosts.length} sites with the most visits, of{" "}
-              {report.sites}.
+              {ui("Showing the")} {report.hosts.length}{" "}
+              {ui("sites with the most visits, of")} {report.sites}.
             </p>
           ) : null}
         </div>
@@ -186,10 +199,14 @@ function ReplayAnswer({ report }: { report: NetworkReplayReport }) {
       {report.undecided > 0 ? (
         <FieldDescription>
           {report.undecided === 1
-            ? "1 visit went to a site only an IP range could allow."
-            : `${report.undecided} visits went to sites only an IP range could allow.`}{" "}
-          The computer decides those by address when it connects, so they aren't
-          counted.
+            ? ui("1 visit went to a site only an IP range could allow.")
+            : ui(
+                "{{value0}} visits went to sites only an IP range could allow.",
+                { value0: String(report.undecided) },
+              )}{" "}
+          {ui(
+            "The computer decides those by address when it connects, so they aren't counted.",
+          )}
         </FieldDescription>
       ) : null}
     </div>
@@ -197,14 +214,19 @@ function ReplayAnswer({ report }: { report: NetworkReplayReport }) {
 }
 
 function visits(count: number): string {
-  return count === 1 ? "1 visit" : `${count} visits`;
+  return count === 1
+    ? ui("1 visit")
+    : ui("{{value0}} visits", { value0: String(count) });
 }
 
 /** The headline: of the visits this policy covers, what it would block and let through. */
 function replayWords(report: NetworkReplayReport): string {
   const of = `Of the last ${visits(report.covered)} by Bots this policy applies to,`;
   if (report.wouldBlock === 0 && report.wouldAllow === 0)
-    return `${of} this list changes none. It may still block pages Bots haven't opened yet.`;
+    return ui(
+      "{{value0}} this list changes none. It may still block pages Bots haven't opened yet.",
+      { value0: String(of) },
+    );
   const block =
     report.wouldBlock > 0
       ? `would block ${report.wouldBlock} that ${report.wouldBlock === 1 ? "is" : "are"} allowed today`
@@ -213,16 +235,23 @@ function replayWords(report: NetworkReplayReport): string {
     report.wouldAllow > 0
       ? `would allow ${report.wouldAllow} that ${report.wouldAllow === 1 ? "is" : "are"} blocked today`
       : null;
-  return `${of} this list ${[block, allow].filter(Boolean).join(" and ")}.`;
+  return ui("{{value0}} this list {{value1}}.", {
+    value0: String(of),
+    value1: String([block, allow].filter(Boolean).join(" and ")),
+  });
 }
 
-const WHEN = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-});
+const WHEN = localeFormatter(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, {
+      month: "short",
+      day: "numeric",
+    }),
+);
 
 /** One row per site, the verdict on the right in the Decision column's colours. */
 function HostRows({ hosts }: { hosts: NetworkReplayHost[] }) {
+  useLocale();
   const nameFor = useBotNames();
   return (
     <PageRows>
@@ -232,12 +261,16 @@ function HostRows({ hosts }: { hosts: NetworkReplayHost[] }) {
         const by =
           others.length === 0
             ? first
-            : `${first} and ${others.length} more ${others.length === 1 ? "Bot" : "Bots"}`;
+            : ui("{{value0}} and {{value1}} more {{value2}}", {
+                value0: String(first),
+                value1: String(others.length),
+                value2: String(others.length === 1 ? ui("Bot") : ui("Bots")),
+              });
         return (
           <div key={`${host.change} ${host.host}`}>
             <Item size="sm">
               <ItemMedia
-                aria-label={block ? "Would block" : "Would allow"}
+                aria-label={block ? ui("Would block") : ui("Would allow")}
                 className="translate-y-0.5 self-start"
                 role="img"
                 variant="icon"
@@ -247,9 +280,11 @@ function HostRows({ hosts }: { hosts: NetworkReplayHost[] }) {
               <ItemContent className="min-w-0">
                 <ItemTitle className="break-all">{host.host}</ItemTitle>
                 <ItemDescription>
-                  {visits(host.visits)}
-                  {by ? ` by ${by}` : ""} · last on{" "}
-                  {WHEN.format(new Date(host.lastVisit))}
+                  {uiNodes("{{slot0}}{{slot1}}· last on {{slot2}}", [
+                    visits(host.visits),
+                    by ? ` by ${by}` : "",
+                    WHEN().format(new Date(host.lastVisit)),
+                  ])}
                 </ItemDescription>
               </ItemContent>
               <ItemActions className="self-start">
@@ -260,7 +295,7 @@ function HostRows({ hosts }: { hosts: NetworkReplayHost[] }) {
                       : "font-medium text-emerald-600 text-sm dark:text-emerald-400"
                   }
                 >
-                  {block ? "Would block" : "Would allow"}
+                  {block ? ui("Would block") : ui("Would allow")}
                 </span>
               </ItemActions>
             </Item>

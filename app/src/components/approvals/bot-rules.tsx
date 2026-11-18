@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChecklist } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -24,6 +26,7 @@ import { RuleForm, RuleRow } from "./rules";
  * `botId` is the Bot's id, or a pattern covering it.
  */
 export function BotApprovalRules({ agentId }: { agentId: string }) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const addRule = useMutation(createApprovalRuleMutationOptions(queryClient));
   const changeRule = useMutation(
@@ -47,29 +50,32 @@ export function BotApprovalRules({ agentId }: { agentId: string }) {
     <PageSection
       description={
         <>
-          The strictest matching rule wins. An "ask" rule beats an "allow" rule.
-          Rules for every Bot are in{" "}
+          {ui(
+            'The strictest matching rule wins. An "ask" rule beats an "allow" rule. Rules for every Bot are in',
+          )}{" "}
           <Link
             className="underline underline-offset-4"
             to="/settings/approvals"
           >
-            Settings → Approvals
+            {ui("Settings → Approvals")}
           </Link>
           .
           {rulesOff
-            ? " An admin has turned off personal rules. Yours are kept but don't apply."
+            ? ui(
+                " An admin has turned off personal rules. Yours are kept but don't apply.",
+              )
             : ""}
         </>
       }
-      title="Rules"
+      title={ui("Rules")}
     >
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {saved === 0 ? (
-        <PageEmpty icon={IconChecklist} title="No rules for this Bot" />
+        <PageEmpty icon={IconChecklist} title={ui("No rules for this Bot")} />
       ) : null}
       {saved > 0 || canAdd ? (
         <PageRows>
@@ -106,7 +112,7 @@ export function BotApprovalRules({ agentId }: { agentId: string }) {
               <RuleForm
                 botField={false}
                 forBot={agentId}
-                label="Add a rule"
+                label={ui("Add a rule")}
                 save={addRule}
               />
             </>

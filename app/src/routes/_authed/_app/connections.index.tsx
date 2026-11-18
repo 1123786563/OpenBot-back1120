@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconApps,
   IconBrandGoogleDrive,
@@ -240,6 +241,7 @@ const MARKS: ReadonlyMap<
 const markFor = (key: string) => keyedLookup(MARKS, key);
 
 function RouteComponent() {
+  useLocale();
   const { connected: outcome, authorized, linked } = Route.useSearch();
   /*
    * ALL THREE READ ONCE HERE, AND ALL THREE DROPPED FROM THE URL BELOW — not just `?linked=`.
@@ -408,10 +410,10 @@ function RouteComponent() {
       className="@container"
       description={
         personal
-          ? "Add apps and connect your accounts so your Bots can use them."
-          : "Connect your accounts so Bots can use apps on your behalf."
+          ? ui("Add apps and connect your accounts so your Bots can use them.")
+          : ui("Connect your accounts so Bots can use apps on your behalf.")
       }
-      title="Connections"
+      title={ui("Connections")}
     >
       {/*
        * For `?connected=` only the failure is worth saying. A success needs no sentence: the row it
@@ -420,7 +422,7 @@ function RouteComponent() {
        */}
       {arrival.outcome === "failed" ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't connect that account. Nothing was saved. Try again.
+          {ui("Couldn't connect that account. Nothing was saved. Try again.")}
         </p>
       ) : null}
       {notice ? (
@@ -462,12 +464,13 @@ function RouteComponent() {
          */}
         {loading ? null : plugins.error || connections.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load your connections. Reload the page, or ask an admin if
-            it keeps happening.
+            {ui(
+              "Couldn't load your connections. Reload the page, or ask an admin if it keeps happening.",
+            )}
           </p>
         ) : rows.length === 0 ? (
-          <PageEmpty icon={IconPlug} title="No apps yet">
-            Apps show up here once an admin turns them on.
+          <PageEmpty icon={IconPlug} title={ui("No apps yet")}>
+            {ui("Apps show up here once an admin turns them on.")}
           </PageEmpty>
         ) : (
           <>
@@ -477,19 +480,23 @@ function RouteComponent() {
                   <IconSearch aria-hidden="true" className="size-4" />
                 </InputGroupAddon>
                 <InputGroupInput
-                  aria-label="Search connections"
-                  placeholder="Search connections"
+                  aria-label={ui("Search connections")}
+                  placeholder={ui("Search connections")}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
               </InputGroup>
               <p className="shrink-0 text-xs text-muted-foreground">
-                {inUse} in use · {rows.length} in all
+                {uiNodes("{{slot0}}in use · {{slot1}}in all", [
+                  inUse,
+                  rows.length,
+                ])}
               </p>
             </div>
             {matching.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground" role="status">
-                Nothing matches “{search.trim()}”.
+                {ui("Nothing matches “")}
+                {search.trim()}”.
               </p>
             ) : (
               /*
@@ -546,16 +553,18 @@ function RouteComponent() {
                 type="button"
                 variant="ghost"
               >
-                Show {needingSetup === 1 ? "1 app" : `${needingSetup} apps`}{" "}
-                that need setup
+                {uiNodes("Show {{slot0}} that need setup", [
+                  needingSetup === 1 ? ui("1 app") : `${needingSetup} apps`,
+                ])}
               </Button>
             ) : null}
           </>
         )}
         {links.error || providers.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load GitHub and Slack, so they aren't listed. Reload the
-            page.
+            {ui(
+              "Couldn't load GitHub and Slack, so they aren't listed. Reload the page.",
+            )}
           </p>
         ) : null}
       </PageSection>
@@ -564,16 +573,16 @@ function RouteComponent() {
        * are a way in from beside the apps that use them, in the personal edition.
        */}
       {personal ? (
-        <PageSection title="Sign-ins and keys">
+        <PageSection title={ui("Sign-ins and keys")}>
           <PageRows>
             <Item render={<Link to="/settings/passwords" />} size="sm">
               <ItemMedia variant="icon">
                 <IconLock />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Saved logins</ItemTitle>
+                <ItemTitle>{ui("Saved logins")}</ItemTitle>
                 <ItemDescription>
-                  Website logins you saved when signing a Bot in.
+                  {ui("Website logins you saved when signing a Bot in.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -586,9 +595,9 @@ function RouteComponent() {
                 <IconKey />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Keys</ItemTitle>
+                <ItemTitle>{ui("Keys")}</ItemTitle>
                 <ItemDescription>
-                  API keys and tokens your apps and models use.
+                  {ui("API keys and tokens your apps and models use.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -615,6 +624,7 @@ function ConnectionItem({
   onPress?: () => void;
   pending?: boolean;
 }) {
+  useLocale();
   return (
     <Item
       className="min-h-14 min-w-0 flex-nowrap gap-3 bg-card px-3 py-1.5 text-left"
@@ -657,6 +667,7 @@ function ConnectionMark({
   mark: ConnectionRow["mark"];
   name: string;
 }) {
+  useLocale();
   if (mark.kind === "logo") return <PluginLogo logo={mark.logo} name={name} />;
   const Mark =
     mark.kind === "provider" ? providerIcon(mark.provider) : markFor(mark.key);
@@ -665,7 +676,17 @@ function ConnectionMark({
 }
 
 /** Where a tile stands, or the word for what pressing it does. */
-const ACTION_LABEL = { connect: "Connect", add: "Add", setup: "Set up" };
+const ACTION_LABEL = {
+  get connect() {
+    return ui("Connect");
+  },
+  get add() {
+    return ui("Add");
+  },
+  get setup() {
+    return ui("Set up");
+  },
+};
 
 function ConnectionStateLabel({
   row,
@@ -674,6 +695,7 @@ function ConnectionStateLabel({
   row: ConnectionRow;
   pending: boolean;
 }) {
+  useLocale();
   const { state } = row;
   if (state === "connected") {
     return (
@@ -682,21 +704,25 @@ function ConnectionStateLabel({
           aria-hidden="true"
           className="size-3.5 text-emerald-600 dark:text-emerald-400"
         />
-        {row.noAccount ? "On" : "Connected"}
+        {row.noAccount ? ui("On") : ui("Connected")}
       </span>
     );
   }
   if (state === "team") {
-    return <span className="text-xs text-muted-foreground">Team account</span>;
+    return (
+      <span className="text-xs text-muted-foreground">
+        {ui("Team account")}
+      </span>
+    );
   }
   const pill = (
     <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
       {pending
         ? row.action === "add"
-          ? "Adding…"
-          : "Connecting…"
+          ? ui("Adding…")
+          : ui("Connecting…")
         : state === "needs_reconnect"
-          ? "Reconnect"
+          ? ui("Reconnect")
           : ACTION_LABEL[row.action ?? "connect"]}
     </span>
   );
@@ -708,7 +734,7 @@ function ConnectionStateLabel({
           className="text-xs text-muted-foreground"
           data-testid="tile-not-connected"
         >
-          Not connected
+          {ui("Not connected")}
         </span>
         {pill}
       </span>

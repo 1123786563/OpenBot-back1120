@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -165,7 +166,7 @@ test("a save that fails is said under the field, and the step stays", async () =
 
   fireEvent.click(primary(view));
 
-  expect((await view.findByRole("alert")).textContent).toBe("Save failed");
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe("Save failed");
   expect(finishes).toBe(0);
   expect(primary(view).textContent).toBe("Get started");
   expect((view.getByLabelText("Name") as HTMLInputElement).value).toBe("Sam");
@@ -179,7 +180,7 @@ test("a completion that fails is said under the field too", async () => {
 
   fireEvent.click(primary(view));
 
-  expect((await view.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
     "Onboarding could not be saved",
   );
   expect(primary(view).textContent).toBe("Get started");

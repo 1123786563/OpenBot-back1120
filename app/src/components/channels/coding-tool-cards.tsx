@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconChevronDown,
   IconChevronUp,
@@ -102,6 +103,7 @@ function CodingFrame({
   aside?: ReactNode;
   children?: ReactNode;
 }) {
+  useLocale();
   return (
     <section
       aria-label={label}
@@ -132,6 +134,7 @@ function OutcomeStatus({
   /** The word while it runs: "Running", "Editing", "Writing". */
   running: string;
 }) {
+  useLocale();
   if (outcome.state === "running")
     return (
       <span className="tool-line-running shrink-0 text-xs text-muted-foreground">
@@ -141,15 +144,15 @@ function OutcomeStatus({
   if (outcome.state === "stopped")
     return (
       <span className="shrink-0 text-xs text-muted-foreground">
-        Not completed
+        {ui("Not completed")}
       </span>
     );
   if (outcome.state === "failed")
     return (
       <span className="shrink-0 text-xs text-amber-600 dark:text-amber-500">
         {outcome.exitCode === undefined
-          ? "Didn't work"
-          : `Exit code ${outcome.exitCode}`}
+          ? ui("Didn't work")
+          : ui("Exit code {{value0}}", { value0: String(outcome.exitCode) })}
       </span>
     );
   return null;
@@ -168,6 +171,7 @@ function Folded({
   limit: number;
   children: (shown: number) => ReactNode;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const folds = total > limit + 2;
   return (
@@ -183,8 +187,12 @@ function Folded({
         >
           {open ? <IconChevronUp /> : <IconChevronDown />}
           {open
-            ? "Show less"
-            : `Show ${plural(total - limit, "more line", "more lines")}`}
+            ? ui("Show less")
+            : ui("Show {{value0}}", {
+                value0: String(
+                  plural(total - limit, "more line", "more lines"),
+                ),
+              })}
         </Button>
       ) : null}
     </>
@@ -201,12 +209,13 @@ export function CommandCard({
   command: string | undefined;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   const lines = linesOf(outcome.text);
   return (
     <CodingFrame
       aside={<OutcomeStatus outcome={outcome} running="Running" />}
       icon={<IconTerminal2 className="size-4" />}
-      label="Ran a command"
+      label={ui("Ran a command")}
       title={<span title={command}>{command}</span>}
     >
       {lines.length ? (
@@ -286,6 +295,7 @@ export function DiffCard({
   replaceAll?: boolean;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   const rows: DiffRow[] = [];
   for (const change of changes) {
     if (rows.length) rows.push({ kind: "gap", text: "" });
@@ -300,7 +310,7 @@ export function DiffCard({
         <>
           {replaceAll ? (
             <span className="shrink-0 text-xs text-muted-foreground">
-              All occurrences
+              {ui("All occurrences")}
             </span>
           ) : null}
           {added || removed ? (
@@ -318,7 +328,7 @@ export function DiffCard({
         </>
       }
       icon={<Icon className="size-4" />}
-      label={kind === "write" ? "Wrote a file" : "Edited a file"}
+      label={kind === "write" ? ui("Wrote a file") : ui("Edited a file")}
       title={<span title={path}>{fileName(path)}</span>}
     >
       {rows.length ? (
@@ -357,7 +367,9 @@ export function DiffCard({
                       <span className="flex-1 whitespace-pre pr-3">
                         {row.kind === "same" ? null : (
                           <span className="sr-only">
-                            {row.kind === "add" ? "Added: " : "Removed: "}
+                            {row.kind === "add"
+                              ? ui("Added: ")
+                              : ui("Removed: ")}
                           </span>
                         )}
                         {row.text || " "}
@@ -391,6 +403,7 @@ const TODO_STATES = {
  * ones it has finished.
  */
 export function TodoCard({ todos }: { todos: readonly Todo[] }) {
+  useLocale();
   const done = todos.filter((todo) => todo.status === "completed").length;
   return (
     <GalleryFrame
@@ -400,10 +413,10 @@ export function TodoCard({ todos }: { todos: readonly Todo[] }) {
             done === todos.length && todos.length > 0 ? "positive" : "neutral"
           }
         >
-          {done} of {todos.length}
+          {done} {ui("of")} {todos.length}
         </Badge>
       }
-      title="To-dos"
+      title={ui("To-dos")}
     >
       <ul className="space-y-2">
         {byPosition(todos).map(({ item: todo, key }) => {
@@ -467,6 +480,7 @@ function LookLine({
   /** Whether what came back is worth opening. A task tool's answer only confirms the call. */
   shows?: boolean;
 }) {
+  useLocale();
   const output = shows ? outcome.text.replace(/\s+$/, "") : "";
   return (
     <ToolLine
@@ -518,13 +532,15 @@ function grepFound(text: string, mode: GrepMode): string {
   const trimmed = text.trim();
   const files = mode === "files_with_matches";
   if (!trimmed || /^No (matches|files) found/.test(trimmed))
-    return files ? "Found no files" : "Found no matches";
+    return files ? ui("Found no files") : ui("Found no matches");
   if (files) {
     const found = /^Found (\d+) files?/.exec(trimmed);
     const count = found
       ? Number(found[1])
       : trimmed.split("\n").filter(Boolean).length;
-    return `Found ${plural(count, "file", "files")}`;
+    return ui("Found {{value0}}", {
+      value0: String(plural(count, "file", "files")),
+    });
   }
   const lines = trimmed.split("\n");
   const total = /Found (\d+) total occurrences?/.exec(trimmed);
@@ -539,7 +555,9 @@ function grepFound(text: string, mode: GrepMode): string {
       : lines.filter(
           (line) => line && line !== "--" && !line.startsWith("[Showing"),
         ).length;
-  return `Found ${plural(count, "match", "matches")}`;
+  return ui("Found {{value0}}", {
+    value0: String(plural(count, "match", "matches")),
+  });
 }
 
 function grepWords(
@@ -575,18 +593,39 @@ function globWords(
       outcome.state === "done"
         ? files
           ? `Found ${plural(files, "file", "files")}`
-          : "Found no files"
-        : "Looked for files",
-    doing: "Looking for files",
+          : ui("Found no files")
+        : ui("Looked for files"),
+    doing: ui("Looking for files"),
     detail: pattern,
   };
 }
 
 /** A shell command that only looked, named for what it did; the command is what it was done to. */
 const COMMAND_WORDS: Record<Look, { did: string; doing: string }> = {
-  file: { did: "Read", doing: "Reading" },
-  pattern: { did: "Searched", doing: "Searching" },
-  directory: { did: "Listed", doing: "Listing" },
+  file: {
+    get did() {
+      return ui("Read");
+    },
+    get doing() {
+      return ui("Reading");
+    },
+  },
+  pattern: {
+    get did() {
+      return ui("Searched");
+    },
+    get doing() {
+      return ui("Searching");
+    },
+  },
+  directory: {
+    get did() {
+      return ui("Listed");
+    },
+    get doing() {
+      return ui("Listing");
+    },
+  },
 };
 
 /**
@@ -628,6 +667,7 @@ export function ReadLine({
   path: string | undefined;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   return (
     <LookLine
       {...readWords(path, outcome)}
@@ -648,6 +688,7 @@ export function GrepLine({
   mode: GrepMode | undefined;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   return (
     <LookLine
       {...grepWords(pattern, path, mode, outcome)}
@@ -664,6 +705,7 @@ export function GlobLine({
   pattern: string | undefined;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   return (
     <LookLine
       {...globWords(pattern, outcome)}
@@ -688,6 +730,7 @@ export function TaskLine({
   subject: string | undefined;
   outcome: CodingOutcome;
 }) {
+  useLocale();
   return (
     <LookLine
       detail={subject}

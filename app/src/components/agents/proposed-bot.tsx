@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Badge, GalleryFrame } from "@/components/gallery/frame";
@@ -63,6 +64,7 @@ export function ProposedBotCard({
   result,
   create,
 }: ProposedBotCardProps) {
+  useLocale();
   const [sending, setSending] = useState<"create" | "decline" | null>(null);
   /**
    * A refusal from the server, kept on the card rather than answered with.
@@ -83,7 +85,7 @@ export function ProposedBotCard({
     const madeId = wasCreated(result) ? createdBotIdIn(result) : null;
     return (
       <GalleryFrame
-        action={<Badge tone="neutral">Done</Badge>}
+        action={<Badge tone="neutral">{ui("Done")}</Badge>}
         title={titleFor(args.name, clashes)}
       >
         <p className="text-sm">{result}</p>
@@ -95,7 +97,9 @@ export function ProposedBotCard({
   if (!respond) {
     return (
       <GalleryFrame title={titleFor(args.name, clashes)}>
-        <p className="text-muted-foreground text-sm">Writing the Bot…</p>
+        <p className="text-muted-foreground text-sm">
+          {ui("Writing the Bot…")}
+        </p>
       </GalleryFrame>
     );
   }
@@ -134,33 +138,43 @@ export function ProposedBotCard({
 
   return (
     <GalleryFrame
-      action={<Badge tone="caution">Waiting on you</Badge>}
+      action={<Badge tone="caution">{ui("Waiting on you")}</Badge>}
       caption={
         clashes
-          ? `There's already a ${clashes.title}, and it's ${clashes.ownership === "the deployment's" ? "built into OpenBot" : clashes.ownership}. Two Bots with the same name are hard to tell apart.`
-          : "Nothing is created until you press Create it."
+          ? ui(
+              "There's already a {{value0}}, and it's {{value1}}. Two Bots with the same name are hard to tell apart.",
+              {
+                value0: String(clashes.title),
+                value1: String(
+                  clashes.ownership === "the deployment's"
+                    ? ui("built into OpenBot")
+                    : ui(clashes.ownership),
+                ),
+              },
+            )
+          : ui("Nothing is created until you press Create it.")
       }
       title={titleFor(values.name, clashes)}
     >
       <dl className="grid grid-cols-[minmax(0,7rem)_1fr] gap-x-4 gap-y-1.5 text-sm">
-        <dt className="truncate text-muted-foreground">Name</dt>
+        <dt className="truncate text-muted-foreground">{ui("Name")}</dt>
         <dd className="min-w-0 break-words font-medium">{values.name}</dd>
-        <dt className="truncate text-muted-foreground">Job</dt>
+        <dt className="truncate text-muted-foreground">{ui("Job")}</dt>
         <dd className="min-w-0 break-words">{values.title}</dd>
-        <dt className="truncate text-muted-foreground">Skills</dt>
+        <dt className="truncate text-muted-foreground">{ui("Skills")}</dt>
         <dd className="min-w-0 break-words">
           {skills.length > 0 ? (
             <span className="font-mono text-xs">
               {skills.map((slug) => `/${slug}`).join(", ")}
             </span>
           ) : (
-            <span className="text-muted-foreground">None</span>
+            <span className="text-muted-foreground">{ui("None")}</span>
           )}
         </dd>
       </dl>
 
       <p className="mt-3 text-muted-foreground text-xs">
-        Its instructions. It follows these every time it replies.
+        {ui("Its instructions. It follows these every time it replies.")}
       </p>
       {/*
        * Scrolled rather than clamped, and the distinction is the whole point of the card. A clamp
@@ -172,7 +186,9 @@ export function ProposedBotCard({
       </p>
 
       <p className="mt-2 text-muted-foreground text-xs">
-        It starts private, with no apps. Apps are added on its page afterwards.
+        {ui(
+          "It starts private, with no apps. Apps are added on its page afterwards.",
+        )}
       </p>
 
       {refusal ? (
@@ -188,14 +204,14 @@ export function ProposedBotCard({
           size="sm"
           variant="outline"
         >
-          {sending === "decline" ? "…" : "Don't create"}
+          {sending === "decline" ? "…" : ui("Don't create")}
         </Button>
         <Button
           disabled={Boolean(sending)}
           onClick={() => void make()}
           size="sm"
         >
-          {sending === "create" ? "Creating…" : "Create it"}
+          {sending === "create" ? ui("Creating…") : ui("Create it")}
         </Button>
       </div>
     </GalleryFrame>
@@ -207,7 +223,9 @@ function titleFor(
   clashes: { title: string } | undefined,
 ): string {
   const called = name?.trim() ? name.trim() : "a new Bot";
-  return clashes ? `Create ${called}, again` : `Create ${called}`;
+  return clashes
+    ? ui("Create {{value0}}, again", { value0: String(called) })
+    : ui("Create {{value0}}", { value0: String(called) });
 }
 
 /**
@@ -224,13 +242,14 @@ function TalkToIt({
   agentId: string;
   name: string | undefined;
 }) {
+  useLocale();
   return (
     <Link
       className="mt-2 inline-block text-sm underline underline-offset-4"
       params={{ agentId }}
       to="/bots/$agentId"
     >
-      Open {name?.trim() || "the Bot"}
+      {ui("Open")} {name?.trim() || ui("the Bot")}
     </Link>
   );
 }
@@ -249,6 +268,7 @@ function Unwritable({
   problems: string[];
   respond: (result: unknown) => Promise<void>;
 }) {
+  useLocale();
   /**
    * Answered once, guarded by a ref rather than by the dependency list.
    *
@@ -265,11 +285,11 @@ function Unwritable({
 
   return (
     <GalleryFrame
-      action={<Badge tone="neutral">Not created</Badge>}
-      title="Create a Bot"
+      action={<Badge tone="neutral">{ui("Not created")}</Badge>}
+      title={ui("Create a Bot")}
     >
       <p className="text-sm">
-        This Bot couldn't be created as written. It's being rewritten.
+        {ui("This Bot couldn't be created as written. It's being rewritten.")}
       </p>
     </GalleryFrame>
   );

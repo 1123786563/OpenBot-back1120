@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChannelAvatar } from "@/components/channels/avatar";
@@ -29,6 +30,7 @@ export function RecipientField({
   recipients: readonly Recipient[];
   onChange: (next: Recipient[]) => void;
 }) {
+  useLocale();
   const { data: profiles } = useQuery(agentListQueryOptions());
   const [search, setSearch] = useState("");
 
@@ -43,7 +45,7 @@ export function RecipientField({
   return (
     <div className="border-b border-border px-4 py-2">
       <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center gap-1.5">
-        <span className="text-sm text-muted-foreground">To:</span>
+        <span className="text-sm text-muted-foreground">{ui("To:")}</span>
 
         {recipients.map((recipient) => (
           <Button
@@ -55,16 +57,18 @@ export function RecipientField({
             <ChannelAvatar participantIds={[recipient.id]} size={16} />
             {recipient.name}
             <span aria-hidden>×</span>
-            <span className="sr-only">Remove {recipient.name}</span>
+            <span className="sr-only">
+              {uiNodes("Remove {{slot0}}", [recipient.name])}
+            </span>
           </Button>
         ))}
 
         {isFull ? null : (
           <InputGroup className="h-8 w-56 border-none bg-transparent">
             <InputGroupInput
-              aria-label="Choose a Bot"
+              aria-label={ui("Choose a Bot")}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Choose a Bot…"
+              placeholder={ui("Choose a Bot…")}
               value={search}
             />
             <InputGroupAddon />
@@ -99,7 +103,7 @@ export function RecipientField({
           ))}
           {matches.length === 0 ? (
             <li className="px-2 py-1.5 text-sm text-muted-foreground">
-              No Bot by that name.
+              {ui("No Bot by that name.")}
             </li>
           ) : null}
         </ul>

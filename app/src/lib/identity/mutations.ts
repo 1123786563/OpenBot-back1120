@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 import { identityKeys } from "./queries";
@@ -53,7 +54,7 @@ export function issueSlackCodeMutationOptions() {
       client<SlackLinkCode>("/api/identity/challenges", "challenge", {
         method: "POST",
         body: { provider: "slack" },
-        fallback: "Could not create a Slack link code",
+        fallback: ui("Could not create a Slack link code"),
       }),
   });
 }

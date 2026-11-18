@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -143,7 +144,9 @@ test("reopening Remember a fact after a failure starts clean", async () => {
     "I work from Lisbon.",
   );
   await user.click(view.getByRole("button", { name: "Remember" }));
-  expect((await view.findByRole("alert")).textContent).toBe("Memory is full.");
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
+    "Memory is full.",
+  );
   await user.keyboard("{Escape}");
   await waitFor(() => expect(view.queryByRole("dialog")).toBeNull());
   await user.click(view.getByRole("button", { name: "Remember a fact" }));

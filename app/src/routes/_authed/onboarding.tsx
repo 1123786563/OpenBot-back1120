@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
@@ -109,7 +110,7 @@ export const Route = createFileRoute("/_authed/onboarding")({
 function welcomeStep(computer: boolean): OnboardingStep {
   return {
     id: "welcome",
-    title: `Welcome to ${PRODUCT}`,
+    title: ui("Welcome to {{value0}}", { value0: String(PRODUCT) }),
     intro: () => (
       <StepIntro
         after={
@@ -122,20 +123,24 @@ function welcomeStep(computer: boolean): OnboardingStep {
                 className="text-lg font-semibold text-pretty"
                 id="onboarding-permissions"
               >
-                Choose when Bots ask
+                {ui("Choose when Bots ask")}
               </h2>
               <p className="text-pretty text-muted-foreground">
-                {ALWAYS_ASKS_SHORT}
+                {ui(ALWAYS_ASKS_SHORT)}
               </p>
             </div>
             <AskFirstSwitch />
             <p className="text-sm text-pretty text-muted-foreground">
-              You can change this anytime in Settings.
+              {ui("You can change this anytime in Settings.")}
             </p>
           </section>
         }
       >
-        <p>Give work to Bots in plain words. They tell you when it's done.</p>
+        <p>
+          {ui(
+            "Give work to Bots in plain words. They tell you when it's done.",
+          )}
+        </p>
       </StepIntro>
     ),
     demo: () => <IntroReel computer={computer} />,
@@ -161,6 +166,7 @@ function welcomeStep(computer: boolean): OnboardingStep {
  * opens the OpenBot for Business page in a new tab (on the Desktop, in the person's browser).
  */
 function useBookDemoStep(): OnboardingStep {
+  useLocale();
   const [calendar, setCalendar] = React.useState(false);
   const [failed, setFailed] = React.useState(false);
   const [booked, setBooked] = React.useState(false);
@@ -168,28 +174,28 @@ function useBookDemoStep(): OnboardingStep {
   const book = React.useCallback(() => setBooked(true), []);
   const value: OnboardingStep = {
     id: "selfhost",
-    title: "OpenBot for Business",
+    title: ui("OpenBot for Business"),
     intro: () => (
       <StepIntro>
         <p>
-          Bring {PRODUCT} to your whole team, on your own servers. Everyone
-          signs in with their work account and shares Bots in Slack and
-          Microsoft Teams. Admins get the controls and audit trail your company
-          needs.
+          {uiNodes(
+            "Bring {{slot0}}to your whole team, on your own servers. Everyone signs in with their work account and shares Bots in Slack and Microsoft Teams. Admins get the controls and audit trail your company needs.",
+            [PRODUCT],
+          )}
         </p>
       </StepIntro>
     ),
     demo: () => <SelfHostDemo />,
     primaryLabel: "Book a demo",
     onPrimary: () => setCalendar(true),
-    secondary: { label: "Not now" },
+    secondary: { label: ui("Not now") },
   };
   if (!calendar) return value;
   if (failed) {
     return {
       ...value,
       // A new tab, so booking doesn't cost the place in onboarding, and then on to the next step.
-      primaryLabel: "Book a call",
+      primaryLabel: ui("Book a call"),
       onPrimary: (next) => {
         window.open(BUSINESS_URL, "_blank", "noopener,noreferrer");
         next();
@@ -199,7 +205,9 @@ function useBookDemoStep(): OnboardingStep {
           className="text-sm text-center text-muted-foreground lg:text-left"
           role="status"
         >
-          Couldn't load the calendar. Book a call opens it in your browser.
+          {ui(
+            "Couldn't load the calendar. Book a call opens it in your browser.",
+          )}
         </p>
       ),
     };
@@ -208,18 +216,21 @@ function useBookDemoStep(): OnboardingStep {
     ...value,
     intro: () => (
       <StepIntro>
-        <p>Pick a time to see a demo or scope a proof of concept with us.</p>
+        <p>
+          {ui("Pick a time to see a demo or scope a proof of concept with us.")}
+        </p>
       </StepIntro>
     ),
     demo: () => <BookingCalendar onBooked={book} onFailed={fail} />,
     primaryLabel: undefined,
     onPrimary: undefined,
     primaryHidden: !booked,
-    secondary: booked ? undefined : { label: "Not now" },
+    secondary: booked ? undefined : { label: ui("Not now") },
   };
 }
 
 function RouteComponent() {
+  useLocale();
   const navigate = useNavigate();
   const router = useRouter();
   const location = useLocation();
@@ -368,7 +379,7 @@ function RouteComponent() {
           className="text-sm text-center text-destructive lg:text-left"
           role="alert"
         >
-          Couldn't load your setup. Try again to continue.
+          {ui("Couldn't load your setup. Try again to continue.")}
         </p>
         <Button
           disabled={loadingCapabilities}
@@ -376,7 +387,7 @@ function RouteComponent() {
           size="sm"
           variant="ghost"
         >
-          Try again
+          {ui("Try again")}
         </Button>
       </div>
     ) : undefined;
@@ -385,7 +396,7 @@ function RouteComponent() {
       className="text-sm text-center text-destructive lg:text-left"
       role="alert"
     >
-      Couldn't finish setting up. Try again.
+      {ui("Couldn't finish setting up. Try again.")}
     </p>
   ) : undefined;
 
@@ -410,7 +421,9 @@ function RouteComponent() {
     const out = () => void finish().catch(() => undefined);
     return {
       ...step,
-      primaryLabel: finished ? "All set" : (step.primaryLabel ?? "Get started"),
+      primaryLabel: finished
+        ? ui("All set")
+        : (step.primaryLabel ?? ui("Get started")),
       primaryDone: finished,
       primaryPending: complete.isPending,
       // A step's own primary decides whether it moves on: Book a call does, so it finishes;

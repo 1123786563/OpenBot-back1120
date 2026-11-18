@@ -424,10 +424,12 @@ test("the reading is made from the guidance alone, and says what it changes and 
   mock.clearRequests();
   const empty = await call("/check", "POST", { text: "   " });
   expect(empty.status).toBe(400);
-  expect(await empty.json()).toEqual({ error: "Write the guidance first." });
+  expect(await empty.json()).toMatchObject({
+    error: "Write the guidance first.",
+  });
   const long = await call("", "PUT", { text: "Ask first. ".repeat(200) });
   expect(long.status).toBe(400);
-  expect(await long.json()).toEqual({
+  expect(await long.json()).toMatchObject({
     error: "Keep the guidance under 2,000 characters.",
   });
   expect(prompts()).toHaveLength(0);

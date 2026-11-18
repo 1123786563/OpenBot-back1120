@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { BotOrb } from "@/components/agents/bot-orb";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +35,7 @@ export function ConversationIntro({
     visibility: "public" | "private";
   };
 }) {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const about = [
@@ -67,7 +69,7 @@ export function ConversationIntro({
         {personal ? null : (
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="inline-flex h-6.5 items-center rounded-lg bg-muted px-2.5 font-semibold text-[13px] text-muted-foreground">
-              {agent.visibility === "public" ? "Public" : "Private"}
+              {agent.visibility === "public" ? ui("Public") : ui("Private")}
             </span>
           </div>
         )}
@@ -87,6 +89,7 @@ export function ConversationIntro({
  * line, so the conversation that replaces it moves nothing but the orb and the words coming in.
  */
 export function ConversationIntroPlaceholder() {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   return (

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   RECORDER_DISCLOSURE_TITLE,
   recorderDisclosureFor,
@@ -19,12 +20,14 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
  * Learning space in the personal one, which has no organization.
  */
 export function BrowserSections() {
+  useLocale();
+
   const [thisInstallId, setThisInstallId] = useState<string>();
   const edition = useQuery(deploymentCapabilitiesQueryOptions()).data?.edition;
   return (
     <>
       <PageSection
-        title={RECORDER_DISCLOSURE_TITLE}
+        title={ui(RECORDER_DISCLOSURE_TITLE)}
         description={recorderDisclosureFor(edition)}
       >
         <RecorderCollectsRows />

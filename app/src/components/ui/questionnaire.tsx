@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Questionnaire as QuestionnairePrimitive } from "@shadcn/react/questionnaire";
 import { IconCheck } from "@tabler/icons-react";
 import type * as React from "react";
@@ -8,6 +9,7 @@ function Questionnaire({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Root>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Root
       data-slot="questionnaire"
@@ -21,6 +23,7 @@ function QuestionnaireProgress({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Progress>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Progress
       data-slot="questionnaire-progress"
@@ -37,6 +40,7 @@ function QuestionnaireItem({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Item>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Item
       data-slot="questionnaire-item"
@@ -53,6 +57,7 @@ function QuestionnaireTitle({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Title>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Title
       data-slot="questionnaire-title"
@@ -69,6 +74,7 @@ function QuestionnaireDescription({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Description>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Description
       data-slot="questionnaire-description"
@@ -82,6 +88,7 @@ function QuestionnaireChoices({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Choices>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Choices
       data-slot="questionnaire-choices"
@@ -99,6 +106,7 @@ function QuestionnaireChoice({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Choice>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Choice
       data-slot="questionnaire-choice"
@@ -145,6 +153,7 @@ function QuestionnaireChoiceDescription({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  useLocale();
   return (
     <span
       data-slot="questionnaire-choice-description"
@@ -158,6 +167,7 @@ function QuestionnaireInput({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Input>) {
+  useLocale();
   return (
     <div
       data-slot="questionnaire-input-wrapper"
@@ -180,6 +190,7 @@ function QuestionnaireError({
   className,
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Error>) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Error
       data-slot="questionnaire-error"
@@ -193,6 +204,7 @@ function QuestionnaireActions({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  useLocale();
   return (
     <div
       data-slot="questionnaire-actions"
@@ -213,6 +225,7 @@ function QuestionnairePrevious({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Previous> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Previous
       data-slot="questionnaire-previous"
@@ -225,7 +238,7 @@ function QuestionnairePrevious({
       )}
       {...props}
     >
-      {children ?? "Previous"}
+      {children ?? ui("Previous")}
     </QuestionnairePrimitive.Previous>
   );
 }
@@ -238,6 +251,7 @@ function QuestionnaireSkip({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Skip> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Skip
       data-slot="questionnaire-skip"
@@ -250,7 +264,7 @@ function QuestionnaireSkip({
       )}
       {...props}
     >
-      {children ?? "Skip"}
+      {children ?? ui("Skip")}
     </QuestionnairePrimitive.Skip>
   );
 }
@@ -263,6 +277,7 @@ function QuestionnaireNext({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Next> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Next
       data-slot="questionnaire-next"
@@ -275,7 +290,7 @@ function QuestionnaireNext({
       )}
       {...props}
     >
-      {children ?? "Next"}
+      {children ?? ui("Next")}
     </QuestionnairePrimitive.Next>
   );
 }
@@ -288,6 +303,7 @@ function QuestionnaireSubmit({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Submit> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  useLocale();
   return (
     <QuestionnairePrimitive.Submit
       data-slot="questionnaire-submit"
@@ -300,7 +316,7 @@ function QuestionnaireSubmit({
       )}
       {...props}
     >
-      {children ?? "Submit"}
+      {children ?? ui("Submit")}
     </QuestionnairePrimitive.Submit>
   );
 }

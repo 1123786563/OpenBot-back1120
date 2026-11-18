@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconX } from "@tabler/icons-react";
 
 import { Collapse } from "./collapse";
@@ -37,6 +38,7 @@ export function RejectedFiles({
   onDismiss: () => void;
   rejected: readonly RejectedFile[];
 }) {
+  useLocale();
   return (
     /*
      * Collapsed rather than switched on and off, because this sits directly against the composer:
@@ -84,8 +86,10 @@ export function RejectedFiles({
           <button
             aria-label={
               rejected.length === 1
-                ? "Dismiss this refusal"
-                : `Dismiss these ${rejected.length} refusals`
+                ? ui("Dismiss this refusal")
+                : ui("Dismiss these {{value0}} refusals", {
+                    value0: String(rejected.length),
+                  })
             }
             className="-m-1 shrink-0 rounded p-1 text-destructive/70 transition-colors hover:text-destructive"
             onClick={onDismiss}

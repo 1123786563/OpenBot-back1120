@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { CopilotKitContext } from "@copilotkit/react-core/v2/context";
 import { outcomeForPerson } from "@openbot/shared/approval-outcomes";
 import {
@@ -200,6 +201,7 @@ const NOTHING_DRAWN: readonly { name: string }[] = [];
  * nothing is drawn. A `*` renderer draws every tool it is asked about, so nothing outside MCP folds.
  */
 export function useDrawnTool(): (name: string) => boolean {
+  const interfaceLocale = useLocale();
   const copilotkit = useContext(CopilotKitContext)?.copilotkit;
   const subscribe = useCallback(
     (onChange: () => void) =>
@@ -214,9 +216,10 @@ export function useDrawnTool(): (name: string) => boolean {
     () => copilotkit?.renderToolCalls ?? NOTHING_DRAWN,
   );
   return useMemo(() => {
+    void interfaceLocale;
     const names = new Set(renderers.map((renderer) => renderer.name));
     return names.has("*") ? () => true : (name) => names.has(name);
-  }, [renderers]);
+  }, [renderers, interfaceLocale]);
 }
 
 /**
@@ -397,7 +400,7 @@ function detailsOf(step: ToolItem, folders: FolderNames): StepDetails {
     return {
       id: step.id,
       kind: "browser",
-      label: browser.label ?? "Used the browser",
+      label: browser.label ?? ui("Used the browser"),
       ...(browser.title ? { detail: browser.title } : {}),
       ...(browser.href ? { href: browser.href } : {}),
       pending: browser.pending,
@@ -435,7 +438,7 @@ function detailsOf(step: ToolItem, folders: FolderNames): StepDetails {
   const reason = refusalOf(answer);
   const refused = reason !== undefined;
   // A refusal is said in the person's words, never in the sentence written for the Bot.
-  const body = refused ? outcomeForPerson(reason) : answer;
+  const body = refused ? outcomeForPerson(reason, ui) : answer;
   // A tool whose answer is for the model, not the person; see `ServerToolLine`.
   const own = answersTheModel(name);
   // A tool the Bot was never offered: the runtime's answer lists every tool it has, for the model.
@@ -466,15 +469,15 @@ function detailsOf(step: ToolItem, folders: FolderNames): StepDetails {
       kind: "tool",
       // Beside "Blocked", what was tried: "Save a file", not "Saved a file", which did not happen.
       label:
-        (refused ? ownToolAttempt(name) : null) ??
-        readToolName(name, outcome.pending).label,
+        (refused ? ownToolAttempt(name, ui) : null) ??
+        readToolName(name, outcome.pending, ui).label,
       ...(folderSubject ? { detail: folderSubject } : {}),
       pages: 0,
     };
 
   const [, server = "", ...rest] = name.split("__");
   const role = researchRoleOfTool(server, rest.join("__"));
-  const { label, detail } = readToolName(name);
+  const { label, detail } = readToolName(name, false, ui);
   const urls = role === "fetch" ? urlsOf(args) : [];
   const sources =
     role && !outcome.failed && !refused && body
@@ -517,7 +520,7 @@ function detailsOf(step: ToolItem, folders: FolderNames): StepDetails {
     kind: "connector",
     ...(detail ? { detail } : {}),
     pages: 0,
-    connector: connectorName(server),
+    connector: connectorName(server, ui),
   };
 }
 
@@ -551,7 +554,7 @@ function subtaskDetails(
   return {
     id: step.id,
     kind: "subtask",
-    label: "Subtask",
+    label: ui("Subtask"),
     ...(task ? { detail: task } : {}),
     pending: answer === undefined,
     failed:
@@ -572,7 +575,10 @@ function subtaskDetails(
 
 function joinPhrases(phrases: string[]): string {
   if (phrases.length <= 1) return phrases[0] ?? "";
-  return `${phrases.slice(0, -1).join(", ")} and ${phrases.at(-1)}`;
+  return ui("{{value0}} and {{value1}}", {
+    value0: String(phrases.slice(0, -1).join(", ")),
+    value1: String(phrases.at(-1)),
+  });
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -666,6 +672,7 @@ export function StepIcon({
   kind: StepKind;
   size?: string;
 }) {
+  useLocale();
   const Icon = KIND_ICONS[kind];
   return <Icon aria-hidden className={`${size} shrink-0`} stroke={2} />;
 }
@@ -677,6 +684,7 @@ export function StepIcon({
  * and a magnifying glass with its handle cut off reads as the letter C.
  */
 function IconStack({ kinds }: { kinds: StepKind[] }) {
+  useLocale();
   return (
     <span aria-hidden className="flex items-center">
       {kinds.map((kind, index) => (
@@ -701,18 +709,19 @@ export function StepStatus({
   step: StepDetails;
   active: boolean;
 }) {
+  useLocale();
   if (step.pending)
     return (
       <span className="shrink-0 text-muted-foreground">
-        {active ? "In progress" : "Not completed"}
+        {active ? ui("In progress") : ui("Not completed")}
       </span>
     );
   if (step.refused)
-    return <span className="shrink-0 text-destructive">Blocked</span>;
+    return <span className="shrink-0 text-destructive">{ui("Blocked")}</span>;
   if (step.failed)
     return (
       <span className="shrink-0 text-amber-600 dark:text-amber-500">
-        Didn't work
+        {ui("Didn't work")}
       </span>
     );
   return null;
@@ -726,6 +735,7 @@ export function StepRow({
   step: StepDetails;
   active: boolean;
 }) {
+  useLocale();
   if (step.kind === "subtask")
     return <SubtaskStep active={active} step={step} />;
   /*
@@ -758,7 +768,7 @@ export function StepRow({
   const reason =
     step.failed && step.kind === "browser" ? (
       <p className="mt-0.5 pl-6 text-destructive">
-        {step.reason ?? "Couldn't finish this step."}
+        {step.reason ?? ui("Couldn't finish this step.")}
       </p>
     ) : null;
   // A browser step says everything it has in its line. Anything else opens to what it was given
@@ -826,6 +836,7 @@ export function StepOutput({
   output: string;
   verbatim?: boolean;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
   const measure = useCallback((element: HTMLDivElement | null) => {
@@ -861,7 +872,7 @@ export function StepOutput({
           onClick={() => setOpen(!open)}
           type="button"
         >
-          {open ? "Show less" : "Show all"}
+          {open ? ui("Show less") : ui("Show all")}
         </button>
       ) : null}
     </div>
@@ -876,6 +887,7 @@ export function ToolActivity({
   /** This is the newest row of a turn still in flight, so a step without a result is running. */
   active: boolean;
 }) {
+  useLocale();
   const folders = useContext(FolderNamesContext);
   const steps = group.steps.map(stepDetailsIn(folders));
   const running = active && steps.some((step) => step.pending);
@@ -894,8 +906,10 @@ export function ToolActivity({
         label={
           running && working
             ? working === 1
-              ? "Working on a subtask…"
-              : `Working on ${working} subtasks…`
+              ? ui("Working on a subtask…")
+              : ui("Working on {{value0}} subtasks…", {
+                  value0: String(working),
+                })
             : running && current
               ? `${current.label}…`
               : summarise(steps)

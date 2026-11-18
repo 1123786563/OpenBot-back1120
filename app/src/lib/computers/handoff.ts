@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type {
   BrowserChallenge,
   HandoffRequest,
@@ -113,8 +114,9 @@ export async function awaitHandoff(
             ok: false,
             requestId,
             reconnecting: true,
-            reason:
+            reason: ui(
               "The handoff could not be reached. Reopen this conversation and use Resume task to check this request again.",
+            ),
           };
         await pause(pollMs, signal);
         continue;
@@ -124,8 +126,9 @@ export async function awaitHandoff(
         return {
           ok: false,
           requestId,
-          reason:
+          reason: ui(
             "The computer did not return the requested handoff. Nothing has been marked complete.",
+          ),
         };
       lastRequest = state.request;
       if (lastRequest.status === "completed") {
@@ -148,8 +151,9 @@ export async function awaitHandoff(
             return {
               ok: false,
               requestId,
-              reason:
+              reason: ui(
                 "The completed request still reports an active challenge. Check the browser before continuing.",
+              ),
             };
           rememberHandoff(
             botId,
@@ -191,7 +195,7 @@ export async function awaitHandoff(
         ok: false,
         stopped: true,
         requestId,
-        reason: "The waiting view disconnected.",
+        reason: ui("The waiting view disconnected."),
       };
     const current = await readControl(
       botId,
@@ -207,8 +211,9 @@ export async function awaitHandoff(
       ok: false,
       stopped: true,
       requestId,
-      reason:
+      reason: ui(
         "Stopped waiting. A person who has control keeps it until they hand back.",
+      ),
     };
   } finally {
     const remaining = (active.get(identity) ?? 1) - 1;
@@ -247,7 +252,7 @@ export async function runHelpRequest(
   if (!request)
     return {
       ok: false,
-      reason: "The computer did not identify the handoff request.",
+      reason: ui("The computer did not identify the handoff request."),
     };
   rememberHandoff(botId, request.id, toolCallId);
   return awaitHandoff(botId, request.id, signal);

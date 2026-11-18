@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   describeApproval,
   type SharedUseApproval,
@@ -9,8 +10,8 @@ export function sharedSectionSentence(
 ): string | null {
   if (!shared) return null;
   return effect === "write"
-    ? "Anyone who can use this Bot can do this as the shared account."
-    : "Anyone who can use this Bot can read what this account can read.";
+    ? ui("Anyone who can use this Bot can do this as the shared account.")
+    : ui("Anyone who can use this Bot can read what this account can read.");
 }
 
 /**
@@ -25,24 +26,33 @@ export function SharedApprovalFields({
   value: SharedUseApproval;
   onChange: (next: SharedUseApproval) => void;
 }) {
+  useLocale();
   const named = value.audience === "people" || value.members.length > 0;
   const options: { audience: SharedUseApproval["audience"]; label: string }[] =
     [
-      { audience: "owner", label: "Only its owner" },
+      { audience: "owner", label: ui("Only its owner") },
       ...(named
         ? [
             {
               audience: "people" as const,
-              label: `Named: ${describeApproval({ ...value, audience: "people", outsideInput: false })}`,
+              label: ui("Named: {{value0}}", {
+                value0: String(
+                  describeApproval({
+                    ...value,
+                    audience: "people",
+                    outsideInput: false,
+                  }),
+                ),
+              }),
             },
           ]
         : []),
-      { audience: "team", label: "Everyone" },
+      { audience: "team", label: ui("Everyone") },
     ];
   return (
     <fieldset className="space-y-2 text-sm">
       <legend className="font-medium">
-        Who can use the shared account through this Bot
+        {ui("Who can use the shared account through this Bot")}
       </legend>
       {options.map((option) => (
         <label className="flex items-center gap-2" key={option.audience}>
@@ -63,13 +73,14 @@ export function SharedApprovalFields({
       ))}
       <label className="flex items-center gap-2">
         <input
+          key="slot0"
           checked={value.outsideInput}
           onChange={(event) =>
             onChange({ ...value, outsideInput: event.target.checked })
           }
           type="checkbox"
         />
-        Messages from outside (email, Slack, webhooks) can use it
+        {ui("Messages from outside (email, Slack, webhooks) can use it")}
       </label>
     </fieldset>
   );

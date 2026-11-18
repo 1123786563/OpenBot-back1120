@@ -1,4 +1,6 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
 // app/src/components/plugins/account-mode-dialog.tsx
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +39,7 @@ export function AccountModeDialog({
   onOpenChange: (open: boolean) => void;
   names?: Record<string, string>;
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   /**
    * Kept out of the `["plugins", …]` family on purpose. `invalidatePlugins` — which every plugin
@@ -70,17 +73,21 @@ export function AccountModeDialog({
         <DialogHeader>
           <DialogTitle>
             {target === "shared"
-              ? `Share one ${title} account?`
-              : `Give everyone their own ${title} account?`}
+              ? ui("Share one {{value0}} account?", { value0: String(title) })
+              : ui("Give everyone their own {{value0}} account?", {
+                  value0: String(title),
+                })}
           </DialogTitle>
           <DialogDescription>
-            {preview.data ? goes : "Checking what this would change…"}
+            {preview.data ? goes : ui("Checking what this would change…")}
           </DialogDescription>
         </DialogHeader>
         {target === "shared" ? (
           <div className="mt-4 space-y-3 text-sm">
             <p>
-              Everyone using a Bot with this app will act as this one account.
+              {ui(
+                "Everyone using a Bot with this app will act as this one account.",
+              )}
             </p>
             {preview.data?.bots.length ? (
               <ul className="space-y-1">
@@ -98,7 +105,7 @@ export function AccountModeDialog({
         ) : null}
         {preview.error || change.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            {(change.error ?? preview.error)?.message}
+            {<ErrorDetails error={change.error ?? preview.error} />}
           </p>
         ) : null}
         <DialogFooter className="mt-4">
@@ -107,7 +114,7 @@ export function AccountModeDialog({
             size="sm"
             variant="outline"
           >
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={!preview.data || change.isPending}

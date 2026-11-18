@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { z } from "zod";
 import type { GalleryComponent } from "@/lib/copilot/gallery-registry";
 import { Badge, FigureLink, GalleryFrame, type Tone } from "./frame";
@@ -35,6 +36,7 @@ export function RecordCard({
   statusTone,
   fields: given,
 }: Partial<z.infer<typeof RecordCardProps>>) {
+  useLocale();
   const fields = given ?? [];
   return (
     <GalleryFrame
@@ -92,6 +94,7 @@ export function MetricsCard({
   caption,
   metrics: given,
 }: Partial<z.infer<typeof MetricsCardProps>>) {
+  useLocale();
   const metrics = given ?? [];
   return (
     <GalleryFrame caption={caption} title={title}>
@@ -146,6 +149,7 @@ export function ChecklistCard({
   caption,
   items: given,
 }: Partial<z.infer<typeof ChecklistCardProps>>) {
+  useLocale();
   const items = given ?? [];
   const done = items.filter((item) => item.done).length;
   return (
@@ -156,7 +160,7 @@ export function ChecklistCard({
             done === items.length && items.length > 0 ? "positive" : "neutral"
           }
         >
-          {done} of {items.length}
+          {done} {ui("of")} {items.length}
         </Badge>
       }
       caption={caption}
@@ -182,7 +186,7 @@ export function ChecklistCard({
             <div className="min-w-0">
               <div className={item.done ? "text-muted-foreground" : ""}>
                 <span className="sr-only">
-                  {item.done ? "Done: " : "To do: "}
+                  {item.done ? ui("Done: ") : ui("To do: ")}
                 </span>
                 <GalleryMarkdown>{item.text}</GalleryMarkdown>
               </div>
@@ -216,9 +220,9 @@ export const NoticeCardProps = z.object({
 function noticeBadge(tone: string | undefined): string | null {
   switch (tone) {
     case "positive":
-      return "Good news";
+      return ui("Good news");
     case "caution":
-      return "Heads up";
+      return ui("Heads up");
     case "negative":
       return "Problem";
     default:
@@ -232,6 +236,7 @@ export function NoticeCard({
   tone: noticeTone,
   points,
 }: Partial<z.infer<typeof NoticeCardProps>>) {
+  useLocale();
   const badge = noticeBadge(noticeTone);
   return (
     <GalleryFrame
@@ -260,47 +265,88 @@ export function NoticeCard({
 export const GALLERY: GalleryComponent[] = [
   {
     name: "showRecord",
-    title: "Record",
+    get title() {
+      return ui("Record");
+    },
     kind: "card",
-    summary:
-      "Shows one thing and its details, such as an order, a person or a ticket.",
-    description:
-      "Show one thing and its fields, an order, a person, a ticket. Use when there are several fields worth reading side by side; a fact or two about it belong in a Markdown reply.",
+    get summary() {
+      return ui(
+        "Shows one thing and its details, such as an order, a person or a ticket.",
+      );
+    },
+    get description() {
+      return "Show one thing and its fields, an order, a person, a ticket. Use when there are several fields worth reading side by side; a fact or two about it belong in a Markdown reply.";
+    },
     parameters: RecordCardProps,
     Component: RecordCard as GalleryComponent["Component"],
     preview: {
-      title: "Invoice 2043",
+      get title() {
+        return ui("Invoice 2043");
+      },
       subtitle: "Northwind Traders",
       status: "Approved",
       fields: [
-        { label: "Amount", value: "$4,280.00" },
-        { label: "Raised", value: "12 March" },
-        { label: "Owner", value: "Priya Raman" },
+        {
+          get label() {
+            return ui("Amount");
+          },
+          value: "$4,280.00",
+        },
+        {
+          get label() {
+            return ui("Raised");
+          },
+          value: "12 March",
+        },
+        {
+          get label() {
+            return ui("Owner");
+          },
+          value: "Priya Raman",
+        },
       ],
     },
     confirmation: "The record is now on screen for the person.",
   },
   {
     name: "showMetrics",
-    title: "Headline figures",
+    get title() {
+      return ui("Headline figures");
+    },
     kind: "card",
-    summary: "Shows up to six headline figures and how each one has changed.",
-    description:
-      "Show up to six headline figures, each with an optional movement. Use for figures somebody reads at a glance, not for a written summary. A figure may link to the page it came from, such as the record or the report, when you have that address; never make one up.",
+    get summary() {
+      return ui(
+        "Shows up to six headline figures and how each one has changed.",
+      );
+    },
+    get description() {
+      return "Show up to six headline figures, each with an optional movement. Use for figures somebody reads at a glance, not for a written summary. A figure may link to the page it came from, such as the record or the report, when you have that address; never make one up.";
+    },
     parameters: MetricsCardProps,
     Component: MetricsCard as GalleryComponent["Component"],
     preview: {
-      title: "This month",
+      get title() {
+        return ui("This month");
+      },
       metrics: [
         {
-          label: "Revenue",
+          get label() {
+            return ui("Revenue");
+          },
           value: "$412k",
           change: "+12% on last month",
           changeTone: "positive",
         },
-        { label: "Open deals", value: "38" },
         {
-          label: "Churn",
+          get label() {
+            return ui("Open deals");
+          },
+          value: "38",
+        },
+        {
+          get label() {
+            return ui("Churn");
+          },
           value: "1.4%",
           change: "+0.3pt",
           changeTone: "caution",
@@ -311,16 +357,24 @@ export const GALLERY: GalleryComponent[] = [
   },
   {
     name: "showChecklist",
-    title: "Checklist",
+    get title() {
+      return ui("Checklist");
+    },
     kind: "card",
-    summary:
-      "Shows the steps of a piece of work and which ones are done, such as a release plan.",
-    description:
-      "Show the tasks or steps of a piece of work and which are finished, such as a release plan or an onboarding list. Only for work somebody ticks off. Not for presenting information: findings, options, recommendations and ordinary lists of points belong in a Markdown reply. The person cannot tick these here, so do not use it to ask for anything.",
+    get summary() {
+      return ui(
+        "Shows the steps of a piece of work and which ones are done, such as a release plan.",
+      );
+    },
+    get description() {
+      return "Show the tasks or steps of a piece of work and which are finished, such as a release plan or an onboarding list. Only for work somebody ticks off. Not for presenting information: findings, options, recommendations and ordinary lists of points belong in a Markdown reply. The person cannot tick these here, so do not use it to ask for anything.";
+    },
     parameters: ChecklistCardProps,
     Component: ChecklistCard as GalleryComponent["Component"],
     preview: {
-      title: "Before the release",
+      get title() {
+        return ui("Before the release");
+      },
       items: [
         { text: "Migrations applied", done: true },
         { text: "Changelog written", done: true },
@@ -331,16 +385,24 @@ export const GALLERY: GalleryComponent[] = [
   },
   {
     name: "showNotice",
-    title: "Notice",
+    get title() {
+      return ui("Notice");
+    },
     kind: "card",
-    summary:
-      "Shows a headline with a short explanation and a few supporting points.",
-    description:
-      "Show a distinct actionable alert needing the person's attention, such as a failed scheduled task requiring intervention or a new issue blocking their work. Also use when the person explicitly asks for a notice card. Answer ordinary questions, explanations, summaries, recommendations and short lists directly in Markdown, including important emails or deadlines. Importance, a caveat or several paragraphs alone does not justify a notice. Do not use this to wrap or repeat a routine answer. Body and supporting points support Markdown.",
+    get summary() {
+      return ui(
+        "Shows a headline with a short explanation and a few supporting points.",
+      );
+    },
+    get description() {
+      return "Show a distinct actionable alert needing the person's attention, such as a failed scheduled task requiring intervention or a new issue blocking their work. Also use when the person explicitly asks for a notice card. Answer ordinary questions, explanations, summaries, recommendations and short lists directly in Markdown, including important emails or deadlines. Importance, a caveat or several paragraphs alone does not justify a notice. Do not use this to wrap or repeat a routine answer. Body and supporting points support Markdown.";
+    },
     parameters: NoticeCardProps,
     Component: NoticeCard as GalleryComponent["Component"],
     preview: {
-      title: "Certificate expires in 30 days",
+      get title() {
+        return ui("Certificate expires in 30 days");
+      },
       body: "The checkout certificate has an owner now, and this is the first of the new alerts.",
       tone: "caution",
       points: ["Owner: Platform", "Renews automatically once approved"],

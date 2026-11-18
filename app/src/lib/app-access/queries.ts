@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -154,7 +155,7 @@ export function giveableAppsQueryOptions() {
     queryKey: appAccessKeys.giveable,
     queryFn: (): Promise<GiveableApp[]> =>
       client("/api/plugins/giveable", "apps", {
-        fallback: "Couldn't load your apps.",
+        fallback: ui("Couldn't load your apps."),
       }),
   });
 }
@@ -165,7 +166,7 @@ export function botAppsQueryOptions(agentId: string) {
     queryKey: appAccessKeys.bot(agentId),
     queryFn: (): Promise<AppAccess[]> =>
       client(`/api/plugins/for/${encodeURIComponent(agentId)}/apps`, "apps", {
-        fallback: "This Bot's apps could not be loaded.",
+        fallback: ui("This Bot's apps could not be loaded."),
       }),
   });
 }
@@ -181,7 +182,11 @@ export function botAppQueryOptions(agentId: string, app: string) {
       client(
         `/api/plugins/for/${encodeURIComponent(agentId)}/apps/${encodeURIComponent(app)}`,
         "app",
-        { fallback: `What ${app} is for this Bot could not be loaded.` },
+        {
+          fallback: ui("What {{value0}} is for this Bot could not be loaded.", {
+            value0: String(app),
+          }),
+        },
       ),
   });
 }
@@ -197,7 +202,7 @@ export function appAccessInboxQueryOptions(enabled: boolean, app?: string) {
     queryFn: async (): Promise<AppAccessInbox> => {
       const query = app ? `?app=${encodeURIComponent(app)}` : "";
       const response = await client(`/api/plugins/access-requests${query}`, {
-        fallback: "Access requests could not be loaded.",
+        fallback: ui("Access requests could not be loaded."),
       });
       return response.json();
     },

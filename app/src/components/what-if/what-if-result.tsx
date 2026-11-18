@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   WhatIfLayer,
   WhatIfLayerId,
@@ -58,40 +59,77 @@ const ICONS: Record<
 
 /** What the row's detail line is about, by control. */
 const BASIS_WORDS: Record<WhatIfLayerId, string> = {
-  grant: "Not given",
-  app_allowlist: "Setting",
-  capabilities: "Permission",
-  network: "Allowlist",
-  boundaries: "Rule",
-  safety: "Why",
-  approvals: "Rule",
+  get grant() {
+    return ui("Not given");
+  },
+  get app_allowlist() {
+    return ui("Setting");
+  },
+  get capabilities() {
+    return ui("Permission");
+  },
+  get network() {
+    return ui("Allowlist");
+  },
+  get boundaries() {
+    return ui("Rule");
+  },
+  get safety() {
+    return ui("Why");
+  },
+  get approvals() {
+    return ui("Rule");
+  },
 };
 
 /** The page each control's setting is on, as the sidebar names it. */
 const PAGE_WORDS: Record<NonNullable<WhatIfLayer["page"]>, string> = {
-  "/admin/plugins": "Open Plugins",
-  "/admin/permissions": "Open Permissions",
-  "/admin/computers": "Open Computers",
-  "/admin/boundaries": "Open Boundaries",
-  "/admin/approvals": "Open Approvals",
+  get "/admin/plugins"() {
+    return ui("Open Plugins");
+  },
+  get "/admin/permissions"() {
+    return ui("Open Permissions");
+  },
+  get "/admin/computers"() {
+    return ui("Open Computers");
+  },
+  get "/admin/boundaries"() {
+    return ui("Open Boundaries");
+  },
+  get "/admin/approvals"() {
+    return ui("Open Approvals");
+  },
 };
 
 const VERDICTS: Record<WhatIfVerdict, { label: string; tone: string }> = {
   allows: {
-    label: "Allows",
+    get label() {
+      return ui("Allows");
+    },
     tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
-  refuses: { label: "Refuses", tone: "bg-destructive/10 text-destructive" },
+  refuses: {
+    get label() {
+      return ui("Refuses");
+    },
+    tone: "bg-destructive/10 text-destructive",
+  },
   asks: {
-    label: "Asks first",
+    get label() {
+      return ui("Asks first");
+    },
     tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   hands_off: {
-    label: "Hands off",
+    get label() {
+      return ui("Hands off");
+    },
     tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   trial: {
-    label: "Would refuse",
+    get label() {
+      return ui("Would refuse");
+    },
     tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
 };
@@ -114,22 +152,30 @@ export const OUTCOMES: Record<
   }
 > = {
   allowed: {
-    label: "Allowed",
+    get label() {
+      return ui("Allowed");
+    },
     icon: IconCircleCheck,
     tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
   refused: {
-    label: "Refused",
+    get label() {
+      return ui("Refused");
+    },
     icon: IconBan,
     tone: "bg-destructive/10 text-destructive",
   },
   asks: {
-    label: "Asks first",
+    get label() {
+      return ui("Asks first");
+    },
     icon: IconMessageQuestion,
     tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
   hands_off: {
-    label: "Person does it",
+    get label() {
+      return ui("Person does it");
+    },
     icon: IconHandStop,
     tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
@@ -139,6 +185,7 @@ const LINK =
   "rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:underline focus-visible:ring-3 focus-visible:ring-ring";
 
 export function VerdictPill({ verdict }: { verdict: WhatIfVerdict }) {
+  useLocale();
   const { label, tone } = VERDICTS[verdict];
   return (
     <span
@@ -154,6 +201,7 @@ export function VerdictPill({ verdict }: { verdict: WhatIfVerdict }) {
 }
 
 function LayerRow({ layer }: { layer: WhatIfLayer }) {
+  useLocale();
   const Icon = ICONS[layer.id];
   const hasFooter = layer.basis || layer.rule || layer.caveat || layer.page;
   return (
@@ -176,11 +224,11 @@ function LayerRow({ layer }: { layer: WhatIfLayer }) {
           {layer.title}
           {layer.decides ? (
             <span className="ms-2 whitespace-nowrap font-medium text-foreground text-xs">
-              Decides
+              {ui("Decides")}
             </span>
           ) : layer.unreached ? (
             <span className="ms-2 whitespace-nowrap font-normal text-muted-foreground text-xs">
-              Not reached
+              {ui("Not reached")}
             </span>
           ) : null}
         </ItemTitle>
@@ -237,6 +285,7 @@ export function WhatIfResultView({
   result: WhatIfResult;
   inDialog?: boolean;
 }) {
+  useLocale();
   const outcome = OUTCOMES[result.outcome];
   const decider = result.layers.find((layer) => layer.decides);
   const rows = cn(inDialog && "bg-muted dark:bg-muted");
@@ -254,7 +303,11 @@ export function WhatIfResultView({
             <ItemTitle className="line-clamp-none">{outcome.label}</ItemTitle>
             <ItemDescription className="line-clamp-none">
               {decider
-                ? `${decider.title} decide${decider.title.endsWith("s") ? "" : "s"}. ${decider.summary}`
+                ? ui("{{value0}} decide{{value1}}. {{value2}}", {
+                    value0: String(decider.title),
+                    value1: String(decider.title.endsWith("s") ? "" : "s"),
+                    value2: String(decider.summary),
+                  })
                 : result.headline.replace(/^[^.]*\.\s*/, "")}
             </ItemDescription>
           </ItemContent>
@@ -271,13 +324,15 @@ export function WhatIfResultView({
       <div className="mt-3 flex flex-col gap-1.5 text-muted-foreground text-xs">
         {result.notApplicable.length > 0 ? (
           <p>
-            Doesn't apply to this kind of action:{" "}
+            {ui("Doesn't apply to this kind of action:")}{" "}
             {result.notApplicable.join(", ")}.
           </p>
         ) : null}
         {result.notChecked.length > 0 ? (
           <div>
-            <p>Not checked here, because only a real action shows it:</p>
+            <p>
+              {ui("Not checked here, because only a real action shows it:")}
+            </p>
             <ul className="mt-1 list-disc ps-4">
               {result.notChecked.map((line) => (
                 <li key={line}>{line}</li>

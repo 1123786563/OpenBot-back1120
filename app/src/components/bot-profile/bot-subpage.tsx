@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import type * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
@@ -23,12 +24,13 @@ export function BotSubpage({
   action?: React.ReactNode;
   children: (agent: AgentProfile) => React.ReactNode;
 }) {
+  useLocale();
   const agent = useQuery(agentQueryOptions(agentId));
   return (
     <PageShell
       action={action}
       backButton={{
-        label: agent.data?.name ?? "Bot",
+        label: agent.data?.name ?? ui("Bot"),
         linkProps: { params: { agentId }, to: "/bots/$agentId" },
       }}
       description={description}
@@ -36,7 +38,7 @@ export function BotSubpage({
     >
       {agent.isPending ? null : agent.error ? (
         <p className="mt-6 text-destructive text-sm" role="alert">
-          Couldn't open this Bot. It may not be shared with you.
+          {ui("Couldn't open this Bot. It may not be shared with you.")}
         </p>
       ) : (
         children(agent.data)

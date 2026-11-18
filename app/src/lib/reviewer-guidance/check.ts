@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { client } from "@/lib/client";
 import type { GuidanceBacktest } from "./queries";
 
@@ -24,7 +25,7 @@ export async function checkReviewerGuidance(
   const response = await client("/api/approvals/team/guidance/check", {
     method: "POST",
     body: { text },
-    fallback: "Couldn't check the guidance. Try again.",
+    fallback: ui("Couldn't check the guidance. Try again."),
   });
   return (await response.json()) as GuidanceReading;
 }
@@ -39,7 +40,7 @@ export async function backtestReviewerGuidance(
   const response = await client("/api/approvals/team/guidance/backtest", {
     method: "POST",
     body: { text },
-    fallback: "Couldn't test the guidance on recent requests.",
+    fallback: ui("Couldn't test the guidance on recent requests."),
   });
   return (await response.json()) as GuidanceBacktest;
 }

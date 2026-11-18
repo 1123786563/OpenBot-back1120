@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconCheck,
   IconChevronDown,
@@ -96,6 +97,7 @@ export function OnboardingFrame({
   /** Below `lg`, the picture above the heading. */
   demoFirst?: boolean;
 }) {
+  useLocale();
   const total = titles.length;
   const shape =
     "h-[52px] w-full rounded-full px-5 text-sm font-semibold lg:h-10 lg:w-auto lg:min-w-32 lg:rounded-lg";
@@ -119,7 +121,7 @@ export function OnboardingFrame({
         <div className="relative flex h-[68px] items-center justify-center px-[76px] lg:hidden">
           {index > 0 ? (
             <button
-              aria-label="Back"
+              aria-label={ui("Back")}
               className="bg-background/80 backdrop-blur absolute left-4 grid size-11 place-items-center rounded-full text-foreground ring-1 ring-border shadow-lg outline-none transition-transform focus-visible:ring-3 focus-visible:ring-ring active:scale-95 motion-reduce:transition-none"
               data-onboarding-back="phone"
               onClick={onBack}
@@ -202,7 +204,7 @@ export function OnboardingFrame({
                 type="button"
               >
                 <IconChevronLeft className="size-4" />
-                Back
+                {ui("Back")}
               </button>
             ) : null}
             {primary ? (
@@ -284,6 +286,7 @@ function StepMenu({
   reached: number;
   onPick: (index: number) => void;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   return (
     <Popover onOpenChange={setOpen} open={open}>
@@ -294,14 +297,14 @@ function StepMenu({
         )}
         data-onboarding-steps=""
       >
-        Step {index + 1} of {titles.length}
+        {ui("Step")} {index + 1} {ui("of")} {titles.length}
         <IconChevronDown aria-hidden className="size-3.5" />
       </PopoverTrigger>
       <PopoverContent align="end" className="w-88 gap-1 p-1.5">
         <PopoverTitle className="text-xs px-2 pt-1 text-muted-foreground">
-          Steps
+          {ui("Steps")}
         </PopoverTitle>
-        <nav aria-label="Onboarding steps">
+        <nav aria-label={ui("Onboarding steps")}>
           <ol className="flex flex-col">
             {titles.map((title, at) => {
               const current = at === index;
@@ -330,9 +333,9 @@ function StepMenu({
                     <BrandName>{title}</BrandName>
                   </span>
                   {done ? (
-                    <span className="sr-only">, done</span>
+                    <span className="sr-only">{ui(", done")}</span>
                   ) : !current && !pickable ? (
-                    <span className="sr-only">, not yet available</span>
+                    <span className="sr-only">{ui(", not yet available")}</span>
                   ) : null}
                 </>
               );
@@ -385,9 +388,10 @@ function StepMenu({
  * sentence, so they are hidden and the sentence is what is announced.
  */
 export function StepDashes({ index, total }: { index: number; total: number }) {
+  useLocale();
   return (
     <div
-      aria-label="Onboarding progress"
+      aria-label={ui("Onboarding progress")}
       aria-valuemax={total}
       aria-valuemin={1}
       aria-valuenow={index + 1}
@@ -431,6 +435,7 @@ export function StepIntro({
   children?: ReactNode;
   after?: ReactNode;
 }) {
+  useLocale();
   const named = useContext(StepTitle);
   const title = given ?? named;
   return (

@@ -1,3 +1,4 @@
+import { getLocale, ui } from "@/lib/i18n";
 /**
  * The current answer each "Settings for this Bot" row states, computed from its query on every
  * render so it updates itself when the page behind it changes something.
@@ -9,8 +10,8 @@ export function countLabel(
   many: string,
   none: string,
 ): string {
-  if (count === 0) return none;
-  return `${count} ${count === 1 ? one : many}`;
+  if (count === 0) return none ? ui(none) : "";
+  return `${new Intl.NumberFormat(getLocale()).format(count)} ${ui(count === 1 ? one : many)}`;
 }
 
 export function accessSummary(skills: number, apps: number): string {
@@ -18,7 +19,7 @@ export function accessSummary(skills: number, apps: number): string {
     skills ? countLabel(skills, "skill", "skills", "") : "",
     apps ? countLabel(apps, "app", "apps", "") : "",
   ].filter(Boolean);
-  return parts.length ? parts.join(", ") : "Nothing granted";
+  return parts.length ? parts.join(", ") : ui("Nothing granted");
 }
 
 /**
@@ -30,11 +31,11 @@ export function sharingSummary(
   visibility: "public" | "private",
 ): string {
   if (!published) {
-    return visibility === "public" ? "Everyone (public)" : "Not shared";
+    return visibility === "public" ? ui("Everyone (public)") : ui("Not shared");
   }
   return published.audience === "team"
-    ? "Whole team"
-    : "Specific people and groups";
+    ? ui("Whole team")
+    : ui("Specific people and groups");
 }
 
 /**
@@ -50,9 +51,9 @@ export function setupSummary(
   },
   edition: "team" | "personal" = "team",
 ): string {
-  if (agent.builtIn || !agent.endpoint) return "Built in";
+  if (agent.builtIn || !agent.endpoint) return ui("Built in");
   if (edition === "personal" && agent.framework)
-    return `Runs on ${agent.framework}`;
+    return ui("Runs on {{framework}}", { framework: agent.framework });
   try {
     return new URL(agent.endpoint).host;
   } catch {
@@ -61,9 +62,15 @@ export function setupSummary(
 }
 
 const TRANSPORT_LABEL: Record<string, string> = {
-  slack: "Slack",
-  teams: "Microsoft Teams",
-  sms: "SMS",
+  get slack() {
+    return ui("Slack");
+  },
+  get teams() {
+    return ui("Microsoft Teams");
+  },
+  get sms() {
+    return ui("SMS");
+  },
 };
 
 /** Where this Bot's conversations continue outside OpenBot, each place once. */
@@ -71,14 +78,14 @@ export function reachSummary(transports: readonly string[]): string {
   const places = [...new Set(transports)]
     .map((transport) => TRANSPORT_LABEL[transport] ?? transport)
     .sort((a, b) => a.localeCompare(b));
-  return places.length ? places.join(", ") : "Only in OpenBot";
+  return places.length ? places.join(", ") : ui("Only in OpenBot");
 }
 
 /** The apps feeding this Bot facts, and whether it checks in on them. */
 export function memorySummary(sources: number, research: boolean): string {
   const parts = [
     sources ? countLabel(sources, "source", "sources", "") : "",
-    research ? (sources ? "check-ins on" : "Check-ins on") : "",
+    research ? ui(sources ? "check-ins on" : "Check-ins on") : "",
   ].filter(Boolean);
-  return parts.length ? parts.join(", ") : "Nothing connected";
+  return parts.length ? parts.join(", ") : ui("Nothing connected");
 }

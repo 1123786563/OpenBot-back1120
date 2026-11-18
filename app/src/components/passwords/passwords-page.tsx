@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { IconKey, IconLockOff, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -30,27 +32,34 @@ import { queryClient } from "@/query-client";
  * Under Settings. The personal edition calls it Saved logins, and links to it from Connections too.
  */
 export function PasswordsPage() {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const logins = useQuery(savedLoginsQueryOptions());
   const remove = useMutation(deleteSavedLoginMutationOptions(queryClient));
   return (
     <PageShell
-      title={personal ? "Saved logins" : "Passwords"}
-      description="Manage saved website logins. Bots cannot see your passwords, and you approve each use."
+      title={personal ? ui("Saved logins") : ui("Passwords")}
+      description={ui(
+        "Manage saved website logins. Bots cannot see your passwords, and you approve each use.",
+      )}
     >
-      <PageSection title={personal ? undefined : "Saved logins"}>
+      <PageSection title={personal ? undefined : ui("Saved logins")}>
         {logins.isPending ? null : logins.error ? (
           <p className="text-destructive text-sm" role="alert">
-            Couldn't load your passwords. Reload the page.
+            {ui("Couldn't load your passwords. Reload the page.")}
           </p>
         ) : !logins.data.passwordManager ? (
-          <PageEmpty icon={IconLockOff} title="Saved passwords are off">
-            An admin turned them off. Your logins are kept but won't be offered.
+          <PageEmpty icon={IconLockOff} title={ui("Saved passwords are off")}>
+            {ui(
+              "An admin turned them off. Your logins are kept but won't be offered.",
+            )}
           </PageEmpty>
         ) : logins.data.logins.length === 0 ? (
-          <PageEmpty icon={IconKey} title="No saved logins yet">
-            Choose Save to Passwords when you sign a Bot in to a website.
+          <PageEmpty icon={IconKey} title={ui("No saved logins yet")}>
+            {ui(
+              "Choose Save to Passwords when you sign a Bot in to a website.",
+            )}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -66,13 +75,21 @@ export function PasswordsPage() {
                     <ItemDescription>
                       {login.username}
                       {login.lastUsedAt
-                        ? ` · last used ${new Date(login.lastUsedAt).toLocaleDateString()}`
-                        : " · never used"}
+                        ? ui(" · last used {{value0}}", {
+                            value0: String(
+                              new Date(login.lastUsedAt).toLocaleDateString(
+                                getLocale(),
+                              ),
+                            ),
+                          })
+                        : ui(" · never used")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <Button
-                      aria-label={`Delete login for ${login.origin}`}
+                      aria-label={ui("Delete login for {{value0}}", {
+                        value0: String(login.origin),
+                      })}
                       size="sm"
                       variant="ghost"
                       disabled={remove.isPending}
@@ -88,7 +105,7 @@ export function PasswordsPage() {
         )}
         {remove.error ? (
           <p className="mt-2 text-destructive text-sm" role="alert">
-            {remove.error.message}
+            {<ErrorDetails error={remove.error} />}
           </p>
         ) : null}
       </PageSection>

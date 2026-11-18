@@ -1,3 +1,4 @@
+import { getLocale, ui } from "@/lib/i18n";
 import { z } from "zod";
 
 /**
@@ -19,11 +20,21 @@ export type Repeat = (typeof REPEATS)[number];
 
 /** What each choice reads as in the picker. */
 export const REPEAT_LABEL: Record<Repeat, string> = {
-  daily: "Every day",
-  weekdays: "Every weekday",
-  weekly: "Every week",
-  monthly: "Every month",
-  hourly: "Every hour",
+  get daily() {
+    return ui("Every day");
+  },
+  get weekdays() {
+    return ui("Every weekday");
+  },
+  get weekly() {
+    return ui("Every week");
+  },
+  get monthly() {
+    return ui("Every month");
+  },
+  get hourly() {
+    return ui("Every hour");
+  },
 };
 
 /** Sunday first, as cron counts them: the index is the day-of-week field. */
@@ -98,12 +109,15 @@ export function cronFrom(schedule: Schedule): string {
 /** "9:00 AM", on the person's own clock. */
 export function clockTime(time: string): string {
   const [hour, minute] = hourAndMinute(time);
+  if (getLocale() === "zh-CN")
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
   const period = hour < 12 ? "AM" : "PM";
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
   return `${twelve}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
 function ordinal(day: number): string {
+  if (getLocale() === "zh-CN") return `${day} 日`;
   const teen = day % 100 >= 11 && day % 100 <= 13;
   const suffix = teen
     ? "th"
@@ -120,15 +134,21 @@ export function scheduleSentence(schedule: Schedule): string {
   const at = clockTime(schedule.time);
   switch (schedule.repeat) {
     case "hourly":
-      return "Every hour, on the hour";
+      return ui("Every hour, on the hour");
     case "weekdays":
-      return `Every weekday at ${at}`;
+      return ui("Every weekday at {{value0}}", { value0: String(at) });
     case "weekly":
-      return `Every ${WEEKDAY_LABEL[Number(schedule.weekday)] ?? "Monday"} at ${at}`;
+      return ui("Every {{value0}} at {{value1}}", {
+        value0: String(ui(WEEKDAY_LABEL[Number(schedule.weekday)] ?? "Monday")),
+        value1: String(at),
+      });
     case "monthly":
-      return `On the ${ordinal(Number(schedule.monthDay))} of every month at ${at}`;
+      return ui("On the {{value0}} of every month at {{value1}}", {
+        value0: String(ordinal(Number(schedule.monthDay))),
+        value1: String(at),
+      });
     default:
-      return `Every day at ${at}`;
+      return ui("Every day at {{value0}}", { value0: String(at) });
   }
 }
 

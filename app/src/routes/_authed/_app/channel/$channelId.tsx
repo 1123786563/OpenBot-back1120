@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconSettings } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/_authed/_app/channel/$channelId")({
 });
 
 function RouteComponent() {
+  useLocale();
   const { channelId } = Route.useParams();
   const { settings, watch } = Route.useSearch();
   const channel = useQuery(channelQueryOptions(channelId));
@@ -92,7 +94,7 @@ function RouteComponent() {
       onClose={() => show(null)}
       open={(isSettingsOpen || isWatching) && agentId !== undefined}
       detailWidth={isWatching ? SCREEN_PANEL_WIDTH : undefined}
-      title={isWatching ? "Computer" : undefined}
+      title={isWatching ? ui("Computer") : undefined}
       waiting={
         channel.data ? (
           <ConversationApprovals threadId={channel.data.threadId} />
@@ -159,7 +161,7 @@ function RouteComponent() {
                 ease: EASE_OUT,
               }}
             >
-              {channel.data?.name ?? "Channel"}
+              {channel.data?.name ?? ui("Channel")}
             </motion.span>
           </div>
           <div className="flex flex-row gap-1.5">
@@ -169,7 +171,7 @@ function RouteComponent() {
               onOpenChange={(open) => show(open ? "watch" : null)}
             />
             <Button
-              aria-label="This conversation's Bot"
+              aria-label={ui("This conversation's Bot")}
               aria-pressed={isSettingsOpen}
               className={isSettingsOpen ? "bg-foreground/5" : undefined}
               disabled={agentId === undefined}
@@ -207,12 +209,13 @@ function ChannelBody({
   isPending: boolean;
   hasError: boolean;
 }) {
+  useLocale();
   // Nothing while the channel loads: a placeholder inside a local round-trip is a flicker.
   if (isPending) return null;
   if (hasError || !channel) {
     return (
       <p className="p-8 text-sm text-destructive" role="alert">
-        Couldn't load this conversation. Reload the page.
+        {ui("Couldn't load this conversation. Reload the page.")}
       </p>
     );
   }

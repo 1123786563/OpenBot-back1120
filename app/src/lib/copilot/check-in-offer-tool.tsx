@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useRenderTool } from "@copilotkit/react-core/v2";
 import { OFFER_CHECK_IN_TOOL } from "@openbot/shared/check-in-offer";
 import { IconRadar } from "@tabler/icons-react";
@@ -37,10 +39,30 @@ const parameters = z.object({
 });
 
 const INTERVALS = [
-  { minutes: 1440, label: "Once a day" },
-  { minutes: 720, label: "Twice a day" },
-  { minutes: 240, label: "Every 4 hours" },
-  { minutes: 60, label: "Every hour" },
+  {
+    minutes: 1440,
+    get label() {
+      return ui("Once a day");
+    },
+  },
+  {
+    minutes: 720,
+    get label() {
+      return ui("Twice a day");
+    },
+  },
+  {
+    minutes: 240,
+    get label() {
+      return ui("Every 4 hours");
+    },
+  },
+  {
+    minutes: 60,
+    get label() {
+      return ui("Every hour");
+    },
+  },
 ];
 const INTERVAL_ITEMS = INTERVALS.map((interval) => ({
   value: interval.minutes,
@@ -66,6 +88,7 @@ function rememberDeclined(toolCallId: string) {
 }
 
 export function CheckInOfferTool() {
+  useLocale();
   useRenderTool({
     name: OFFER_CHECK_IN_TOOL,
     parameters,
@@ -93,6 +116,7 @@ export function CheckInOfferCard({
   link?: string;
   toolCallId: string;
 }) {
+  useLocale();
   const agentId = useDeclaredBotId();
   const channelId = useParams({ strict: false }).channelId;
   const bot = useQuery({
@@ -122,19 +146,31 @@ export function CheckInOfferCard({
   if (watching)
     return (
       <p className="my-2 flex items-center gap-2 text-muted-foreground text-sm">
-        <IconRadar aria-hidden className="size-4 shrink-0" />
-        {who} checks {subject}{" "}
-        {INTERVALS.find(
-          (interval) => interval.minutes === watching.intervalMinutes,
-        )?.label.toLowerCase() ?? "regularly"}
-        . Change it on {who}'s check-ins.
+        {uiNodes(
+          "{{slot0}}{{slot1}}checks {{slot2}} {{slot3}}. Change it on {{slot4}}'s check-ins.",
+          [
+            <IconRadar key="slot0" aria-hidden className="size-4 shrink-0" />,
+            who,
+            subject,
+            INTERVALS.find(
+              (interval) => interval.minutes === watching.intervalMinutes,
+            )?.label.toLowerCase() ?? ui("regularly"),
+            who,
+          ],
+        )}
       </p>
     );
   if (declined)
     return (
       <p className="my-2 flex items-center gap-2 text-muted-foreground text-sm">
-        <IconRadar aria-hidden className="size-4 shrink-0" />
-        No check-in on {subject}. You can add one from {who}'s check-ins.
+        {uiNodes(
+          "{{slot0}}No check-in on {{slot1}}. You can add one from {{slot2}}'s check-ins.",
+          [
+            <IconRadar key="slot0" aria-hidden className="size-4 shrink-0" />,
+            subject,
+            who,
+          ],
+        )}
       </p>
     );
 
@@ -148,21 +184,27 @@ export function CheckInOfferCard({
           <IconRadar aria-hidden className="size-4" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="font-medium text-sm">Keep an eye on {subject}?</p>
+          <p className="font-medium text-sm">
+            {ui("Keep an eye on")} {subject}?
+          </p>
           <p className="text-muted-foreground text-sm">
-            {who} reads it and tells you when something there needs you. It only
-            reads, and never changes anything.
+            {uiNodes(
+              "{{slot0}}reads it and tells you when something there needs you. It only reads, and never changes anything.",
+              [who],
+            )}
           </p>
         </div>
       </div>
       {create.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {create.error.message}
+          {<ErrorDetails error={create.error} />}
         </p>
       ) : null}
       {channelId ? null : (
         <p className="text-muted-foreground text-sm">
-          Open this in a conversation with {who} to turn it on.
+          {uiNodes("Open this in a conversation with {{slot0}}to turn it on.", [
+            who,
+          ])}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -174,7 +216,11 @@ export function CheckInOfferCard({
           }}
           value={minutes}
         >
-          <SelectTrigger aria-label="How often" className="w-36" size="sm">
+          <SelectTrigger
+            aria-label={ui("How often")}
+            className="w-36"
+            size="sm"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -194,7 +240,7 @@ export function CheckInOfferCard({
           size="sm"
           variant="ghost"
         >
-          Not now
+          {ui("Not now")}
         </Button>
         <Button
           disabled={create.isPending || !channelId}
@@ -213,7 +259,7 @@ export function CheckInOfferCard({
           }
           size="sm"
         >
-          {create.isPending ? "Turning on…" : "Turn on"}
+          {create.isPending ? ui("Turning on…") : ui("Turn on")}
         </Button>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { ssoClient } from "@better-auth/sso/client";
 import { createAuthClient } from "better-auth/react";
 import type { AuthProviderId } from "./queries";
@@ -6,9 +7,15 @@ export const authClient = createAuthClient({ plugins: [ssoClient()] });
 
 /** What each provider is called on the button, since none of them are called by their id. */
 const PROVIDER_NAMES: Record<AuthProviderId, string> = {
-  google: "Google",
-  microsoft: "Microsoft",
-  okta: "Okta",
+  get google() {
+    return ui("Google");
+  },
+  get microsoft() {
+    return ui("Microsoft");
+  },
+  get okta() {
+    return ui("Okta");
+  },
 };
 
 export function providerName(provider: AuthProviderId): string {

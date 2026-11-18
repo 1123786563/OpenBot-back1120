@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { NarrationPreference } from "@openbot/shared/user-preferences";
 import { IconMicrophone } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
@@ -29,6 +30,7 @@ import { queryClient } from "@/query-client";
  * them every time. `read` asks for it then.
  */
 export function useNarrationChoice() {
+  useLocale();
   const { data, userId } = useUserPreferences();
   const save = useMutation(
     saveUserPreferencesMutationOptions(queryClient, userId),
@@ -97,33 +99,38 @@ export function NarrationChoiceDialog({
   onAnswer: (narrate: boolean) => void;
   onClose: () => void;
 }) {
+  useLocale();
   return (
     <Dialog onOpenChange={(next) => (next ? null : onClose())} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Narrate while you record?</DialogTitle>
+          <DialogTitle>{ui("Narrate while you record?")}</DialogTitle>
           <DialogDescription>
-            Talk through the task as you do it, and the recording keeps what you
-            say as text, so your Bots learn why you did each step.
+            {ui(
+              "Talk through the task as you do it, and the recording keeps what you say as text, so your Bots learn why you did each step.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 text-muted-foreground text-sm">
           <p>
-            Your browser turns your speech into text on your own computer. Your
-            voice never leaves it, and no recording of it is kept.
+            {ui(
+              "Your browser turns your speech into text on your own computer. Your voice never leaves it, and no recording of it is kept.",
+            )}
           </p>
           <p className="mt-2">
-            OpenBot keeps your answer for every recording. You can change it any
-            time with the Narration switch on this page.
+            {ui(
+              "OpenBot keeps your answer for every recording. You can change it any time with the Narration switch on this page.",
+            )}
           </p>
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={() => onAnswer(false)} size="sm" variant="outline">
-            Record without narration
+            {ui("Record without narration")}
           </Button>
           <Button onClick={() => onAnswer(true)} size="sm">
-            <IconMicrophone data-icon="inline-start" />
-            Record with narration
+            {uiNodes("{{slot0}}Record with narration", [
+              <IconMicrophone key="slot0" data-icon="inline-start" />,
+            ])}
           </Button>
         </DialogFooter>
       </DialogContent>

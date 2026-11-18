@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -66,7 +67,7 @@ export function signInRequestQueryOptions(id: string) {
     queryFn: async (): Promise<SignInRequest> =>
       (
         await client(`/api/sign-in-requests/${encodeURIComponent(id)}`, {
-          fallback: "Could not load this sign-in request",
+          fallback: ui("Could not load this sign-in request"),
         })
       ).json(),
   });
@@ -80,7 +81,7 @@ export function pendingSignInRequestsQueryOptions() {
       (
         (await (
           await client("/api/sign-in-requests", {
-            fallback: "Could not load your sign-in requests",
+            fallback: ui("Could not load your sign-in requests"),
           })
         ).json()) as { requests: SignInRequest[] }
       ).requests,
@@ -96,7 +97,7 @@ export function savedLoginsQueryOptions() {
     }> =>
       (
         await client("/api/passwords", {
-          fallback: "Could not load your passwords",
+          fallback: ui("Could not load your passwords"),
         })
       ).json(),
   });

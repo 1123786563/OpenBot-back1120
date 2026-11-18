@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type {
   WhatIfAction,
   WhatIfLabels,
@@ -38,8 +39,9 @@ export async function askWhatIf(question: string): Promise<WhatIfReading> {
   const response = await client("/api/admin/what-if/ask", {
     method: "POST",
     body: { question },
-    fallback:
+    fallback: ui(
       "Couldn't read that question. Try again, or set the action yourself.",
+    ),
   });
   return (await response.json()) as WhatIfReading;
 }
@@ -52,7 +54,7 @@ export async function checkWhatIf(
   const response = await client("/api/admin/what-if/check", {
     method: "POST",
     body: { action, ...(question ? { question } : {}) },
-    fallback: "Couldn't check that action. Try again.",
+    fallback: ui("Couldn't check that action. Try again."),
   });
   return (await response.json()) as WhatIfChecked;
 }
@@ -63,7 +65,7 @@ export async function explainAuditEvent(
 ): Promise<WhatIfExplained> {
   const response = await client(
     `/api/admin/what-if/explain/${encodeURIComponent(eventId)}`,
-    { fallback: "Couldn't explain this event. Try again." },
+    { fallback: ui("Couldn't explain this event. Try again.") },
   );
   return (await response.json()) as WhatIfExplained;
 }

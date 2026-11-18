@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef } from "react";
@@ -49,6 +51,7 @@ import { TeamBotConsentCard } from "./team-bot-consent";
  * that asked on it (`approvals/questions.ts`).
  */
 export function GroupChat({ channelId }: { channelId: string }) {
+  useLocale();
   const queryClient = useQueryClient();
   const group = useQuery(groupQueryOptions(channelId));
   const me = useQuery(currentUserQueryOptions()).data;
@@ -125,7 +128,7 @@ export function GroupChat({ channelId }: { channelId: string }) {
   if (group.isError)
     return (
       <p className="p-8 text-sm text-destructive" role="alert">
-        {group.error.message}
+        {<ErrorDetails error={group.error} />}
       </p>
     );
 
@@ -144,8 +147,10 @@ export function GroupChat({ channelId }: { channelId: string }) {
         >
           {messages.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Say something to {bots.map((bot) => bot.name).join(" and ")}.
-              Every Bot answers in turn; start with @Name to ask just one.
+              {uiNodes(
+                "Say something to {{slot0}}. Every Bot answers in turn; start with @Name to ask just one.",
+                [bots.map((bot) => bot.name).join(" and ")],
+              )}
             </p>
           ) : null}
           {messages.map((message) => (
@@ -173,12 +178,12 @@ export function GroupChat({ channelId }: { channelId: string }) {
       <div className="mx-auto w-full max-w-2xl shrink-0 pb-4">
         {send.error ? (
           <p className="pb-2 text-sm text-destructive" role="alert">
-            {send.error.message}
+            {<ErrorDetails error={send.error} />}
           </p>
         ) : null}
         {answer.error ? (
           <p className="pb-2 text-sm text-destructive" role="alert">
-            {answer.error.message}
+            {<ErrorDetails error={answer.error} />}
           </p>
         ) : null}
         {/* The same drawer a conversation with one Bot draws its question in. */}
@@ -246,6 +251,7 @@ function GroupLine({
   answeredBy?: string;
   mine: boolean;
 }) {
+  useLocale();
   if (message.agentId === null)
     return (
       <MessageRow align={mine ? "end" : "start"}>
@@ -271,7 +277,9 @@ function GroupLine({
       <MessageContent>
         <MessageHeader className="text-xs font-medium text-muted-foreground">
           {name}
-          {answeredBy ? ` · answer from ${answeredBy}` : null}
+          {answeredBy
+            ? ui(" · answer from {{value0}}", { value0: String(answeredBy) })
+            : null}
         </MessageHeader>
         {(message.status === "running" || message.status === "queued") &&
         !message.text ? (
@@ -279,17 +287,17 @@ function GroupLine({
             className="tool-line-running text-sm text-muted-foreground"
             role="status"
           >
-            Thinking
+            {ui("Thinking")}
           </p>
         ) : message.status === "waiting" ? (
           <p className="text-sm text-muted-foreground">
-            {message.reason ?? "Waiting for your response."}{" "}
+            {message.reason ?? ui("Waiting for your response.")}{" "}
             <Link
               className="underline"
               params={{ agentId: message.agentId }}
               to="/bots/$agentId"
             >
-              Open {name}
+              {ui("Open")} {name}
             </Link>
           </p>
         ) : message.consent ? (
@@ -302,13 +310,15 @@ function GroupLine({
             />
           ) : (
             <p className="text-sm text-muted-foreground">
-              Asked a teammate for permission to use their own{" "}
-              {message.consent.serverId} account.
+              {uiNodes(
+                "Asked a teammate for permission to use their own {{slot0}}account.",
+                [message.consent.serverId],
+              )}
             </p>
           )
         ) : message.status === "failed" ? (
           <p className="text-sm text-destructive" role="alert">
-            {message.text || "This Bot couldn't answer."}
+            {message.text || ui("This Bot couldn't answer.")}
           </p>
         ) : (
           <Bubble

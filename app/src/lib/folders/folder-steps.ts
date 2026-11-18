@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { inFolder, ownToolSubject } from "@openbot/shared/tool-name";
 import { createContext } from "react";
 
@@ -89,6 +90,7 @@ export function folderStepSubject(
   return inFolder(
     ownToolSubject(name, args),
     typeof grantId === "string" ? folders.get(grantId) : undefined,
+    ui,
   );
 }
 
@@ -108,9 +110,9 @@ export function folderStepBody(
     const names = listing.folders.map((folder) => folder.name);
     return [
       names.length > 0
-        ? `Folders it can read: ${names.join(", ")}.`
-        : "No folders are shared with this Bot.",
-      ...(listing.connected ? [] : ["OpenBot Desktop isn't running."]),
+        ? ui("Folders it can read: {{folders}}.", { folders: names.join(", ") })
+        : ui("No folders are shared with this Bot."),
+      ...(listing.connected ? [] : [ui("OpenBot Desktop isn't running.")]),
     ].join(" ");
   }
   const trimmed = body.trim();

@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { IconArrowUpRight, IconWorld } from "@tabler/icons-react";
 import { useState } from "react";
 import type { ResearchSource } from "@/lib/plugins/research-results";
@@ -25,6 +26,7 @@ export function ResearchResults({
   /** What the list is, for a screen reader: "Search results", "Pages read". */
   label: string;
 }) {
+  useLocale();
   const [all, setAll] = useState(false);
   const shown = all ? sources : sources.slice(0, FIRST_SHOWN);
   const hidden = sources.length - shown.length;
@@ -44,7 +46,9 @@ export function ResearchResults({
           onClick={() => setAll(!all)}
           type="button"
         >
-          {all ? "Show fewer" : `Show ${hidden} more`}
+          {all
+            ? ui("Show fewer")
+            : ui("Show {{value0}} more", { value0: String(hidden) })}
         </button>
       ) : null}
     </section>
@@ -52,6 +56,7 @@ export function ResearchResults({
 }
 
 function SourceEntry({ source }: { source: ResearchSource }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const excerpt = source.excerpt ?? "";
   const long =
@@ -99,7 +104,7 @@ function SourceEntry({ source }: { source: ResearchSource }) {
               onClick={() => setOpen(!open)}
               type="button"
             >
-              {open ? "Show less" : "Show all"}
+              {open ? ui("Show less") : ui("Show all")}
             </button>
           ) : null}
         </>
@@ -115,7 +120,7 @@ function publishedOn(value: string | undefined): string | undefined {
     ? new Date(`${value}T00:00:00Z`)
     : new Date(value);
   if (Number.isNaN(day.getTime())) return undefined;
-  return day.toLocaleDateString(undefined, {
+  return day.toLocaleDateString(getLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",

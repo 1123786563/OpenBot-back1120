@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 import { ToolLine } from "@/components/channels/tool-line";
@@ -39,6 +40,7 @@ function reached(result: unknown): boolean {
 }
 
 export function EscalationTool() {
+  useLocale();
   useRenderTool({
     name: "ask_person",
     parameters,
@@ -46,7 +48,7 @@ export function EscalationTool() {
       const running = status !== "complete" && result === undefined;
       return (
         <ToolLine
-          label="Asked you"
+          label={ui("Asked you")}
           detail={given?.question}
           running={running}
           refused={!running && !reached(result)}

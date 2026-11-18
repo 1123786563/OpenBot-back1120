@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { ActionPolicy, RuleLabel } from "@/lib/computers/queries";
 
 /**
@@ -20,7 +21,9 @@ export type RuleTemplate = RuleLabel & {
 export const RULE_TEMPLATES: RuleTemplate[] = [
   {
     name: "Never submit a form",
-    description: "Stops a Bot pressing a submit button, or Enter while typing.",
+    get description() {
+      return ui("Stops a Bot pressing a submit button, or Enter while typing.");
+    },
     // The keypress clause is guarded by tool name so a click is only refused on a submit button.
     // Both tools that can press Enter are named: `computer_type` takes a `submit` flag that presses
     // it once the text is in, and a rule naming only `computer_key` left that door open. It asks for
@@ -31,13 +34,17 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   },
   {
     name: "Never type into a password field",
-    description: "Stops a Bot typing into a field labelled as a password.",
+    get description() {
+      return ui("Stops a Bot typing into a field labelled as a password.");
+    },
     rule: 'intent == "type" && contains(element.name, "password")',
     cost: "A password box with a different label isn't covered. The rule matches the label.",
   },
   {
     name: "Stay off social media",
-    description: "Stops a Bot opening Facebook or X.",
+    get description() {
+      return ui("Stops a Bot opening Facebook or X.");
+    },
     // Each site, or a name ending in a dot and the site. `contains(page.host, "x.com")` also stopped
     // dropbox.com and netflix.com. The dot is `[.]` because cel-js keeps backslashes as written, so
     // `\\.` would match a backslash and the rule would stop nothing.
@@ -96,7 +103,7 @@ export function ruleLabel(policy: ActionPolicy, rule: string): RuleLabel {
   const template = templateOf(rule);
   if (template)
     return { name: template.name, description: template.description };
-  return { name: "Custom rule", description: "" };
+  return { name: ui("Custom rule"), description: "" };
 }
 
 /**

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type Icon,
   IconAdjustments,
@@ -42,40 +43,95 @@ export const TEAM_FEATURE_GROUPS: readonly {
   features: readonly { title: string; icon: Icon }[];
 }[] = [
   {
-    title: "For your whole team",
-    features: [
-      { title: "Sign-in with Google, Microsoft or Okta", icon: IconLogin2 },
-      { title: "People, roles and admins", icon: IconUsers },
-      { title: "Bots shared with your whole team", icon: IconUsersGroup },
-      { title: "Learning shared across the team", icon: IconSchool },
-    ],
-  },
-  {
-    title: "Where your Bots work",
-    features: [
-      { title: "Bots in Slack and Microsoft Teams", icon: IconMessages },
-      { title: "A computer for each Bot", icon: IconDeviceDesktop },
-    ],
-  },
-  {
-    title: "In control",
+    get title() {
+      return ui("For your whole team");
+    },
     features: [
       {
-        title: "Controls over models, apps and networks",
+        get title() {
+          return ui("Sign-in with Google, Microsoft or Okta");
+        },
+        icon: IconLogin2,
+      },
+      {
+        get title() {
+          return ui("People, roles and admins");
+        },
+        icon: IconUsers,
+      },
+      {
+        get title() {
+          return ui("Bots shared with your whole team");
+        },
+        icon: IconUsersGroup,
+      },
+      {
+        get title() {
+          return ui("Learning shared across the team");
+        },
+        icon: IconSchool,
+      },
+    ],
+  },
+  {
+    get title() {
+      return ui("Where your Bots work");
+    },
+    features: [
+      {
+        get title() {
+          return ui("Bots in Slack and Microsoft Teams");
+        },
+        icon: IconMessages,
+      },
+      {
+        get title() {
+          return ui("A computer for each Bot");
+        },
+        icon: IconDeviceDesktop,
+      },
+    ],
+  },
+  {
+    get title() {
+      return ui("In control");
+    },
+    features: [
+      {
+        get title() {
+          return ui("Controls over models, apps and networks");
+        },
         icon: IconAdjustments,
       },
-      { title: "Rules every Bot follows", icon: IconListCheck },
+      {
+        get title() {
+          return ui("Rules every Bot follows");
+        },
+        icon: IconListCheck,
+      },
       /*
        * Boundaries, team approval rules, auto-review guidance, permissions, the network allowlist
        * and one Bot's app actions are each described in words on their Admin screen, and each
        * replays the result over recorded activity before it is saved.
        */
       {
-        title: "Policies in plain English, tested on past activity",
+        get title() {
+          return ui("Policies in plain English, tested on past activity");
+        },
         icon: IconSparkles,
       },
-      { title: "Governance for everyone", icon: IconChecks },
-      { title: "A full audit trail, with export", icon: IconHistory },
+      {
+        get title() {
+          return ui("Governance for everyone");
+        },
+        icon: IconChecks,
+      },
+      {
+        get title() {
+          return ui("A full audit trail, with export");
+        },
+        icon: IconHistory,
+      },
     ],
   },
 ];
@@ -106,6 +162,7 @@ function subscribe(listener: () => void) {
 }
 
 export function TeamFeaturesDialog() {
+  useLocale();
   const isOpen = useSyncExternalStore(subscribe, () => open);
   // Closed when the layout holding it goes (signing out), so it never reopens by itself later.
   useEffect(() => () => setOpen(false), []);
@@ -140,10 +197,10 @@ export function TeamFeaturesDialog() {
           >
             <DialogHeader>
               <DialogTitle className="text-xl">
-                <BrandName>OpenBot for Business</BrandName>
+                <BrandName>{ui("OpenBot for Business")}</BrandName>
               </DialogTitle>
               <DialogDescription>
-                Everything you have here, on prem and for a whole team.
+                {ui("Everything you have here, on prem and for a whole team.")}
               </DialogDescription>
             </DialogHeader>
             {TEAM_FEATURE_GROUPS.map((group) => (
@@ -163,7 +220,9 @@ export function TeamFeaturesDialog() {
                 </ul>
               </section>
             ))}
-            <p className="text-muted-foreground text-sm">And tons more…</p>
+            <p className="text-muted-foreground text-sm">
+              {ui("And tons more…")}
+            </p>
             {/* An anchor, not Button: Base UI gives a rendered anchor role="button", and this is a link. */}
             <a
               className={cn(buttonVariants(), "mt-2 w-full")}
@@ -171,7 +230,7 @@ export function TeamFeaturesDialog() {
               rel="noopener noreferrer"
               target="_blank"
             >
-              Talk to us
+              {ui("Talk to us")}
               <IconArrowUpRight aria-hidden="true" />
             </a>
           </div>
@@ -228,6 +287,7 @@ export function NavigationTarget({
   onClick,
   ...props
 }: NavigationTargetProps & { item: NavigationItem }) {
+  useLocale();
   if (item.kind === "dialog") {
     return (
       <button
@@ -248,6 +308,7 @@ export function NavigationTarget({
 
 /** The personal edition's way to learn about a computer for each Bot. */
 export function BusinessComputerLink() {
+  useLocale();
   return (
     <a
       className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
@@ -255,7 +316,7 @@ export function BusinessComputerLink() {
       rel="noopener noreferrer"
       target="_blank"
     >
-      Give each Bot its own computer with OpenBot for Business.
+      {ui("Give each Bot its own computer with OpenBot for Business.")}
     </a>
   );
 }

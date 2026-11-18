@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -15,6 +16,7 @@ import {
 import { resumeUrlFor, verifierPathFor } from "@/lib/auth/resume";
 import { appConfig } from "@/lib/generated/application-config";
 import { searchTextEntry } from "@/lib/search-text";
+import { LanguagePicker } from "@/lib/i18n/provider";
 import {
   type AuthProviderId,
   authProvidersQueryOptions,
@@ -74,6 +76,7 @@ export const Route = createFileRoute("/sign")({
 });
 
 function SignScreen() {
+  useLocale();
   const { flow_id: flowId } = Route.useSearch();
   // Which provider is being opened, rather than whether one is: with three buttons, a single
   // boolean would put "Opening…" on all of them.
@@ -153,8 +156,12 @@ function SignScreen() {
           {/* Centred against the button, not against the space left of the mark. */}
           <span className="flex-1 text-center">
             {opening === provider
-              ? `Opening ${providerName(provider)}…`
-              : `Continue with ${providerName(provider)}`}
+              ? ui("Opening {{value0}}…", {
+                  value0: String(providerName(provider)),
+                })
+              : ui("Continue with {{value0}}", {
+                  value0: String(providerName(provider)),
+                })}
           </span>
           {/* Balances the mark so the label sits in the middle of the button. */}
           <span aria-hidden="true" className="size-[18px]" />
@@ -196,7 +203,7 @@ function SignScreen() {
           transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
           variants={{ hidden, shown }}
         >
-          Sign in to {appConfig.brand.productName}
+          {ui("Sign in to")} {appConfig.brand.productName}
         </motion.h1>
         <motion.div
           className="mt-8 w-full"
@@ -205,15 +212,16 @@ function SignScreen() {
         >
           {options?.ssoRequired ? (
             <p className="mb-3 text-center text-sm text-muted-foreground">
-              Your organization requires you to sign in with your company
-              account.
+              {ui(
+                "Your organization requires you to sign in with your company account.",
+              )}
             </p>
           ) : null}
           {providers.length > 0 && !options?.ssoRequired ? (
             providerButtons
           ) : options?.sso || options?.ssoRequired ? null : (
             <p className="text-center text-sm text-muted-foreground">
-              Sign-in isn't set up yet. An admin has to set it up first.
+              {ui("Sign-in isn't set up yet. An admin has to set it up first.")}
             </p>
           )}
           {/*
@@ -227,7 +235,9 @@ function SignScreen() {
               {providers.length > 0 ? (
                 <div className="mb-3 flex items-center gap-3">
                   <Separator className="flex-1" />
-                  <span className="text-muted-foreground text-xs">or</span>
+                  <span className="text-muted-foreground text-xs">
+                    {ui("or")}
+                  </span>
                   <Separator className="flex-1" />
                 </div>
               ) : null}
@@ -247,8 +257,8 @@ function SignScreen() {
                 variant="outline"
               >
                 {opening === "sso"
-                  ? "Opening…"
-                  : "Continue with your company account"}
+                  ? ui("Opening…")
+                  : ui("Continue with your company account")}
               </Button>
             </form>
           ) : null}
@@ -256,7 +266,7 @@ function SignScreen() {
           {options?.ssoRequired && providers.length > 0 ? (
             <details className="mt-4 text-sm">
               <summary className="cursor-pointer text-center text-muted-foreground">
-                Admin sign-in
+                {ui("Admin sign-in")}
               </summary>
               <div className="mt-3">{providerButtons}</div>
             </details>
@@ -267,6 +277,7 @@ function SignScreen() {
             </p>
           ) : null}
         </motion.div>
+        <LanguagePicker />
       </motion.div>
     </div>
   );

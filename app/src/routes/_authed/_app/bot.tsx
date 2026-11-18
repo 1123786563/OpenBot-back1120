@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { TelemetryAssistantMessage } from "@/components/channels/telemetry-assistant-message";
 import { CopilotChat } from "@copilotkit/react-core/v2";
 import { IconPlus } from "@tabler/icons-react";
@@ -79,6 +80,7 @@ async function loadExplicitBot(agentId: string): Promise<BotDetailLookup> {
 }
 
 function RouteComponent() {
+  useLocale();
   const search = Route.useSearch();
   const agent = search.agent === "" ? undefined : search.agent;
   const {
@@ -110,7 +112,7 @@ function RouteComponent() {
     return (
       <div className="flex h-screen items-center justify-center p-6">
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load your Bots. Reload the page.
+          {ui("Couldn't load your Bots. Reload the page.")}
         </p>
       </div>
     );
@@ -119,7 +121,7 @@ function RouteComponent() {
     return (
       <div className="flex h-screen items-center justify-center p-6">
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load this Bot. Reload the page.
+          {ui("Couldn't load this Bot. Reload the page.")}
         </p>
       </div>
     );
@@ -129,8 +131,10 @@ function RouteComponent() {
       <div className="flex h-screen items-center justify-center p-6">
         <p className="text-muted-foreground text-sm">
           {agent
-            ? `There's no Bot called "${agent}".`
-            : "There are no Bots yet."}
+            ? ui('There\'s no Bot called "{{value0}}".', {
+                value0: String(agent),
+              })
+            : ui("There are no Bots yet.")}
         </p>
       </div>
     );
@@ -144,6 +148,7 @@ function RouteComponent() {
 }
 
 function BotChat({ agentId, name }: { agentId: string; name: string }) {
+  useLocale();
   // Tool calls here act on this Bot's own computer.
   useActiveBot(agentId);
   /*
@@ -175,7 +180,7 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
 
   return (
     <DetailPanel
-      title="Computer"
+      title={ui("Computer")}
       open={watch === true}
       onClose={() => showComputer(false)}
       waiting={threadId ? <ConversationApprovals threadId={threadId} /> : null}
@@ -205,13 +210,12 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
                 onOpenChange={showComputer}
               />
               <Button onClick={startNew} size="sm" variant="ghost">
-                <IconPlus />
-                New chat
+                {uiNodes("{{slot0}}New chat", [<IconPlus key="slot0" />])}
               </Button>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Ask it to open a page and watch it work.
+            {ui("Ask it to open a page and watch it work.")}
           </p>
         </header>
         {/*
@@ -225,7 +229,9 @@ function BotChat({ agentId, name }: { agentId: string; name: string }) {
             data-testid="bot-chat-history-unavailable"
             role="alert"
           >
-            Couldn't load earlier messages. The Bot is answering without them.
+            {ui(
+              "Couldn't load earlier messages. The Bot is answering without them.",
+            )}
           </p>
         ) : null}
         {/*

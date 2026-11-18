@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { PageShell } from "@/components/layout/page-shell";
 import { CheckInsSection } from "@/components/settings/check-ins";
@@ -13,10 +14,13 @@ export const Route = createFileRoute("/_authed/settings/notifications")({
  * Each Bot's own page says how much.
  */
 function NotificationsPage() {
+  useLocale();
   return (
     <PageShell
-      description="Choose where you receive updates when you’re away. Set each Bot’s update frequency on its page."
-      title="Notifications"
+      description={ui(
+        "Choose where you receive updates when you’re away. Set each Bot’s update frequency on its page.",
+      )}
+      title={ui("Notifications")}
     >
       <CheckInsSection />
       <UpdateRoutingSection />

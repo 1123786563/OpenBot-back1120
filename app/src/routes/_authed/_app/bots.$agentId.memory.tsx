@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { BotSubpage } from "@/components/bot-profile/bot-subpage";
 import { MemorySources } from "@/components/memory/sources";
@@ -22,22 +23,25 @@ export const Route = createFileRoute("/_authed/_app/bots/$agentId/memory")({
 });
 
 function MemoryPage() {
+  useLocale();
   const { agentId } = Route.useParams();
   return (
     <BotSubpage
       agentId={agentId}
-      description="Choose which apps this Bot learns from and manage its check-ins."
-      title="Memory"
+      description={ui(
+        "Choose which apps this Bot learns from and manage its check-ins.",
+      )}
+      title={ui("Memory")}
     >
       {(agent) => (
         <>
           <p className="mt-6 text-muted-foreground text-sm">
-            What your Bots remember about you is in{" "}
+            {ui("What your Bots remember about you is in")}{" "}
             <Link
               className="underline underline-offset-4"
               to="/capabilities/memory"
             >
-              Capabilities
+              {ui("Capabilities")}
             </Link>
             .
           </p>

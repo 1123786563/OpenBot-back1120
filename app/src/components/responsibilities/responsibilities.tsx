@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconChecklist, IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
@@ -38,6 +40,7 @@ import {
  * many values and a settings screen that edits many values in place turns back into a form.
  */
 export function BotResponsibilities({ agentId }: { agentId?: string }) {
+  useLocale();
   const goals = useQuery(responsibilitiesQueryOptions());
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -50,16 +53,15 @@ export function BotResponsibilities({ agentId }: { agentId?: string }) {
     <PageSection
       action={
         <Button onClick={() => setCreating(true)} size="sm" variant="ghost">
-          <IconPlus />
-          New goal
+          {uiNodes("{{slot0}}New goal", [<IconPlus key="slot0" />])}
         </Button>
       }
-      title="Goals"
+      title={ui("Goals")}
     >
       {/* Pending, error, empty, rows — pending first, so no sentence asserts anything mid-fetch. */}
       {goals.isPending ? null : goals.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {goals.error.message}
+          {<ErrorDetails error={goals.error} />}
         </p>
       ) : shown.length === 0 ? (
         <PageEmpty
@@ -69,16 +71,15 @@ export function BotResponsibilities({ agentId }: { agentId?: string }) {
               size="sm"
               variant="outline"
             >
-              <IconPlus />
-              New goal
+              {uiNodes("{{slot0}}New goal", [<IconPlus key="slot0" />])}
             </Button>
           }
           icon={IconChecklist}
-          title="No goals yet"
+          title={ui("No goals yet")}
         >
           {agentId
-            ? "Work you give this Bot to keep doing shows up here."
-            : "Work you give your Bots to keep doing shows up here."}
+            ? ui("Work you give this Bot to keep doing shows up here.")
+            : ui("Work you give your Bots to keep doing shows up here.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -122,6 +123,7 @@ function ResponsibilityRow({
   goal: ResponsibilityRecord;
   onOpen: () => void;
 }) {
+  useLocale();
   const triggers = useQuery(triggersQueryOptions(goal.id));
   const Icon = STATUS[goal.status].icon;
   return (

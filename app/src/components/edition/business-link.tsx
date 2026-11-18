@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -30,6 +31,7 @@ function readDismissed(): boolean {
  * Hidden until the deployment says which edition it is, so it never flashes on a team deployment.
  */
 export function BusinessLink() {
+  useLocale();
   const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
   const [dismissed, setDismissed] = useState(readDismissed);
 
@@ -48,12 +50,13 @@ export function BusinessLink() {
         target="_blank"
       >
         <span>
-          Meet OpenBot for Business
-          <Trademark />
+          {uiNodes("Meet OpenBot for Business{{slot0}}", [
+            <Trademark key="slot0" />,
+          ])}
         </span>
       </a>
       <Button
-        aria-label="Close"
+        aria-label={ui("Close")}
         className="text-muted-foreground"
         onClick={() => {
           try {

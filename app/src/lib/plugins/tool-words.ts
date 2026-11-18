@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { appToolName } from "@openbot/shared/tool-name";
 import { TOOL_VERBS as VERBS } from "@openbot/shared/tool-name-words";
 
@@ -25,7 +26,7 @@ export function toolInWords(
  * goal", where a conversation says what was done, "Created a goal").
  */
 export function toolName(serverId: string, name: string): string {
-  return appToolName(serverId, name).label;
+  return appToolName(serverId, name, ui).label;
 }
 
 /**

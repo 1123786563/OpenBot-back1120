@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 
@@ -37,7 +38,7 @@ export function componentListQueryOptions() {
     queryFn: async (): Promise<ComponentRecord[]> => {
       return (
         (await client("/api/components", "components", {
-          fallback: "The components could not be loaded.",
+          fallback: ui("The components could not be loaded."),
         })) ?? []
       );
     },
@@ -63,7 +64,7 @@ export function agentComponentsQueryOptions(agentId: string | undefined) {
         (await client(
           `/api/components/for-agent/${encodeURIComponent(agentId ?? "")}`,
           "components",
-          { fallback: "This Bot's components could not be loaded." },
+          { fallback: ui("This Bot's components could not be loaded.") },
         )) ?? []
       );
     },
@@ -104,7 +105,7 @@ export function dataFunctionsQueryOptions() {
     queryFn: async (): Promise<DataFunctionSummary[]> => {
       return (
         (await client("/api/components/functions", "functions", {
-          fallback: "The data functions could not be loaded.",
+          fallback: ui("The data functions could not be loaded."),
         })) ?? []
       );
     },
@@ -139,12 +140,12 @@ export async function callComponentFunction(
     }
     return {
       allowed: false,
-      reason: "OpenBot couldn't be asked for that data.",
+      reason: ui("OpenBot couldn't be asked for that data."),
     };
   } catch {
     return {
       allowed: false,
-      reason: "OpenBot couldn't be reached to read that data.",
+      reason: ui("OpenBot couldn't be reached to read that data."),
     };
   }
 }
@@ -168,16 +169,18 @@ export async function decideComponent(
     if (!response.ok) {
       return {
         allowed: false,
-        reason:
+        reason: ui(
           "OpenBot couldn't be asked whether that component is allowed, so it wasn't shown.",
+        ),
       };
     }
     return await response.json();
   } catch {
     return {
       allowed: false,
-      reason:
+      reason: ui(
         "OpenBot couldn't be reached to check whether that component is allowed, so it wasn't shown.",
+      ),
     };
   }
 }

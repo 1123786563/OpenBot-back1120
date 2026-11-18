@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconMessageCircle } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -17,20 +18,26 @@ const TAB =
  * lists them, so the badge and the screen never disagree.
  */
 export function TabBar({ current }: { current: OpenDuetTab }) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const waiting = waitingCount(inbox.data);
   const tabs = [
-    { id: "chat" as const, label: "Chat", Glyph: IconMessageCircle, badge: 0 },
+    {
+      id: "chat" as const,
+      label: ui("Chat"),
+      Glyph: IconMessageCircle,
+      badge: 0,
+    },
     {
       id: "tasks" as const,
-      label: "Tasks",
+      label: ui("Tasks"),
       Glyph: IconTasksList,
       badge: waiting,
     },
   ];
   return (
     <nav
-      aria-label="Main"
+      aria-label={ui("Main")}
       className="openduet-glass absolute inset-x-0 bottom-[22px] z-20 mx-auto flex h-16 w-[236px] max-w-[calc(100%-32px)] gap-0.5 rounded-[32px] p-[5px] shadow-openduet-glass"
     >
       {tabs.map(({ id, label, Glyph, badge }) => {

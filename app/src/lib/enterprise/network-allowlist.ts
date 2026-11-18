@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { client } from "@/lib/client";
 import type { EgressRule } from "./queries";
 
@@ -35,7 +36,7 @@ export async function translateNetworkAllowlist(
   const response = await client("/api/admin/enterprise/network/translate", {
     method: "POST",
     body: { text },
-    fallback: "Couldn't write the list. Try again, or type it yourself.",
+    fallback: ui("Couldn't write the list. Try again, or type it yourself."),
   });
   return (await response.json()) as NetworkAllowlistTranslation;
 }

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type QueryClient,
   queryOptions,
@@ -71,7 +72,7 @@ export function deploymentCapabilitiesQueryOptions() {
        */
       const body = (await (
         await client("/api/capabilities", {
-          fallback: "Couldn't load what OpenBot can do.",
+          fallback: ui("Couldn't load what OpenBot can do."),
         })
       ).json()) as {
         generativeUi?: boolean;
@@ -118,6 +119,7 @@ export function offersMemory(
  * never draws a memory row for a moment or asks the server for memory it doesn't have.
  */
 export function useOffersMemory(): boolean {
+  useLocale();
   const capabilities = useQuery(deploymentCapabilitiesQueryOptions());
   return !capabilities.isPending && offersMemory(capabilities.data);
 }

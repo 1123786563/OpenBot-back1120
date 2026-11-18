@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { DecisionToolName } from "@openbot/shared/decision-tools";
 import { useState } from "react";
 import { z } from "zod";
@@ -52,13 +53,16 @@ export const ApprovalCardProps = z.object({
 type ApprovalArgs = z.infer<typeof ApprovalCardProps>;
 
 export function ApprovalCard(props: Waiting<ApprovalArgs> & { name?: string }) {
+  useLocale();
   const { args, status, respond } = props;
   const [sending, setSending] = useState(false);
 
   if (status === "inProgress") {
     return (
-      <GalleryFrame title={args.title ?? "Waiting for the Bot…"}>
-        <p className="text-sm text-muted-foreground">Preparing the request…</p>
+      <GalleryFrame title={args.title ?? ui("Waiting for the Bot…")}>
+        <p className="text-sm text-muted-foreground">
+          {ui("Preparing the request…")}
+        </p>
       </GalleryFrame>
     );
   }
@@ -78,10 +82,10 @@ export function ApprovalCard(props: Waiting<ApprovalArgs> & { name?: string }) {
       answer={
         decided
           ? decided.decision === "approved"
-            ? { label: "Approved", choice: approve, tone: "positive" }
+            ? { label: ui("Approved"), choice: approve, tone: "positive" }
             : decided.decision === "declined"
-              ? { label: "Declined", choice: decline, tone: "negative" }
-              : { label: "Answered", note: decided.note, tone: "neutral" }
+              ? { label: ui("Declined"), choice: decline, tone: "negative" }
+              : { label: ui("Answered"), note: decided.note, tone: "neutral" }
           : undefined
       }
       onSubmit={async (value, text) => {
@@ -98,15 +102,15 @@ export function ApprovalCard(props: Waiting<ApprovalArgs> & { name?: string }) {
         {
           value: "approved",
           label: approve,
-          description: "The Bot goes ahead.",
+          description: ui("The Bot goes ahead."),
         },
         {
           value: "declined",
           label: decline,
-          description: "The Bot doesn't, and is told you declined.",
+          description: ui("The Bot doesn't, and is told you declined."),
         },
       ]}
-      other={{ placeholder: "Tell the Bot something else…" }}
+      other={{ placeholder: ui("Tell the Bot something else…") }}
       submitting={sending || !respond}
       title={args.title}
     >
@@ -115,7 +119,9 @@ export function ApprovalCard(props: Waiting<ApprovalArgs> & { name?: string }) {
         <dl className="mt-3 grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 gap-y-1.5 rounded-lg bg-muted/60 px-3 py-2 text-sm">
           {command ? (
             <div className="contents">
-              <dt className="truncate text-muted-foreground">Command</dt>
+              <dt className="truncate text-muted-foreground">
+                {ui("Command")}
+              </dt>
               <dd className="min-w-0">
                 <code className="break-all font-mono text-xs">{command}</code>
               </dd>
@@ -157,13 +163,16 @@ export const ChoiceCardProps = z.object({
 type ChoiceArgs = z.infer<typeof ChoiceCardProps>;
 
 export function ChoiceCard(props: Waiting<ChoiceArgs>) {
+  useLocale();
   const { args, status, respond } = props;
   const [sending, setSending] = useState(false);
 
   if (status === "inProgress") {
     return (
-      <GalleryFrame title={args.title ?? "Waiting for the Bot…"}>
-        <p className="text-sm text-muted-foreground">Preparing the question…</p>
+      <GalleryFrame title={args.title ?? ui("Waiting for the Bot…")}>
+        <p className="text-sm text-muted-foreground">
+          {ui("Preparing the question…")}
+        </p>
       </GalleryFrame>
     );
   }
@@ -181,8 +190,8 @@ export function ChoiceCard(props: Waiting<ChoiceArgs>) {
       answer={
         chosen
           ? chosenLabel !== undefined
-            ? { label: "Answered", choice: chosenLabel, tone: "positive" }
-            : { label: "Answered", note: chosen.answer, tone: "positive" }
+            ? { label: ui("Answered"), choice: chosenLabel, tone: "positive" }
+            : { label: ui("Answered"), note: chosen.answer, tone: "positive" }
           : undefined
       }
       onSubmit={async (value, text) => {
@@ -202,7 +211,7 @@ export function ChoiceCard(props: Waiting<ChoiceArgs>) {
         label: option.label,
         ...(option.description ? { description: option.description } : {}),
       }))}
-      other={{ placeholder: "Answer something else…" }}
+      other={{ placeholder: ui("Answer something else…") }}
       submitting={sending || !respond}
       title={args.title}
     >
@@ -260,12 +269,18 @@ function readChoice(
 export const GALLERY: GalleryComponent[] = [
   {
     name: "askApproval" satisfies DecisionToolName,
-    title: "Approval",
+    get title() {
+      return ui("Approval");
+    },
     kind: "decision",
-    summary:
-      "Asks you to approve or decline something. The Bot waits for your answer.",
-    description:
-      "Ask the person to approve or decline something, and wait for their answer. You are given their decision: `approved`, `declined`, or `other` with `note`, what they wrote instead. Use it only before something you cannot undo that nothing else asks them about (your instructions say which kinds of action the person is already asked about), or for a decision only they can make. Do not use it to confirm a step they already asked you to take.",
+    get summary() {
+      return ui(
+        "Asks you to approve or decline something. The Bot waits for your answer.",
+      );
+    },
+    get description() {
+      return "Ask the person to approve or decline something, and wait for their answer. You are given their decision: `approved`, `declined`, or `other` with `note`, what they wrote instead. Use it only before something you cannot undo that nothing else asks them about (your instructions say which kinds of action the person is already asked about), or for a decision only they can make. Do not use it to confirm a step they already asked you to take.";
+    },
     parameters: ApprovalCardProps,
     Component: ApprovalCard as GalleryComponent["Component"],
     preview: {
@@ -273,13 +288,33 @@ export const GALLERY: GalleryComponent[] = [
       // so its arguments arrive wrapped in the state of the decision it is waiting on.
       status: "executing",
       args: {
-        title: "Refund this order?",
-        summary:
-          "The customer was charged twice for the same order and the second charge has not settled.",
+        get title() {
+          return ui("Refund this order?");
+        },
+        get summary() {
+          return ui(
+            "The customer was charged twice for the same order and the second charge has not settled.",
+          );
+        },
         details: [
-          { label: "Amount", value: "$128.40" },
-          { label: "Customer", value: "Northwind Traders" },
-          { label: "Order", value: "2043" },
+          {
+            get label() {
+              return ui("Amount");
+            },
+            value: "$128.40",
+          },
+          {
+            get label() {
+              return ui("Customer");
+            },
+            value: "Northwind Traders",
+          },
+          {
+            get label() {
+              return ui("Order");
+            },
+            value: "2043",
+          },
         ],
         approveLabel: "Refund",
       },
@@ -288,29 +323,47 @@ export const GALLERY: GalleryComponent[] = [
   },
   {
     name: "askChoice" satisfies DecisionToolName,
-    title: "Choice",
+    get title() {
+      return ui("Choice");
+    },
     kind: "decision",
-    summary:
-      "Asks you to pick one of several options. The Bot waits for your answer.",
-    description:
-      "Ask the person to pick one of several options, and wait for their answer. Use it only when the options lead to materially different work and nothing you can read settles it; otherwise pick the most reasonable one, say which, and carry on. You are given the id of the option they chose as `choice`, or `answer`, what they wrote instead.",
+    get summary() {
+      return ui(
+        "Asks you to pick one of several options. The Bot waits for your answer.",
+      );
+    },
+    get description() {
+      return "Ask the person to pick one of several options, and wait for their answer. Use it only when the options lead to materially different work and nothing you can read settles it; otherwise pick the most reasonable one, say which, and carry on. You are given the id of the option they chose as `choice`, or `answer`, what they wrote instead.";
+    },
     parameters: ChoiceCardProps,
     Component: ChoiceCard as GalleryComponent["Component"],
     preview: {
       status: "executing",
       args: {
-        title: "Which environment should this go to?",
-        summary: "The build is green and nothing else is queued.",
+        get title() {
+          return ui("Which environment should this go to?");
+        },
+        get summary() {
+          return ui("The build is green and nothing else is queued.");
+        },
         options: [
           {
             id: "staging",
-            label: "Staging",
-            description: "Safe, and reversible",
+            get label() {
+              return ui("Staging");
+            },
+            get description() {
+              return ui("Safe, and reversible");
+            },
           },
           {
             id: "production",
-            label: "Production",
-            description: "Live customers",
+            get label() {
+              return ui("Production");
+            },
+            get description() {
+              return ui("Live customers");
+            },
           },
         ],
       },

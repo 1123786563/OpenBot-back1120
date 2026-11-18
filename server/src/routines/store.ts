@@ -141,6 +141,7 @@ export type RoutineSummary = {
    * and the sweep both derive from the expression itself.
    */
   schedule: string;
+  scheduleZhCN?: string;
   timezone: string;
   enabled: boolean;
   nextRunAt: Date;
@@ -966,6 +967,7 @@ export function createRoutineStore(database: Database): RoutineStore {
           instruction: routine.instruction,
           title: routine.title,
           schedule: describeCron(routine.cron),
+          scheduleZhCN: describeCron(routine.cron, "zh-CN"),
           timezone: routine.timezone,
           enabled: routine.enabled,
           nextRunAt: routine.nextRunAt,

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -25,7 +27,9 @@ export const Route = createFileRoute("/_authed/admin/permissions_/describe")({
 });
 
 const BACK = {
-  label: "Permissions",
+  get label() {
+    return ui("Permissions");
+  },
   linkProps: { to: "/admin/permissions" as const },
 };
 
@@ -44,6 +48,7 @@ const same = (a: readonly CapabilityChange[], b: readonly CapabilityChange[]) =>
  * were written from.
  */
 function DescribePermissionsPage() {
+  useLocale();
   const navigate = Route.useNavigate();
   const save = useMutation(saveCapabilityChangesMutationOptions(queryClient));
   const overview = useQuery(enterpriseOverviewQueryOptions());
@@ -84,8 +89,10 @@ function DescribePermissionsPage() {
   return (
     <PageShell
       backButton={BACK}
-      description="Say who may use what, and your model writes the permission changes. Nothing changes until you save them."
-      title="Describe who can do what"
+      description={ui(
+        "Say who may use what, and your model writes the permission changes. Nothing changes until you save them.",
+      )}
+      title={ui("Describe who can do what")}
     >
       <form
         noValidate
@@ -101,21 +108,23 @@ function DescribePermissionsPage() {
                 render={(props) => <Link {...props} to="/admin/permissions" />}
                 variant="outline"
               >
-                Cancel
+                {ui("Cancel")}
               </Button>
               <Button disabled={!ready || save.isPending} type="submit">
-                {save.isPending ? "Saving…" : "Save changes"}
+                {save.isPending ? ui("Saving…") : ui("Save changes")}
               </Button>
             </>
           }
         >
           <FieldGroup>
             <DescribeField
-              action="Write changes"
-              description="Say in a sentence who may or may not do something, and your model writes the changes from this OpenBot's roles and groups. A second reading that never sees your words says what the changes do."
+              action={ui("Write changes")}
+              description={ui(
+                "Say in a sentence who may or may not do something, and your model writes the changes from this OpenBot's roles and groups. A second reading that never sees your words says what the changes do.",
+              )}
               id="permissions-english"
-              label="Describe the change"
-              placeholder="Contractors can't use their own computer"
+              label={ui("Describe the change")}
+              placeholder={ui("Contractors can't use their own computer")}
               write={async (described) => {
                 const translation = await translateCapabilityChanges(described);
                 save.reset();
@@ -129,7 +138,9 @@ function DescribePermissionsPage() {
                 check={written.check}
                 edited={
                   edited
-                    ? "You've removed a change since they were written. The check and the reading above are for the written changes, not your edit."
+                    ? ui(
+                        "You've removed a change since they were written. The check and the reading above are for the written changes, not your edit.",
+                      )
                     : null
                 }
                 explanation={written.explanation}
@@ -137,10 +148,14 @@ function DescribePermissionsPage() {
                   // No changes says so itself, with the model's reason.
                   written.changes.length === 0
                     ? ""
-                    : "These changes don't check, so OpenBot won't save them."
+                    : ui(
+                        "These changes don't check, so OpenBot won't save them.",
+                      )
                 }
-                heading="What these changes do"
-                passed="Checks. Every change names a permission, role or group this OpenBot has."
+                heading={ui("What these changes do")}
+                passed={ui(
+                  "Checks. Every change names a permission, role or group this OpenBot has.",
+                )}
                 warning={written.warning}
               />
             ) : null}
@@ -167,7 +182,7 @@ function DescribePermissionsPage() {
           </FieldGroup>
           {save.error ? (
             <p className="mt-5 text-destructive text-sm" role="alert">
-              {save.error.message}
+              {<ErrorDetails error={save.error} />}
             </p>
           ) : null}
         </PageCard>

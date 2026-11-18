@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -44,14 +45,16 @@ export const memoriesQueryOptions = () =>
   queryOptions({
     queryKey: memoryKeys.all,
     queryFn: (): Promise<MemoryRecord[]> =>
-      client("/api/memory", "memories", { fallback: "Could not load memory" }),
+      client("/api/memory", "memories", {
+        fallback: ui("Could not load memory"),
+      }),
   });
 export const memorySourcesQueryOptions = () =>
   queryOptions({
     queryKey: memoryKeys.sources,
     queryFn: (): Promise<MemorySource[]> =>
       client("/api/memory/sources", "sources", {
-        fallback: "Could not load memory sources",
+        fallback: ui("Could not load memory sources"),
       }),
     refetchInterval: 15_000,
   });
@@ -63,14 +66,14 @@ export const availableMemorySourcesQueryOptions = (id: string) =>
       client(
         `/api/memory/sources/available/${encodeURIComponent(id)}`,
         "tools",
-        { fallback: "Could not load connected app actions" },
+        { fallback: ui("Could not load connected app actions") },
       ),
   });
 export const createMemory = (content: string) =>
   client("/api/memory", {
     method: "POST",
     body: { content },
-    fallback: "Could not remember this fact",
+    fallback: ui("Could not remember this fact"),
   });
 export const updateMemory = (
   id: string,
@@ -79,12 +82,12 @@ export const updateMemory = (
   client(`/api/memory/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: input,
-    fallback: "Could not update memory",
+    fallback: ui("Could not update memory"),
   });
 export const deleteMemory = (id: string) =>
   client(`/api/memory/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    fallback: "Could not forget this memory",
+    fallback: ui("Could not forget this memory"),
   });
 export const addMemorySource = (input: {
   agentId: string;
@@ -95,7 +98,7 @@ export const addMemorySource = (input: {
   client("/api/memory/sources", {
     method: "POST",
     body: input,
-    fallback: "Could not add this source",
+    fallback: ui("Could not add this source"),
   });
 export const memorySourceAction = (
   id: string,
@@ -109,7 +112,7 @@ export const memorySourceAction = (
       ...(action === "enable" || action === "disable"
         ? { body: { enabled: action === "enable" } }
         : {}),
-      fallback: "Could not change this source",
+      fallback: ui("Could not change this source"),
     },
   );
 

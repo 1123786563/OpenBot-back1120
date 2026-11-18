@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -37,7 +38,7 @@ export function teamBotsQueryOptions() {
     queryKey: teamBotKeys.all,
     queryFn: async (): Promise<TeamBotsData> => {
       const response = await client("/api/team-bots", {
-        fallback: "Team Bots could not be loaded.",
+        fallback: ui("Team Bots could not be loaded."),
       });
       return (await response.json()) as TeamBotsData;
     },
@@ -71,7 +72,7 @@ export function publishTeamBotMutationOptions(queryClient: QueryClient) {
       await client(path(botId, "/publication"), {
         method: "PUT",
         body,
-        fallback: "The Bot could not be published.",
+        fallback: ui("The Bot could not be published."),
       });
     },
     /* Publishing can widen who reaches a shared app, so the request inbox may now hold a
@@ -89,7 +90,7 @@ export function unpublishTeamBotMutationOptions(queryClient: QueryClient) {
     mutationFn: async (botId: string) => {
       await client(path(botId, "/publication"), {
         method: "DELETE",
-        fallback: "The Bot could not be unpublished.",
+        fallback: ui("The Bot could not be unpublished."),
       });
     },
     onSettled: () => refresh(queryClient),
@@ -110,7 +111,7 @@ export function assignTeamBotMutationOptions(queryClient: QueryClient) {
         {
           method: input.remove ? "DELETE" : "POST",
           ...(input.remove ? {} : { body: { group: input.group } }),
-          fallback: "The assignment could not be saved.",
+          fallback: ui("The assignment could not be saved."),
         },
       );
     },
@@ -134,7 +135,7 @@ export function teamBotConsentMutationOptions() {
       await client(path(input.botId, "/consents"), {
         method: "POST",
         body: { serverId: input.serverId, decision: input.decision },
-        fallback: "Your answer could not be saved.",
+        fallback: ui("Your answer could not be saved."),
       });
     },
   });
@@ -145,7 +146,7 @@ export function clearTeamBotConsentsMutationOptions() {
     mutationFn: async () => {
       await client("/api/team-bots/consents", {
         method: "DELETE",
-        fallback: "Your connector preferences could not be cleared.",
+        fallback: ui("Your connector preferences could not be cleared."),
       });
     },
   });

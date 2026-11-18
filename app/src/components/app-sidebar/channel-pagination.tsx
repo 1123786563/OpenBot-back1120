@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { UseInfiniteQueryResult } from "@tanstack/react-query";
 import { type RefObject, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export function ChannelPagination({ query, scrollRoot, searching }: Props) {
+  useLocale();
   const sentinel = useRef<HTMLDivElement>(null);
   const {
     hasNextPage,
@@ -65,7 +67,7 @@ export function ChannelPagination({ query, scrollRoot, searching }: Props) {
     <div ref={sentinel} className="px-2 py-3 text-center">
       {isFetchNextPageError ? (
         <p role="alert" className="mb-2 text-xs text-muted-foreground">
-          Couldn't load older conversations.
+          {ui("Couldn't load older conversations.")}
         </p>
       ) : null}
       <Button
@@ -76,10 +78,10 @@ export function ChannelPagination({ query, scrollRoot, searching }: Props) {
         onClick={() => void fetchNextPage({ cancelRefetch: false })}
       >
         {isFetchingNextPage
-          ? "Loading older conversations…"
+          ? ui("Loading older conversations…")
           : isFetchNextPageError
-            ? "Try again"
-            : "Load older conversations"}
+            ? ui("Try again")
+            : ui("Load older conversations")}
       </Button>
     </div>
   );

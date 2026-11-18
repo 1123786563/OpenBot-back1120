@@ -13,6 +13,7 @@
  * the page opened it does not, because when it ran is not something the conversation says. The
  * record is still the audit trail on the server; this is the window beside the screen.
  */
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { ownToolLabel } from "@openbot/shared/tool-name";
 import {
   IconArrowsVertical,
@@ -45,10 +46,18 @@ const ICONS = {
 
 /** What the line says was done. The subject beside it says what it was done to. */
 const LABELS = {
-  command: "Ran",
-  read_file: "Read",
-  write_file: "Saved",
-  list_files: "Listed",
+  get command() {
+    return ui("Ran");
+  },
+  get read_file() {
+    return ui("Read");
+  },
+  get write_file() {
+    return ui("Saved");
+  },
+  get list_files() {
+    return ui("Listed");
+  },
 } as const;
 
 const BROWSER_ICONS: Record<BrowserStepName, typeof IconWorld> = {
@@ -63,7 +72,7 @@ const BROWSER_ICONS: Record<BrowserStepName, typeof IconWorld> = {
 };
 
 function timeOf(at: number): string {
-  return new Date(at).toLocaleTimeString(undefined, {
+  return new Date(at).toLocaleTimeString(getLocale(), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -81,6 +90,7 @@ function CommandEntry({
   computerId: string;
   entry: ComputerActivity;
 }) {
+  useLocale();
   return (
     <li>
       <TerminalBlock
@@ -96,7 +106,7 @@ function CommandEntry({
         }
         command={entry.subject}
         computerId={computerId}
-        label={entry.declined === true ? "Declined" : "Ran"}
+        label={entry.declined === true ? ui("Declined") : ui("Ran")}
         output={entry.output}
         status={commandStatus({
           running: false,
@@ -117,6 +127,7 @@ function CommandEntry({
  * it acted on. A page opened carries its title underneath; a step that did not happen, why not.
  */
 function BrowserEntry({ entry }: { entry: ComputerActivity }) {
+  useLocale();
   const step = entry.step ?? "computer_navigate";
   const Icon = BROWSER_ICONS[step];
   const failed = entry.refused === true || entry.failed === true;
@@ -130,7 +141,9 @@ function BrowserEntry({ entry }: { entry: ComputerActivity }) {
           }`}
         />
         <span className="shrink-0 text-muted-foreground text-xs">
-          {entry.declined === true ? "Declined" : ownToolLabel(step)}
+          {entry.declined === true
+            ? ui("Declined")
+            : ownToolLabel(step, false, ui)}
         </span>
         {entry.subject ? (
           <code className="min-w-0 break-all font-mono text-xs">
@@ -157,8 +170,8 @@ function BrowserEntry({ entry }: { entry: ComputerActivity }) {
       ) : failed ? (
         <p className="mt-1 pl-5 text-destructive text-xs">
           {entry.refused === true
-            ? "A boundary refused it."
-            : "It did not work."}
+            ? ui("A boundary refused it.")
+            : ui("It did not work.")}
         </p>
       ) : null}
     </li>
@@ -166,6 +179,7 @@ function BrowserEntry({ entry }: { entry: ComputerActivity }) {
 }
 
 function Entry({ entry }: { entry: ComputerActivity }) {
+  useLocale();
   if (entry.kind === "browser") return <BrowserEntry entry={entry} />;
   const Icon = ICONS[entry.kind];
   const failed =
@@ -182,7 +196,7 @@ function Entry({ entry }: { entry: ComputerActivity }) {
           }`}
         />
         <span className="shrink-0 text-muted-foreground text-xs">
-          {entry.declined === true ? "Declined" : LABELS[entry.kind]}
+          {entry.declined === true ? ui("Declined") : LABELS[entry.kind]}
         </span>
         {/*
           The command wraps rather than truncating. In the transcript one line per call is what keeps
@@ -204,11 +218,11 @@ function Entry({ entry }: { entry: ComputerActivity }) {
 
       {entry.refused === true ? (
         <p className="mt-1 pl-5 text-destructive text-xs">
-          {entry.output || "A boundary refused it."}
+          {entry.output || ui("A boundary refused it.")}
         </p>
       ) : entry.doneByPerson === true ? (
         <p className="mt-1 pl-5 text-muted-foreground text-xs">
-          {entry.output || "You did it yourself."}
+          {entry.output || ui("You did it yourself.")}
         </p>
       ) : (
         <div className="mt-1 max-h-64 overflow-auto pl-5">
@@ -227,6 +241,7 @@ function Entry({ entry }: { entry: ComputerActivity }) {
 }
 
 export function ActivityLog({ computerId }: { computerId: string }) {
+  useLocale();
   const entries = useSyncExternalStore(
     subscribeToActivity,
     () => activityFor(computerId),
@@ -237,8 +252,9 @@ export function ActivityLog({ computerId }: { computerId: string }) {
   if (entries.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        Nothing yet. Pages the Bot opens, commands it runs and files it reads
-        appear here.
+        {ui(
+          "Nothing yet. Pages the Bot opens, commands it runs and files it reads appear here.",
+        )}
       </p>
     );
   }

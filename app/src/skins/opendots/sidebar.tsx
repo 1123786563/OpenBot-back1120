@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBook,
   IconClockHour3,
@@ -69,6 +70,7 @@ function NavLabel({
   actions?: ReactNode;
   className?: string;
 }) {
+  useLocale();
   return (
     <div
       className={cn(
@@ -95,6 +97,7 @@ export function IconAction({
   children: ReactNode;
   className?: string;
 } & Omit<React.ComponentProps<typeof Button>, "children">) {
+  useLocale();
   return (
     <Button
       aria-label={label}
@@ -118,10 +121,11 @@ export function IconAction({
  * whose product it is.
  */
 function Wordmark({ onNavigate }: { onNavigate: () => void }) {
+  useLocale();
   const productName = appConfig.brand.productName;
   return (
     <Link
-      aria-label={`${productName} home`}
+      aria-label={ui("{{value0}} home", { value0: String(productName) })}
       className="mb-[23px] flex h-[18px] min-w-0 items-center self-start rounded-lg px-2.5 text-[16px] leading-[18px] font-bold tracking-[-0.5px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-testid="opendots-wordmark"
       onClick={onNavigate}
@@ -172,17 +176,18 @@ function BotsSection({
   channels: ChannelSummary[] | undefined;
   onNavigate: () => void;
 }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const dots = agents.data ? dotOrder(agents.data) : [];
   const bots = useNavigationItems()
     .filter(isNavigationLink)
     .find((item) => item.id === "bots");
   return (
-    <section aria-label="Bots">
+    <section aria-label={ui("Bots")}>
       <NavLabel
         actions={
           <IconAction
-            label="Create Bot"
+            label={ui("Create Bot")}
             onClick={onNavigate}
             render={(props) => (
               <Link {...props} search={{ new: true }} to="/bots" />
@@ -192,19 +197,19 @@ function BotsSection({
           </IconAction>
         }
       >
-        BOTS
+        {ui("BOTS")}
       </NavLabel>
       {agents.isPending ? null : agents.error ? (
         <p className="px-3.5 py-1.5 text-[12px] text-destructive" role="alert">
-          Couldn't load your Bots. Reload the page.
+          {ui("Couldn't load your Bots. Reload the page.")}
         </p>
       ) : dots.length === 0 ? (
         <p className="px-3.5 py-1.5 text-[12px] leading-relaxed text-(--opendots-faint)">
-          No Bots yet. Use + to create one.
+          {ui("No Bots yet. Use + to create one.")}
         </p>
       ) : (
         <nav
-          aria-label="Your Bots"
+          aria-label={ui("Your Bots")}
           className="grid max-h-[32vh] gap-[3px] overflow-y-auto"
         >
           {dots.map((agent) => {
@@ -242,7 +247,9 @@ function BotsSection({
                   <span className="min-w-0 flex-1 truncate">{agent.name}</span>
                 </Link>
                 <IconAction
-                  label={`Open ${agent.name}'s settings`}
+                  label={ui("Open {{value0}}'s settings", {
+                    value0: String(agent.name),
+                  })}
                   onClick={onNavigate}
                   render={(props) => (
                     <Link
@@ -269,7 +276,9 @@ function BotsSection({
           to={bots.to}
         >
           <bots.icon />
-          <span className="min-w-0 flex-1 truncate">All {bots.label}</span>
+          <span className="min-w-0 flex-1 truncate">
+            {uiNodes("All {{slot0}}", [bots.label])}
+          </span>
         </Link>
       ) : null}
     </section>
@@ -287,6 +296,7 @@ function ThreadRow({
   open: boolean;
   onNavigate: () => void;
 }) {
+  useLocale();
   const navigate = useNavigate();
   const setPinned = useMutation(setChannelPinnedMutationOptions(queryClient));
   const [confirming, setConfirming] = useState(false);
@@ -321,13 +331,13 @@ function ThreadRow({
             </span>
             {channel.pinned ? (
               <IconPin
-                aria-label="Pinned"
+                aria-label={ui("Pinned")}
                 className="size-3! text-(--opendots-faint)"
               />
             ) : null}
             {unread ? (
               <span
-                aria-label="Unread"
+                aria-label={ui("Unread")}
                 className="size-1.5 shrink-0 rounded-full bg-(--opendots-teal)"
                 role="img"
               />
@@ -345,14 +355,14 @@ function ThreadRow({
             }}
           >
             {channel.pinned ? <IconPinnedOff /> : <IconPin />}
-            {channel.pinned ? "Unpin conversation" : "Pin conversation"}
+            {channel.pinned ? ui("Unpin conversation") : ui("Pin conversation")}
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() => setConfirming(true)}
             variant="destructive"
           >
             <IconTrash />
-            Delete conversation…
+            {ui("Delete conversation…")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -381,6 +391,7 @@ function RecentChats({
   newChat: LinkProps;
   onNavigate: () => void;
 }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
   const [searching, setSearching] = useState(false);
@@ -395,7 +406,7 @@ function RecentChats({
   };
   return (
     <section
-      aria-label="Recent chats"
+      aria-label={ui("Recent chats")}
       className="mt-4 flex min-h-0 flex-1 flex-col max-md:flex-none"
     >
       <NavLabel
@@ -403,13 +414,15 @@ function RecentChats({
           <>
             <IconAction
               aria-pressed={searching}
-              label={searching ? "Close search" : "Search conversations"}
+              label={
+                searching ? ui("Close search") : ui("Search conversations")
+              }
               onClick={() => (searching ? closeSearch() : setSearching(true))}
             >
               {searching ? <IconX /> : <IconSearch />}
             </IconAction>
             <IconAction
-              label="New conversation"
+              label={ui("New conversation")}
               onClick={onNavigate}
               render={(props) => <Link {...props} {...newChat} />}
             >
@@ -419,19 +432,19 @@ function RecentChats({
         }
         className="mt-[18px]"
       >
-        RECENT CHATS
+        {ui("RECENT CHATS")}
       </NavLabel>
       {searching ? (
         <div className="mb-2 px-1">
           <Input
-            aria-label="Search conversations"
+            aria-label={ui("Search conversations")}
             autoFocus
             className="h-8 rounded-[9px] bg-background text-[13px]"
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") closeSearch();
             }}
-            placeholder="Find a conversation…"
+            placeholder={ui("Find a conversation…")}
             value={search}
           />
         </div>
@@ -442,13 +455,16 @@ function RecentChats({
       >
         {channels.isPending ? null : channels.error ? (
           <p className="px-3.5 py-1.5 text-[12px] text-(--opendots-error-ink)">
-            Couldn't load your conversations. Reload the page.
+            {ui("Couldn't load your conversations. Reload the page.")}
           </p>
         ) : visible.length === 0 ? (
           <p className="px-3.5 py-1.5 text-[12px] leading-relaxed text-(--opendots-faint)">
             {search.trim()
-              ? `No conversation has “${search.trim()}” in its name or latest message.`
-              : "No conversations yet. Start one with New chat."}
+              ? ui(
+                  "No conversation has “{{value0}}” in its name or latest message.",
+                  { value0: String(search.trim()) },
+                )
+              : ui("No conversations yet. Start one with New chat.")}
           </p>
         ) : (
           visible.map((channel) => (
@@ -476,6 +492,7 @@ function RecentChats({
 }
 
 function Count({ value }: { value: number | undefined }) {
+  useLocale();
   if (!value) return null;
   return (
     <small className="bg-(--opendots-tag) text-[10px] text-(--opendots-tag-ink) tabular-nums">
@@ -491,6 +508,7 @@ function WorkspaceLinks({
   place: Place;
   onNavigate: () => void;
 }) {
+  useLocale();
   const routines = useQuery(routinesQueryOptions());
   // No Memories row where memory isn't offered (see `offersMemory`).
   const memory = useOffersMemory();
@@ -517,7 +535,7 @@ function WorkspaceLinks({
   );
   return (
     <nav
-      aria-label="Workspace"
+      aria-label={ui("Workspace")}
       className="mt-auto border-t border-(--opendots-line) pt-2.5"
     >
       <Link
@@ -528,7 +546,7 @@ function WorkspaceLinks({
         to="/s/$screen"
       >
         <IconClockHour3 />
-        <span className="min-w-0 flex-1 truncate">Routines</span>
+        <span className="min-w-0 flex-1 truncate">{ui("Routines")}</span>
         <Count value={routines.data?.routines.length} />
       </Link>
       {memory ? (
@@ -540,7 +558,7 @@ function WorkspaceLinks({
           to="/s/$screen"
         >
           <IconBook />
-          <span className="min-w-0 flex-1 truncate">Memories</span>
+          <span className="min-w-0 flex-1 truncate">{ui("Memories")}</span>
           <Count value={memories.data?.length} />
         </Link>
       ) : null}
@@ -576,6 +594,7 @@ export function initialsOf(user: { name?: string | null; email: string }) {
 
 /** Who is signed in, and the way out. OpenBot's sidebar keeps this in its user menu. */
 function UserRow() {
+  useLocale();
   const user = useQuery(currentUserQueryOptions());
   const navigate = useNavigate();
   const signOut = useMutation(signOutMutationOptions(queryClient));
@@ -600,7 +619,7 @@ function UserRow() {
       {signOutOffered ? (
         <IconAction
           disabled={signOut.isPending}
-          label="Sign out"
+          label={ui("Sign out")}
           onClick={async () => {
             await signOut.mutateAsync();
             await navigate({ to: "/sign" });
@@ -626,6 +645,7 @@ export function OpenDotsSidebar({
   newChat: LinkProps;
   onNavigate: () => void;
 }) {
+  useLocale();
   const channels = useInfiniteQuery(channelListQueryOptions());
   return (
     <div className="flex h-full min-h-0 flex-col px-3 pt-[23px] pb-3 max-md:overflow-y-auto">
@@ -639,7 +659,7 @@ export function OpenDotsSidebar({
         onClick={onNavigate}
       >
         <IconPlus />
-        <span>New chat</span>
+        <span>{ui("New chat")}</span>
       </Link>
       <BotsSection
         channels={channels.data}

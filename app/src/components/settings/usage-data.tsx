@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChartBar } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageRows, PageSection } from "@/components/layout/page-shell";
@@ -28,42 +29,47 @@ export const USAGE_DATA_DOC =
  * app that can't say draws nothing either.
  */
 export function UsageDataSection() {
+  useLocale();
   const usageData = useQuery(desktopUsageDataQueryOptions());
   const queryClient = useQueryClient();
   const change = useMutation(setUsageDataMutationOptions(queryClient));
   if (desktopShell() === null || !usageData.data) return null;
   const { shared, offByEnvironment } = usageData.data;
   return (
-    <PageSection title="Privacy">
+    <PageSection title={ui("Privacy")}>
       <PageRows>
         <Item size="sm">
           <ItemMedia variant="icon">
             <IconChartBar />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Share usage data</ItemTitle>
+            <ItemTitle>{ui("Share usage data")}</ItemTitle>
             <ItemDescription className="line-clamp-none">
               {offByEnvironment
-                ? "Turned off on this computer. OpenBot sends no usage data."
-                : "OpenBot sends usage data, linked to your OpenBot account. It never sends your conversations, files or keys. Changes apply the next time OpenBot starts."}{" "}
+                ? ui(
+                    "Turned off on this computer. OpenBot sends no usage data.",
+                  )
+                : ui(
+                    "OpenBot sends usage data, linked to your OpenBot account. It never sends your conversations, files or keys. Changes apply the next time OpenBot starts.",
+                  )}{" "}
               <a
                 className="underline underline-offset-2 hover:text-foreground"
                 href={USAGE_DATA_DOC}
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                What OpenBot sends
+                {ui("What OpenBot sends")}
               </a>
             </ItemDescription>
             {change.error ? (
               <p className="text-destructive text-sm" role="alert">
-                Couldn't change this setting. Try again.
+                {ui("Couldn't change this setting. Try again.")}
               </p>
             ) : null}
           </ItemContent>
           <ItemActions>
             <Switch
-              aria-label="Share usage data"
+              aria-label={ui("Share usage data")}
               checked={shared}
               disabled={offByEnvironment || change.isPending}
               onCheckedChange={(share) => change.mutate(share)}

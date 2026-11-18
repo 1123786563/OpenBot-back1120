@@ -1,6 +1,7 @@
 import {
   DEFAULT_USER_PREFERENCES,
   isSkinId,
+  isLanguagePreference,
   type UserPreferences,
 } from "@openbot/shared/user-preferences";
 import { and, eq, sql } from "drizzle-orm";
@@ -13,6 +14,8 @@ import { users } from "./db/schema";
  */
 function withDefaults(stored: Partial<UserPreferences>): UserPreferences {
   const preferences = { ...DEFAULT_USER_PREFERENCES, ...stored };
+  if (!isLanguagePreference(preferences.language))
+    preferences.language = "system";
   return isSkinId(preferences.skin)
     ? preferences
     : { ...preferences, skin: DEFAULT_USER_PREFERENCES.skin };

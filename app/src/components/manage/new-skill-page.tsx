@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { PageShell } from "@/components/layout/page-shell";
@@ -17,6 +18,7 @@ import { emptySkillForm } from "@/lib/skills/form";
  * (the server grants it, `personal-defaults.ts`), so there the page is where to turn one off.
  */
 export function NewSkillPage() {
+  useLocale();
   const paths = useManagePaths();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -26,13 +28,17 @@ export function NewSkillPage() {
 
   return (
     <PageShell
-      backButton={{ label: "Skills", linkProps: paths.skills() }}
+      backButton={{ label: ui("Skills"), linkProps: paths.skills() }}
       description={
         personal
-          ? "Write instructions a Bot follows when you pick the skill from the / menu. Your Bots offer it as soon as you save."
-          : "Write instructions a Bot follows when someone picks the skill from the / menu. After saving, choose which Bots offer it."
+          ? ui(
+              "Write instructions a Bot follows when you pick the skill from the / menu. Your Bots offer it as soon as you save.",
+            )
+          : ui(
+              "Write instructions a Bot follows when someone picks the skill from the / menu. After saving, choose which Bots offer it.",
+            )
       }
-      title="New skill"
+      title={ui("New skill")}
     >
       <SkillFields
         sections={{
@@ -42,7 +48,7 @@ export function NewSkillPage() {
               render={(props) => <Link {...props} {...paths.skills()} />}
               variant="outline"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
           ),
         }}
@@ -53,7 +59,7 @@ export function NewSkillPage() {
           await saveSkill.mutateAsync({ ...values, global: true });
           await navigate(paths.skill(values.slug.trim()));
         }}
-        submitLabel="Save skill"
+        submitLabel={ui("Save skill")}
       />
     </PageShell>
   );

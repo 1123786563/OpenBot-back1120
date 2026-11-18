@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 import { passwordKeys, type SignInRequest } from "./queries";
@@ -89,7 +90,7 @@ export function deleteSavedLoginMutationOptions(queryClient: QueryClient) {
     mutationFn: async (loginId: string) => {
       await client(`/api/passwords/${encodeURIComponent(loginId)}`, {
         method: "DELETE",
-        fallback: "Could not delete that password",
+        fallback: ui("Could not delete that password"),
       });
     },
     onSuccess: () => invalidate(queryClient),
@@ -117,7 +118,7 @@ export async function requestSignIn(
   if (!response.ok || !body)
     return {
       ok: false,
-      reason: body?.error ?? "The sign-in request could not be made.",
+      reason: body?.error ?? ui("The sign-in request could not be made."),
     };
   return { ok: true, request: body };
 }

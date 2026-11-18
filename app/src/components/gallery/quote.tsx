@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { z } from "zod";
 import type { GalleryComponent } from "@/lib/copilot/gallery-registry";
 import { GalleryFrame } from "./frame";
@@ -23,18 +24,19 @@ export const QuoteCardProps = z.object({
 type QuoteArgs = z.infer<typeof QuoteCardProps>;
 
 export function QuoteCard({ quote, attribution, context }: Partial<QuoteArgs>) {
+  useLocale();
   if (!quote) {
     return (
-      <GalleryFrame title="Quotation">
+      <GalleryFrame title={ui("Quotation")}>
         <p className="text-sm text-muted-foreground">
-          There is nothing to quote.
+          {ui("There is nothing to quote.")}
         </p>
       </GalleryFrame>
     );
   }
 
   return (
-    <GalleryFrame caption={context} title="Quotation">
+    <GalleryFrame caption={context} title={ui("Quotation")}>
       <blockquote className="border-l-2 border-border pl-4">
         <GalleryMarkdown className="text-sm leading-relaxed">
           {quote}
@@ -52,11 +54,16 @@ export function QuoteCard({ quote, attribution, context }: Partial<QuoteArgs>) {
 export const GALLERY: GalleryComponent[] = [
   {
     name: "showQuote",
-    title: "Quotation",
+    get title() {
+      return ui("Quotation");
+    },
     kind: "card",
-    summary: "Shows a quotation and who said or wrote it.",
-    description:
-      "Show a quotation with its attribution. Use when the exact words matter, something a person said, or a line from a document you were given.",
+    get summary() {
+      return ui("Shows a quotation and who said or wrote it.");
+    },
+    get description() {
+      return "Show a quotation with its attribution. Use when the exact words matter, something a person said, or a line from a document you were given.";
+    },
     parameters: QuoteCardProps,
     Component: QuoteCard as GalleryComponent["Component"],
     preview: {

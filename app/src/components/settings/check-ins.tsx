@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconRadar } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageRows, PageSection } from "@/components/layout/page-shell";
@@ -30,6 +32,7 @@ import { queryClient } from "@/query-client";
  * says who turned it off. Their own choice is kept underneath for when the admin turns it back on.
  */
 export function CheckInsSection() {
+  useLocale();
   const preferences = useUserPreferences();
   const allowed = useQuery(proactiveAllowedQueryOptions());
   // Each Bot's own check-ins are on its Memory page, or on What it can do where there is no memory.
@@ -49,12 +52,14 @@ export function CheckInsSection() {
   const on = chosen === "on" && !byAdmin;
   return (
     <PageSection
-      description="Your Bots check the apps they can read and tell you when something needs you, at most once an hour. They never act without asking."
-      title="Check-ins"
+      description={ui(
+        "Your Bots check the apps they can read and tell you when something needs you, at most once an hour. They never act without asking.",
+      )}
+      title={ui("Check-ins")}
     >
       {preferences.isPending ? null : preferences.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load your check-ins. Reload the page.
+          {ui("Couldn't load your check-ins. Reload the page.")}
         </p>
       ) : (
         <PageRows>
@@ -63,18 +68,21 @@ export function CheckInsSection() {
               <IconRadar />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>All your Bots</ItemTitle>
+              <ItemTitle>{ui("All your Bots")}</ItemTitle>
               <ItemDescription>
                 {byAdmin
-                  ? "Turned off by your admin."
+                  ? ui("Turned off by your admin.")
                   : on
-                    ? `On. Each Bot's own check-ins are on its ${botPage} page.`
-                    : "Off. None of your Bots check in for you."}
+                    ? ui(
+                        "On. Each Bot's own check-ins are on its {{value0}} page.",
+                        { value0: String(botPage) },
+                      )
+                    : ui("Off. None of your Bots check in for you.")}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Check-ins for all your Bots"
+                aria-label={ui("Check-ins for all your Bots")}
                 checked={on}
                 disabled={byAdmin || save.isPending}
                 onCheckedChange={(next) =>
@@ -87,7 +95,7 @@ export function CheckInsSection() {
       )}
       {save.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {save.error.message}
+          {<ErrorDetails error={save.error} />}
         </p>
       ) : null}
     </PageSection>

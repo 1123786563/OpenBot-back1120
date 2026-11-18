@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { DryRunChanges } from "@/components/boundaries/dry-run-changes";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -15,32 +17,43 @@ export function RulePreview({
 }: {
   preview: UseQueryResult<DryRunReport>;
 }) {
+  useLocale();
   if (preview.isPending) return null;
   return (
     <Field aria-labelledby="rule-preview" aria-live="polite">
-      <FieldLabel id="rule-preview">On recent activity</FieldLabel>
+      <FieldLabel id="rule-preview">{ui("On recent activity")}</FieldLabel>
       {preview.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {preview.error.message}
+          {<ErrorDetails error={preview.error} />}
         </p>
       ) : preview.data.scanned === 0 ? (
         <FieldDescription>
-          No recorded actions to test against yet. You'll see what this rule
-          stops once Bots have acted.
+          {ui(
+            "No recorded actions to test against yet. You'll see what this rule stops once Bots have acted.",
+          )}
         </FieldDescription>
       ) : (
         <div>
           <FieldDescription>
             {preview.data.wouldRefuse === 0
-              ? `Of the last ${preview.data.scanned} recorded actions, this rule would have stopped none. It may still stop future ones.`
-              : `Of the last ${preview.data.scanned} recorded actions, this rule would have stopped ${preview.data.wouldRefuse}.`}
+              ? ui(
+                  "Of the last {{value0}} recorded actions, this rule would have stopped none. It may still stop future ones.",
+                  { value0: String(preview.data.scanned) },
+                )
+              : ui(
+                  "Of the last {{value0}} recorded actions, this rule would have stopped {{value1}}.",
+                  {
+                    value0: String(preview.data.scanned),
+                    value1: String(preview.data.wouldRefuse),
+                  },
+                )}
           </FieldDescription>
           <DryRunChanges
             changes={preview.data.changes.filter(
               (change) => change.would === "refused",
             )}
             total={preview.data.wouldRefuse}
-            verdict="Would stop"
+            verdict={ui("Would stop")}
           />
         </div>
       )}

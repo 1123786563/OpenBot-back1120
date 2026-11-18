@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { currentUserQueryOptions } from "@/lib/auth/queries";
@@ -21,6 +23,7 @@ export function SharedAppNotice({
   botId: string;
   reason: "publish" | "trigger";
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const me = useQuery(currentUserQueryOptions()).data;
   const shared = useQuery(botSharedAppsQueryOptions(botId));
@@ -33,8 +36,10 @@ export function SharedAppNotice({
       <div className="space-y-1 text-sm">
         {apps.map((app) => (
           <p key={app.serverId}>
-            Saving also lets everyone who can use this Bot use the shared{" "}
-            {app.title} account.
+            {uiNodes(
+              "Saving also lets everyone who can use this Bot use the shared {{slot0}}account.",
+              [app.title],
+            )}
           </p>
         ))}
       </div>
@@ -49,16 +54,23 @@ export function SharedAppNotice({
       {apps.map((app) =>
         waiting.has(app.serverId) ? (
           <p className="text-muted-foreground" key={app.serverId}>
-            Waiting for an admin to approve the shared {app.title} account.
+            {uiNodes(
+              "Waiting for an admin to approve the shared {{slot0}}account.",
+              [app.title],
+            )}
           </p>
         ) : app.covered ? null : (
           <div className="flex flex-wrap items-center gap-2" key={app.serverId}>
             <p className="text-amber-700 dark:text-amber-400">
-              This Bot can't use the shared {app.title} account until an admin
-              approves who can use the Bot.
+              {uiNodes(
+                "This Bot can't use the shared {{slot0}}account until an admin approves who can use the Bot.",
+                [app.title],
+              )}
             </p>
             <Button
-              aria-label={`Request approval for ${app.title}`}
+              aria-label={ui("Request approval for {{value0}}", {
+                value0: String(app.title),
+              })}
               disabled={ask.isPending}
               onClick={() =>
                 ask.mutate({ botId, serverId: app.serverId, reason })
@@ -67,14 +79,14 @@ export function SharedAppNotice({
               type="button"
               variant="outline"
             >
-              Request approval
+              {ui("Request approval")}
             </Button>
           </div>
         ),
       )}
       {ask.error ? (
         <p className="text-destructive" role="alert">
-          {ask.error.message}
+          {<ErrorDetails error={ask.error} />}
         </p>
       ) : null}
     </div>

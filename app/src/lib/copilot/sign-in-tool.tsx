@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconLock } from "@tabler/icons-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -70,6 +71,7 @@ const OFFERED: Readonly<Record<string, OfferRule>> = {
 };
 
 export function SignInTool() {
+  useLocale();
   const botOf = useBotOfCall();
   // Stable for the provider's life, so the SDK's once-registered handler may keep it.
   const queryClient = useQueryClient();
@@ -158,6 +160,7 @@ function SignInCard({
   running: boolean;
   outcome: Outcome;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   // While the call waits there is no result to carry the id, so the open request that this call
   // asked for is looked up instead, polled until the handler has opened it.
@@ -180,10 +183,10 @@ function SignInCard({
       <ToolLine
         label={
           running
-            ? "Waiting for you to sign in"
+            ? ui("Waiting for you to sign in")
             : outcome.signedIn
-              ? "Signed in"
-              : "Sign-in did not complete"
+              ? ui("Signed in")
+              : ui("Sign-in did not complete")
         }
         detail={site}
         running={running}
@@ -199,15 +202,20 @@ function SignInCard({
       {running && requestId ? (
         <div>
           <Button size="sm" onClick={() => setOpen(true)}>
-            <IconLock />
-            Open private sign-in
+            {uiNodes("{{slot0}}Open private sign-in", [
+              <IconLock key="slot0" />,
+            ])}
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Sign in to {site}</DialogTitle>
+                <DialogTitle>
+                  {uiNodes("Sign in to {{slot0}}", [site])}
+                </DialogTitle>
                 <DialogDescription>
-                  Goes to your Bot's browser, not into this conversation.
+                  {ui(
+                    "Goes to your Bot's browser, not into this conversation.",
+                  )}
                 </DialogDescription>
               </DialogHeader>
               <DialogBody className="mt-4 overflow-y-auto">

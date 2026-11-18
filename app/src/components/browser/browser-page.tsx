@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   BrowserApiState,
   BrowserOpenResponse,
@@ -26,12 +27,13 @@ const DESCRIPTION =
  * with automatic learning and sharing. A link there, so this page stays the place to teach and the settings stay there.
  */
 function LearnedLink() {
+  useLocale();
   return (
     <Link
       className="text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"
       to="/settings/learning"
     >
-      See what your Bots learned
+      {ui("See what your Bots learned")}
     </Link>
   );
 }
@@ -41,10 +43,13 @@ function LearnedLink() {
  * The page's own title, as every page has one; the browser below it is the tool, not the page.
  */
 function TeachHeading() {
+  useLocale();
   return (
     <header className="flex flex-col gap-1">
-      <h1 className="font-semibold text-2xl tracking-tight">{TITLE}</h1>
-      <p className="text-pretty text-muted-foreground text-sm">{DESCRIPTION}</p>
+      <h1 className="font-semibold text-2xl tracking-tight">{ui(TITLE)}</h1>
+      <p className="text-pretty text-muted-foreground text-sm">
+        {ui(DESCRIPTION)}
+      </p>
     </header>
   );
 }
@@ -56,6 +61,7 @@ function TeachHeading() {
  * (the tabs, a recording's actions) changes in the browser rather than here.
  */
 export function BrowserPage() {
+  useLocale();
   const state = useQuery(browserStateQueryOptions({ poll: true }));
   // A recording that stops, here or in the browser, is a new row or a final state in the list beneath.
   const phase = state.data?.recorder?.phase;
@@ -82,9 +88,9 @@ export function BrowserPage() {
   // screen, where tearing it down would open it all over again.
   if (state.data === undefined) {
     return (
-      <PageShell title={TITLE}>
+      <PageShell title={ui(TITLE)}>
         <p className="mt-6 text-destructive text-sm" role="alert">
-          Couldn't load your browser. Reload the page.
+          {ui("Couldn't load your browser. Reload the page.")}
         </p>
         <YourRecordings action={<LearnedLink />} />
       </PageShell>
@@ -93,10 +99,10 @@ export function BrowserPage() {
   if (!state.data.available) {
     // Why, where the server can say: its Bots share one computer, say, which is no place for a browser of the person's.
     return (
-      <PageShell title={TITLE}>
+      <PageShell title={ui(TITLE)}>
         <PageEmpty>
           {state.data.note ??
-            "OpenBot isn't set up to run a browser for you. Ask an admin."}
+            ui("OpenBot isn't set up to run a browser for you. Ask an admin.")}
         </PageEmpty>
         <YourRecordings action={<LearnedLink />} />
       </PageShell>
@@ -110,6 +116,7 @@ export function BrowserPage() {
  * Open, so arriving here opens nothing. A browser in the page is the page itself, so it opens once on arrival.
  */
 function OpenedBrowser({ state }: { state: BrowserApiState }) {
+  useLocale();
   const native = state.shows === "native";
   // The Recorder's "See it on Teach a Bot" link (`?recordings`) is to the list, so it opens no browser on arrival.
   const recordingsOnly = "recordings" in useSearch({ strict: false });
@@ -149,11 +156,11 @@ function OpenedBrowser({ state }: { state: BrowserApiState }) {
       );
     // The Recorder's link to the list opens no browser on arrival: the list, and Open browser to open one.
     return (
-      <PageShell title={TITLE} description={DESCRIPTION}>
+      <PageShell title={ui(TITLE)} description={ui(DESCRIPTION)}>
         {recordingsOnly && !said ? (
           <div className="mt-6">
             <Button onClick={() => open.mutate()} size="sm" variant="outline">
-              Open browser
+              {ui("Open browser")}
             </Button>
           </div>
         ) : null}
@@ -164,7 +171,7 @@ function OpenedBrowser({ state }: { state: BrowserApiState }) {
             </p>
             {open.error ? (
               <Button onClick={() => open.mutate()} size="sm" variant="outline">
-                Try again
+                {ui("Try again")}
               </Button>
             ) : null}
           </div>
@@ -207,8 +214,9 @@ function OpenedBrowser({ state }: { state: BrowserApiState }) {
  * whether to save the recording, or here with Stop, which saves it.
  */
 function NativeBrowser({ state }: { state: BrowserApiState }) {
+  useLocale();
   return (
-    <PageShell title={TITLE}>
+    <PageShell title={ui(TITLE)}>
       <TeachSteps state={state} />
       <YourRecordings
         action={<LearnedLink />}

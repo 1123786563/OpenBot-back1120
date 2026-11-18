@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { IdentityProviders, LinkedAccount } from "@/lib/identity/queries";
 import { schemeNeedsKey } from "@/lib/plugins/enablement-notes";
 import { brokeredProvenance } from "@/lib/plugins/provider-vocabulary";
@@ -80,7 +81,14 @@ const IDENTITY_TILE_SUMMARIES = {
   slack: "Message OpenBot from Slack.",
 } as const;
 
-const IDENTITY_TITLES = { github: "GitHub", slack: "Slack" } as const;
+const IDENTITY_TITLES = {
+  get github() {
+    return ui("GitHub");
+  },
+  get slack() {
+    return ui("Slack");
+  },
+} as const;
 
 export function connectionRows(input: {
   /** Catalogue apps a person connects for themselves, already narrowed to the enabled ones. */
@@ -156,7 +164,9 @@ export function connectionRows(input: {
           // expected a sign-in is surprised when the page asks for one.
           summary:
             !input.connected.has(server.id) && schemeNeedsKey(server.authScheme)
-              ? `Needs a key from ${server.title}`
+              ? ui("Needs a key from {{value0}}", {
+                  value0: String(server.title),
+                })
               : server.summary,
           state: input.connected.has(server.id) ? "connected" : "available",
           notConnected: !input.connected.has(server.id),
@@ -167,7 +177,7 @@ export function connectionRows(input: {
       (server): ConnectionRow => ({
         key: server.id,
         title: server.title,
-        summary: "Your organisation's account. Bots act as the team here.",
+        summary: ui("Your organisation's account. Bots act as the team here."),
         state: "team",
         mark: { kind: "logo", logo: server.logo },
       }),

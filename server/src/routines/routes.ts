@@ -232,6 +232,7 @@ type RoutineDto = {
   /** Which Bot carries it out, so a Bot's own screen can show only its routines. */
   agentId: string;
   schedule: string;
+  scheduleZhCN?: string;
   timezone: string;
   instruction: string;
   /** What the person called it, or null: the page then names it by its schedule. */
@@ -271,6 +272,7 @@ function routineDto(routine: RoutineSummary): RoutineDto {
     id: routine.id,
     agentId: routine.agentId,
     schedule: routine.schedule,
+    scheduleZhCN: routine.scheduleZhCN,
     timezone: routine.timezone,
     instruction: routine.instruction,
     title: routine.title,

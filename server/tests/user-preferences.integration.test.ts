@@ -35,6 +35,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
   const alice = await person();
   const bob = await person();
   expect(await store.read(alice)).toEqual({
+    language: "system",
     messageListEmphasis: "thread",
     selfHostBannerDismissed: false,
     narration: null,
@@ -42,6 +43,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     proactive: "on",
   });
   expect(await store.patch(alice, { messageListEmphasis: "agent" })).toEqual({
+    language: "system",
     messageListEmphasis: "agent",
     selfHostBannerDismissed: false,
     narration: null,
@@ -49,6 +51,7 @@ test("database defaults and writes survive a new store and remain scoped to the 
     proactive: "on",
   });
   expect(await createUserPreferencesStore(database).read(alice)).toEqual({
+    language: "system",
     messageListEmphasis: "agent",
     selfHostBannerDismissed: false,
     narration: null,
@@ -56,11 +59,33 @@ test("database defaults and writes survive a new store and remain scoped to the 
     proactive: "on",
   });
   expect(await store.read(bob)).toEqual({
+    language: "system",
     messageListEmphasis: "thread",
     selfHostBannerDismissed: false,
     narration: null,
     skin: "openbot",
     proactive: "on",
+  });
+});
+
+test("language persists across stores, preserves other preferences and normalizes future stored values", async () => {
+  const alice = await person();
+  const bob = await person();
+  await store.patch(alice, { language: "zh-CN", skin: "openmuse" });
+  expect(await createUserPreferencesStore(database).read(alice)).toMatchObject({
+    language: "zh-CN",
+    skin: "openmuse",
+  });
+  expect((await store.read(bob)).language).toBe("system");
+  await database
+    .update(users)
+    .set({
+      preferences: sql`${users.preferences} || '{"language":"future-language"}'::jsonb`,
+    })
+    .where(eq(users.id, alice));
+  expect(await store.read(alice)).toMatchObject({
+    language: "system",
+    skin: "openmuse",
   });
 });
 
@@ -94,6 +119,7 @@ test("the narration choice is kept in the database beside the others", async () 
   expect((await store.read(id)).narration).toBe(null);
   await store.patch(id, { narration: "on" });
   expect(await createUserPreferencesStore(database).read(id)).toEqual({
+    language: "system",
     messageListEmphasis: "thread",
     selfHostBannerDismissed: false,
     narration: "on",
@@ -105,6 +131,7 @@ test("the narration choice is kept in the database beside the others", async () 
 test("the skin is saved on the account and survives a new store", async () => {
   const id = await person();
   expect(await store.patch(id, { skin: "openmuse" })).toEqual({
+    language: "system",
     messageListEmphasis: "thread",
     selfHostBannerDismissed: false,
     narration: null,
@@ -135,6 +162,7 @@ test("check-ins are on for a person who never chose, and their off is kept in th
   expect((await store.read(id)).proactive).toBe("on");
   await store.patch(id, { proactive: "off" });
   expect(await createUserPreferencesStore(database).read(id)).toEqual({
+    language: "system",
     messageListEmphasis: "thread",
     selfHostBannerDismissed: false,
     narration: null,
