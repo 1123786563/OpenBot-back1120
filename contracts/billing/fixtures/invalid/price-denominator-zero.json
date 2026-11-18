@@ -1,0 +1,8 @@
+{
+  "expect": "reject",
+  "schema": "PriceDenominator",
+  "instance": "0",
+  "via": "schema",
+  "code": "invalid_integer",
+  "note": "denominator is strictly positive"
+}

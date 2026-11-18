@@ -1,0 +1,136 @@
+# =============================================================================
+# Isolated billing test environment (#62) — DO NOT confuse with the app's
+# docker-compose.yml at the repository root (which is the existing application
+# environment and is never started or modified by this file).
+#
+# Requirements (requirement.md §7):
+#   - project name `billing62_<run_id>` — provided via BILLING62_RUN_ID; the
+#     runner refuses to start without it (no default, no accidental reuse).
+#   - dedicated internal network only; no published ports, no external
+#     networks/volumes, no host network mode, no production connections.
+#   - PostgreSQL 17 + Lago community edition v1.57.0, every image pinned by
+#     tag AND amd64 manifest digest (digests fetched from the registries on
+#     2026-11-17 and recorded in docs/billing-contract.md).
+#
+# Credentials: NEVER baked into this file. The runner generates one-time
+# credentials per run and injects them through a permission-restricted env
+# file (BILLING62_ENV_FILE) plus a generated Lago RSA key.
+# =============================================================================
+name: billing62_${BILLING62_RUN_ID:?set BILLING62_RUN_ID to a unique run id}
+
+networks:
+  billing62-internal:
+    name: billing62_${BILLING62_RUN_ID}-internal
+    internal: true
+  billing62-admin:
+    # the ONLY network with an egress path (image pulls during `compose up`);
+    # it carries no published ports either
+    name: billing62_${BILLING62_RUN_ID}-admin
+
+volumes:
+  billing62-pgdata:
+    name: billing62_${BILLING62_RUN_ID}_pgdata
+  billing62-lago-pgdata:
+    name: billing62_${BILLING62_RUN_ID}_lago_pgdata
+  billing62-lago-redis:
+    name: billing62_${BILLING62_RUN_ID}_lago_redis
+
+services:
+  # ------------------------------------------------------------ OpenBot ledger
+  postgres:
+    image: postgres:17@sha256:6f7593c161689b6b02c78668b314af7da8811b592c5519108c57a49d0b6ad788 # postgres:17, linux/amd64
+    container_name: billing62_${BILLING62_RUN_ID}-postgres
+    environment:
+      POSTGRES_DB: billing62_${BILLING62_RUN_ID}
+      POSTGRES_USER: ${BILLING62_PG_USER:?one-time user}
+      POSTGRES_PASSWORD: ${BILLING62_PG_PASSWORD:?one-time password}
+    networks: [billing62-internal]
+    volumes:
+      - billing62-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # ------------------------------------------------------------- Lago CE stack
+  lago-db:
+    image: getlago/postgres-partman:15.0-alpine@sha256:ff4616c24367f3643aac27061a0c4e757ca8f78af967249cb4b3fd64049d290d
+    container_name: billing62_${BILLING62_RUN_ID}-lago-db
+    environment:
+      POSTGRES_DB: ${BILLING62_LAGO_DB_NAME:?one-time lago database}
+      POSTGRES_USER: ${BILLING62_LAGO_USER:?one-time user}
+      POSTGRES_PASSWORD: ${BILLING62_LAGO_PASSWORD:?one-time password}
+    networks: [billing62-internal]
+    volumes:
+      - billing62-lago-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  lago-redis:
+    image: redis:7-alpine@sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446 # redis:7-alpine, linux/amd64
+    container_name: billing62_${BILLING62_RUN_ID}-lago-redis
+    networks: [billing62-internal]
+    volumes:
+      - billing62-lago-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  lago-migrate:
+    image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
+    container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
+    command: ["./scripts/docker/migrate.sh"]
+    environment: &lago-env
+      LAGO_DATABASE_URL: postgres://${BILLING62_LAGO_USER}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
+      LAGO_DATABASE_URL_PASSWORD: ${BILLING62_LAGO_PASSWORD}
+      LAGO_REDIS_URL: redis://lago-redis:6379
+      LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY:?one-time key}
+      RAILS_ENV: production
+      RAILS_LOG_TO_STDOUT: "true"
+      LAGO_ENCRYPTION_PRIMARY_KEY: ${BILLING62_LAGO_ENC_PRIMARY:?one-time key}
+      LAGO_ENCRYPTION_DETERMINISTIC_KEY: ${BILLING62_LAGO_ENC_DETERMINISTIC:?one-time key}
+      LAGO_ENCRYPTION_KEY_DERIVATION_SALT: ${BILLING62_LAGO_ENC_SALT:?one-time key}
+    networks: [billing62-internal]
+    depends_on:
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
+
+  lago-api:
+    image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
+    container_name: billing62_${BILLING62_RUN_ID}-lago-api
+    command: ["./scripts/docker/api.sh"]
+    environment: *lago-env
+    networks: [billing62-internal]
+    expose:
+      - "3000"
+    depends_on:
+      lago-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  lago-clock:
+    image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
+    container_name: billing62_${BILLING62_RUN_ID}-lago-clock
+    command: ["./scripts/docker/clock.sh"]
+    environment: *lago-env
+    networks: [billing62-internal]
+    depends_on:
+      lago-migrate: { condition: service_completed_successfully }
+
+  lago-worker:
+    image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
+    container_name: billing62_${BILLING62_RUN_ID}-lago-worker
+    command: ["./scripts/docker/worker.sh"]
+    environment: *lago-env
+    networks: [billing62-internal]
+    depends_on:
+      lago-migrate: { condition: service_completed_successfully }

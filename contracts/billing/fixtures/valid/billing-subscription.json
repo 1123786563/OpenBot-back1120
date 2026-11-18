@@ -1,0 +1,20 @@
+{
+  "expect": "accept",
+  "schema": "BillingSubscription",
+  "instance": {
+    "id": "c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1699999500000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "2",
+    "original_purchased_at_us": "1699999545000000",
+    "current_period_start_us": "1699999545000000",
+    "current_period_end_us": "1702418745000000",
+    "timezone": "Asia/Shanghai",
+    "period_months": "1",
+    "prepaid_periods_ahead": "0",
+    "status": "active"
+  }
+}

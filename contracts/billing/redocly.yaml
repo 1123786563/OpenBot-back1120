@@ -1,0 +1,20 @@
+# Redocly configuration for the billing contract lint.
+# Locked to @redocly/cli 2.3.1 (see root package.json devDependencies).
+# Run: bun run billing:contract:lint
+extends:
+  - recommended
+apis:
+  billing@v1:
+    root: openapi.yaml
+    rules:
+      # Failure modes must be enumerated explicitly; validate-fixtures.ts
+      # additionally verifies x-error-codes coverage of every ProblemDocument
+      # code, so generic "some 4xx exists" is replaced by real checks.
+      operation-4xx-response: error
+      info-license-strict: error
+      no-unresolved-refs: error
+      no-identical-paths: error
+      operation-operationId-unique: error
+      operation-summary: error
+      path-parameters-defined: error
+      no-ambiguous-paths: error

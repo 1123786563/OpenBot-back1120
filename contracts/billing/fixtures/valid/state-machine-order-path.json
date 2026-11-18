@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "Order",
+  "transitions": [
+    ["pending", "payment_confirming"],
+    ["payment_confirming", "paid"],
+    ["paid", "fulfilling"],
+    ["fulfilling", "fulfilled"],
+    ["pending", "closing"],
+    ["closing", "closed"],
+    ["paid", "exception"],
+    ["fulfilling", "exception"]
+  ],
+  "note": "legal order lifecycle incl. exception path"
+}

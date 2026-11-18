@@ -1,0 +1,106 @@
+# billing contract — pagination and list-response envelopes
+components:
+  schemas:
+    LimitQuery:
+      type: integer
+      description: >-
+        Page size for every public list endpoint. Default 20, range 1..100.
+        Offset-based pagination is NOT supported; use the opaque cursor.
+      format: int32
+      minimum: 1
+      maximum: 100
+      default: 20
+    CursorQuery:
+      type: string
+      description: >-
+        Opaque continuation token returned as next_cursor of the previous page.
+        Bound to organization, billing account, request filters and a fixed
+        snapshot watermark; reuse outside its binding scope is rejected with
+        400 invalid_cursor.
+      minLength: 16
+      maxLength: 512
+    FromUsQuery:
+      type: string
+      $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+      description: Optional inclusive lower time filter on created_at_us.
+    ToUsQuery:
+      type: string
+      $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+      description: Optional exclusive upper time filter on created_at_us ([from_us, to_us)).
+    BillingAccountPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/BillingAccount"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    CreditLotPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/CreditLot"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    OrderPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/Order"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    ReservationPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/Reservation"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    SettlementPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/Settlement"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    AdjustmentPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/Adjustment"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    RefundPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/Refund"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"

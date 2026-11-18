@@ -1,0 +1,25 @@
+{
+  "expect": "accept",
+  "schema": "Refund",
+  "instance": {
+    "id": "b0b1c2d3-e4f5-4a6b-9c7d-8e9f0a1b2c3f",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "1",
+    "order_id": "8d9e0f10-a1b2-4c3d-9e4f-6a7b8c9d0e1f",
+    "payment_attempt_id": "9e0f1a2b-c3d4-4e5f-8a6b-7c8d9e0f1a2b",
+    "provider_refund_reference": null,
+    "amount_fen": "9900",
+    "frozen_allocations": [],
+    "reason": "unused credit pack",
+    "requested_by": "subj_01hx8z3k2m",
+    "reviewed_by": null,
+    "provider_result": null,
+    "resolved_at_us": null,
+    "status": "requested"
+  },
+  "note": "acceptance is not success: reviewed_by/provider_result/resolved all null"
+}

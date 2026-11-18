@@ -1,0 +1,78 @@
+# billing contract — payment channel callback protocol contract
+#
+# The callback endpoint is authenticated by the CHANNEL PROTOCOL (signature
+# verification / certificate / decryption of the raw message) and never by a
+# user session, cookie, or bearer token. The response body is the channel
+# protocol's own acknowledgment format — deliberately a different schema from
+# the business problem+json, because the channel gateway cannot parse our error
+# contract. Business semantics (order match, amount/currency match, merchant
+# match, fulfillment) are processed asynchronously AFTER the raw message is
+# durably persisted; the ack only confirms receipt.
+components:
+  schemas:
+    CallbackChannel:
+      $ref: "./scalars.yaml#/components/schemas/ChannelName"
+    ChannelAcknowledgment:
+      type: object
+      description: >-
+        Channel-protocol confirmation returned by POST /payment-callbacks/{channel}.
+        Shape mirrors what channel gateways require (e.g. WeChat v3
+        {"code":"SUCCESS"} / Alipay "success"), expressed as a contract type so
+        responses remain schema-checked. Returned after the raw callback payload
+        is durably persisted with a dedupe key of channel + message/transaction
+        id (channels are NOT required to send business idempotency headers).
+        Signature-verification failures answer with the channel's own failure
+        acknowledgment format, never with business problem+json.
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [SUCCESS, FAIL]
+        message:
+          type: string
+          minLength: 0
+          maxLength: 256
+      examples:
+        - code: SUCCESS
+          message: ""
+        - code: FAIL
+          message: "signature verification failed"
+    CallbackEnvelope:
+      type: object
+      description: >-
+        Channel-agnostic envelope of the raw inbound callback. The raw protocol
+        payload is kept verbatim (base64 of the exact bytes) plus protocol
+        metadata needed for verification (signature headers, certificate serial,
+        encryption material identifiers). Ownership is verified server-side by
+        decrypt/verify + merchant/application + order + amount+currency match;
+        URL parameters and user sessions are never trusted, and a user redirect
+        back to the app never proves payment.
+      required: [channel, raw_payload_b64, protocol_metadata]
+      additionalProperties: false
+      properties:
+        channel:
+          $ref: "./scalars.yaml#/components/schemas/ChannelName"
+        raw_payload_b64:
+          type: string
+          description: Exact raw request body bytes, base64-encoded; never re-serialized before verification.
+          minLength: 1
+          maxLength: 262144
+          pattern: "^[A-Za-z0-9+/]+={0,2}$"
+        protocol_metadata:
+          type: object
+          description: Protocol verification inputs (signature, timestamp, nonce, certificate serial, encryption key id). Keyed by protocol-defined header names; values opaque.
+          minProperties: 1
+          maxProperties: 32
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 4096
+      examples:
+        - channel: wechat
+          raw_payload_b64: "eyJpZCI6IkVWTlQifQ=="
+          protocol_metadata:
+            Wechatpay-Signature: "b64signature"
+            Wechatpay-Timestamp: "1700000460"
+            Wechatpay-Nonce: "n0nce"
+            Wechatpay-Serial: "5157F09EFDC096DE"

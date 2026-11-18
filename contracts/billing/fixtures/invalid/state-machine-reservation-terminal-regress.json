@@ -1,0 +1,13 @@
+{
+  "expect": "reject",
+  "kind": "state-machine",
+  "object": "Reservation",
+  "transitions": [
+    ["settled", "released"],
+    ["released", "settled"],
+    ["settled", "settled"]
+  ],
+  "via": "semantic",
+  "code": "state_conflict",
+  "note": "terminal states are never left"
+}

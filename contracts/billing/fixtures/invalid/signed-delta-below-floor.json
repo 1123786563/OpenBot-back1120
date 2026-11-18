@@ -1,0 +1,8 @@
+{
+  "expect": "reject",
+  "schema": "SignedAdjustmentDelta",
+  "instance": "-9223372036854775808",
+  "via": "semantic",
+  "code": "out_of_range",
+  "note": "signed floor is -2^63+1, not -2^63"
+}

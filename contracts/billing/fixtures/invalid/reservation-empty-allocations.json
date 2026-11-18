@@ -1,0 +1,28 @@
+{
+  "expect": "reject",
+  "schema": "Reservation",
+  "instance": {
+    "id": "4c5d6e7f-8091-4a0b-9c2d-3e4f5a6b7c8d",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000000000000",
+    "revision": "1",
+    "root_run_id": "5d6e7f80-91a2-4b1c-8d3e-4f5a6b7c8d9e",
+    "run_id": "6e7f8091-a2b3-4c2d-9e4f-5a6b7c8d9e0f",
+    "step_id": "step_0007",
+    "call_id": "call_9f8e7d6c",
+    "bot_id": "bot_01hx",
+    "payer_authorization_id": "auth_01hx8z3k2m",
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "max_cost_microcredits": "200000",
+    "allocations": [],
+    "reserved_at_us": "1700000300000000",
+    "unknown_usage_deadline_us": "1700086700000000",
+    "usage_status": "reserved"
+  },
+  "via": "schema",
+  "code": "invalid_integer",
+  "note": "at least one lot allocation"
+}

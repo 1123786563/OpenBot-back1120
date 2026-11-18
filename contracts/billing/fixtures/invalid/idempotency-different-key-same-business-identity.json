@@ -1,0 +1,16 @@
+{
+  "expect": "reject",
+  "kind": "idempotency",
+  "case": "different_key_same_business_identity",
+  "operationId": "settleReservation",
+  "logical_resource_id": "4c5d6e7f-8091-4a0b-9c2d-3e4f5a6b7c8d",
+  "key_a": "settle-attempt-1",
+  "key_b": "settle-attempt-2",
+  "via": "semantic",
+  "code": "state_conflict",
+  "expected": {
+    "one_settlement_only": true,
+    "second_key_outcome": "business_unique_constraint"
+  },
+  "note": "business uniqueness (settlement per reservation) is independent of the HTTP key"
+}

@@ -1,0 +1,13 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "Reservation",
+  "transitions": [
+    ["reserved", "awaiting_usage"],
+    ["awaiting_usage", "settled"],
+    ["reserved", "settled"],
+    ["awaiting_usage", "released"],
+    ["reserved", "released"]
+  ],
+  "note": "every legal path to a terminal state"
+}

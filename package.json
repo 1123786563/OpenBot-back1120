@@ -15,6 +15,11 @@
   "scripts": {
     "i18n:check": "bun scripts/i18n-check.ts",
     "build": "bun run generate:app-config && bun run --filter '*' build",
+    "billing:contract:lint": "cd contracts/billing && bunx @redocly/cli@2.3.1 lint",
+    "billing:contract:generate": "bunx openapi-typescript@7.9.1 contracts/billing/openapi.yaml -o generated/billing-client/schema.d.ts",
+    "billing:contract:check": "bun run billing:contract:lint && bun run billing:contract:generate && git diff --exit-code -- generated/billing-client && test -z \"$(git status --porcelain -- generated/billing-client)\" && bun server/src/billing-contract/validate-fixtures.ts",
+    "billing:test:guard": "bun tests/billing/runner.ts --guard-only",
+    "billing:test:integration": "bun tests/billing/runner.ts",
     "dev": "bun run generate:app-config && bun run --filter app --filter server --parallel dev",
     "generate:app-config": "bun --env-file=.env scripts/generate-app-config.ts",
     "format": "bunx biome format --write .",
@@ -40,7 +45,11 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.10",
     "@copilotkit/aimock": "1.43.0",
+    "@redocly/cli": "2.3.1",
     "@types/bun": "^1.3.3",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "openapi-typescript": "7.9.1",
     "roughjs": "^4.6.6",
     "typescript": "^5.9.3",
     "yaml": "^2.9.0",

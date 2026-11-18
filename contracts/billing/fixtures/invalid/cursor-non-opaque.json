@@ -1,0 +1,8 @@
+{
+  "expect": "reject",
+  "schema": "CursorToken",
+  "instance": "1",
+  "via": "schema",
+  "code": "invalid_cursor",
+  "note": "cursors are opaque signed tokens"
+}

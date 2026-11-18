@@ -1,0 +1,32 @@
+{
+  "expect": "accept",
+  "schema": "PriceVersion",
+  "instance": {
+    "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": null,
+    "created_at_us": "1699999000000000",
+    "updated_at_us": "1699999000000000",
+    "revision": "1",
+    "effective_from_us": "1700000000000000",
+    "effective_to_us": null,
+    "resources": [
+      {
+        "resource": "model_input_tokens",
+        "price_unit": "1000",
+        "price_numerator": "37",
+        "price_denominator": "1000000"
+      },
+      {
+        "resource": "model_output_tokens",
+        "price_unit": "1000",
+        "price_numerator": "111",
+        "price_denominator": "1000000"
+      }
+    ],
+    "rounding": "half_up",
+    "default_root_run_cap_microcredits": "5000000",
+    "status": "active"
+  }
+}

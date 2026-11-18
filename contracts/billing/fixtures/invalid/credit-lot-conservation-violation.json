@@ -1,0 +1,29 @@
+{
+  "expect": "reject",
+  "schema": "CreditLot",
+  "instance": {
+    "id": "3b4c5d6e-7f80-4a9b-8c1d-2e3f4a5b6c7d",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000000000000",
+    "updated_at_us": "1700000200000000",
+    "revision": "4",
+    "source_type": "subscription",
+    "source_event_id": "evt_sub_2026M11_grant",
+    "source_period_id": "period_2026-11",
+    "granted_microcredits": "900000",
+    "available_microcredits": "600000",
+    "reserved_microcredits": "200000",
+    "refund_frozen_microcredits": "50000",
+    "consumed_microcredits": "100000",
+    "expired_microcredits": "30000",
+    "revoked_microcredits": "20000",
+    "valid_from_us": "1700000000000000",
+    "expires_at_us": "1702512000000000",
+    "status": "active"
+  },
+  "via": "semantic",
+  "code": "out_of_range",
+  "note": "granted != available+reserved+frozen+consumed+expired+revoked"
+}

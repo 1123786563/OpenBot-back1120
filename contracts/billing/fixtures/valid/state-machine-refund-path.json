@@ -1,0 +1,15 @@
+{
+  "expect": "accept",
+  "kind": "state-machine",
+  "object": "Refund",
+  "transitions": [
+    ["requested", "approved"],
+    ["requested", "rejected"],
+    ["approved", "processing"],
+    ["processing", "unknown"],
+    ["unknown", "processing"],
+    ["processing", "succeeded"],
+    ["processing", "failed"]
+  ],
+  "note": "acceptance is not success; unknown keeps the freeze"
+}
