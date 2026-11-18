@@ -21,6 +21,9 @@ function stubRunner(): { runner: RoutineRunner; calls: string[] } {
         calls.push(id);
         return Promise.resolve();
       },
+      cancel: () => {
+        throw new Error("Dispatch tests do not cancel routines");
+      },
     },
     calls,
   };

@@ -33,7 +33,7 @@ async function newUser(auth: ReturnType<typeof createAuth>, email: string) {
     updatedAt: new Date(),
   };
   const hooks = auth.options.databaseHooks!.user!.create!;
-  await hooks.before!(user, null);
+  await hooks.before!(user);
   await database.insert(users).values(user);
   made.push(user.id);
   await hooks.after!(user, null);

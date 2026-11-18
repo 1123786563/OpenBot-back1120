@@ -127,6 +127,9 @@ describe("POST /internal/routines/run id", () => {
           calls.push(id);
           return Promise.resolve();
         },
+        cancel: () => {
+          throw new Error("Dispatch tests do not cancel routines");
+        },
       });
       const response = await app.request(
         "http://openbot.local/internal/routines/run",

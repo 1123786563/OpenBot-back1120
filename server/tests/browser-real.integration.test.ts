@@ -406,7 +406,7 @@ async function openAs(openbot: OpenBot, as?: Person) {
     body: (await response.json()) as
       | BrowserOpenResponse
       | RealBrowserOpenResponse
-      | { error: string },
+      | { error: string; code?: string },
   };
 }
 
