@@ -1575,6 +1575,12 @@ services:
         require(any(r.get("openbot_event_type") == "configuration.changed" and
                     r.get("openbot_target_id") != edge_id for r in audited),
                 "real settings audit record reached OpenObserve")
+        # The goal's authenticated trigger in the audit copy, by its own id: the audit-side
+        # correlation of the dispatch whose runtime stream record is the Info event above.
+        retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_audit" WHERE '
+                                       f"openbot_event_type = 'responsibility.triggered' "
+                                       f"AND openbot_target_id = '{goal_id}'")] or None,
+              "the goal's authenticated trigger is queryable in the audit copy by its id")
         require(not hits('SELECT * FROM "openbot_runtime" WHERE log_class = \'audit\''),
                 "audit records do not appear in the runtime stream")
         require(not hits('SELECT * FROM "openbot_audit" WHERE log_class = \'runtime\''),
@@ -1615,7 +1621,7 @@ services:
         # Positive controls, scoped to the source that really produced them: each named event with
         # the run id of the very operation that emitted it, on the runtime stream it belongs to.
         positives = {
-            "server business dispatch (Info)": ["responsibility-dispatch", goal_run_id],
+            "server business dispatch (Info)": ["responsibility-dispatch"],
             "server crash window (Error)": ["routine-run-crashed", crash_run_id],
             "agent-bot failed turn": ["agent-turn-failed", bot_fail_run["runId"]],
             "agent-langgraph failed turn": ["langgraph-turn-failed", langgraph_fail_run["runId"]],
@@ -1625,6 +1631,12 @@ services:
         for what, needles in positives.items():
             require(all(needle in runtime_sent for needle in needles),
                     f"captured runtime payloads contain {what}")
+        # The goal's own identifier is carried where the platform carries ids: the authoritative
+        # audit copy of its authenticated trigger, not the Info event (whose payload is the
+        # dispatch report and names no run).
+        audit_sent = "\n".join(bodies.get("openbot_audit", []))
+        require("responsibility.triggered" in audit_sent and goal_id in audit_sent,
+                "captured audit payloads contain the goal's authenticated trigger with its id")
         require(any("configuration.changed" in chunk for chunk in bodies.get("openbot_audit", [])),
                 "captured audit payloads contain the real settings event")
         leaked = [name for name in list(markers.values()) + list(credentials.values()) +
