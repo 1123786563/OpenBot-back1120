@@ -109,6 +109,7 @@ services:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
     command: ["./scripts/migrate.sh"]
+    restart: "no"
     environment: &lago-env
       # v1.57 database.yml reads the plain DATABASE_URL (user+password in it).
       DATABASE_URL: postgres://${BILLING62_LAGO_USER}:${BILLING62_LAGO_PASSWORD}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
@@ -138,7 +139,8 @@ services:
     expose:
       - "3000"
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
     healthcheck:
       # the v1.57 api image ships curl, not wget
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
@@ -153,7 +155,8 @@ services:
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
 
   lago-worker:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
@@ -162,4 +165,5 @@ services:
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
