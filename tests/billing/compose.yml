@@ -12,6 +12,17 @@
 #     tag AND amd64 manifest digest (digests fetched from the registries on
 #     2026-11-17 and recorded in docs/billing-contract.md).
 #
+# Boot fixes verified against the actual v1.57.0 image (#65 full-stack run):
+#   - service commands point at /app/scripts/... (the image has no
+#     ./scripts/docker/ directory);
+#   - the api healthcheck uses /health with curl (no wget in the image, and
+#     /healthz answers 404 on this version);
+#   - Lago reads the standard DATABASE_URL/REDIS_URL (the older LAGO_* names
+#     are not consulted by this image) and additionally needs
+#     SECRET_KEY_BASE in production;
+#   - BILLING62_LAGO_RSA_KEY is the Base64 of the PEM (Lago Base64-decodes
+#     it), which keeps the compose env file single-line.
+#
 # Credentials: NEVER baked into this file. The runner generates one-time
 # credentials per run and injects them through a permission-restricted env
 # file (BILLING62_ENV_FILE) plus a generated Lago RSA key.
@@ -85,12 +96,14 @@ services:
   lago-migrate:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
-    command: ["./scripts/docker/migrate.sh"]
+    command: ["/app/scripts/migrate.sh"]
     environment: &lago-env
-      LAGO_DATABASE_URL: postgres://${BILLING62_LAGO_USER}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
-      LAGO_DATABASE_URL_PASSWORD: ${BILLING62_LAGO_PASSWORD}
-      LAGO_REDIS_URL: redis://lago-redis:6379
+      # Lago v1.57.0 reads the standard DATABASE_URL/REDIS_URL (the older
+      # LAGO_* names are not consulted by this image).
+      DATABASE_URL: postgres://${BILLING62_LAGO_USER}:${BILLING62_LAGO_PASSWORD}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
+      REDIS_URL: redis://lago-redis:6379/0
       LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY:?one-time key}
+      SECRET_KEY_BASE: ${BILLING62_LAGO_SECRET_KEY_BASE:?one-time key}
       RAILS_ENV: production
       RAILS_LOG_TO_STDOUT: "true"
       LAGO_ENCRYPTION_PRIMARY_KEY: ${BILLING62_LAGO_ENC_PRIMARY:?one-time key}
@@ -104,7 +117,7 @@ services:
   lago-api:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-api
-    command: ["./scripts/docker/api.sh"]
+    command: ["/app/scripts/start.api.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     expose:
@@ -112,7 +125,9 @@ services:
     depends_on:
       lago-migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      # v1.57.0 serves /health (the old /healthz answers 404) and ships curl
+      # (no wget in this image).
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -120,7 +135,7 @@ services:
   lago-clock:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-clock
-    command: ["./scripts/docker/clock.sh"]
+    command: ["/app/scripts/start.clock.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
@@ -129,7 +144,7 @@ services:
   lago-worker:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-worker
-    command: ["./scripts/docker/worker.sh"]
+    command: ["/app/scripts/start.worker.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:

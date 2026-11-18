@@ -314,6 +314,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/billing/product-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote one product over the release the trusted clock selects
+         * @description Resolves the catalog release for the server-resolved scope at the server's trusted clock (no client-provided now is ever accepted), returns sellability with a closed reason, the full immutable version snapshot when sellable, the eligibility outcome over the trusted subscription projection, and a period preview only when the target period is already determined. An expected_price_version_id that is not the pinned version answers 409 price_version_conflict. A missing or incomplete production configuration answers sellable=false with a closed reason — never a zero price or a demo value. A production request never selects a test release. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/step-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote the exact microcredit cost of one step against a pinned price version
+         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts ANY version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingStep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/period-queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate or build a Beijing-time monthly period from an activation anchor
+         * @description Given the trusted original activation anchor (original_purchased_at_us — the server-confirmed activation instant, never an order or payment time) and either an explicit target_period_index or an occurrence_us to locate, returns the half-open [B(n), B(n+1)) period with integer UTC microsecond boundaries, ISO renderings, and Asia/Shanghai local wall times. Month ends clamp to the target month's length and the original day number resumes; an event at exactly end_us belongs to the next period. Wall times that do not exist or occur twice in the timezone are rejected, never silently shifted. x-readonly: no write side effects.
+         */
+        post: operations["queryBillingPeriod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/catalog-versions/{catalog_version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Full immutable catalog release snapshot for history replay
+         * @description Returns the complete referenced version bundle of one release, scoped to the caller's organization (cross-organization ids answer 404 without revealing existence). Historical reads answer retired releases — history never disappears — but a historical read can never be used to purchase against a retired price; new sales always select through quoteBillingProduct.
+         */
+        get: operations["getBillingCatalogVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -480,6 +560,60 @@ export interface components {
             /** @description Entitlement freeze applied atomically at approval; empty on rejection. */
             frozen_allocations: components["schemas"]["FrozenAllocation"][];
             request_id: string;
+        };
+        /**
+         * @description The caller chooses WHAT to quote and, optionally, which price version it expects — never a price, a payer, or the clock. The organization scope comes from the trusted service credential; billing_account_id narrows the scope when quoting an account-specific catalog.
+         * @example {
+         *       "product_id": "pack_1m_credits",
+         *       "action": "initial_purchase",
+         *       "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+         *     }
+         */
+        QuoteBillingProductRequest: {
+            product_id: string;
+            /**
+             * @description The purchase action eligibility is evaluated for.
+             * @enum {string}
+             */
+            action: "initial_purchase" | "renewal" | "change_tier";
+            billing_account_id?: null | components["schemas"]["Uuid"];
+            /** @description When present and not the pinned version, the quote answers 409 price_version_conflict. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+        };
+        /**
+         * @description The FINAL merged resource vector of one step. The trusted adapter owes the merge semantics: non-overlapping token classes, deduplicated stream fragments (same event id -> one contribution), and durations accumulated per resource and converted ONCE to whole milliseconds. Quantities are contract decimal strings; a stream without stable event identity cannot be settled at all.
+         * @example {
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "resources": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993"
+         *         }
+         *       ]
+         *     }
+         */
+        QuoteBillingStepRequest: {
+            /** @description The version to price against — the reservation's pinned version, or any historical version for replay. */
+            price_version_id: components["schemas"]["Uuid"];
+            resources: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+            }[];
+        };
+        /**
+         * @description Exactly one selector — an explicit period index or an occurrence time to locate.
+         * @example {
+         *       "original_purchased_at_us": "1706679015123456",
+         *       "target_period_index": "0"
+         *     }
+         */
+        QueryBillingPeriodRequest: {
+            /** @description The trusted original activation anchor (server-confirmed activation). */
+            original_purchased_at_us: components["schemas"]["TimestampUs"];
+            /** @description Mutually exclusive with occurrence_us. */
+            target_period_index?: components["schemas"]["UnsignedInt64"];
+            /** @description Locate the half-open period containing this instant; mutually exclusive with target_period_index. */
+            occurrence_us?: components["schemas"]["TimestampUs"];
         };
         /**
          * @description Server-generated, immutable, never-reused identifier (UUID lowercase hexadecimal). External channel identifiers are stored separately and are never used as personal identity or as these primary keys.
@@ -1023,11 +1157,11 @@ export interface components {
             revision: components["schemas"]["Revision"];
         };
         /**
-         * @description Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change.
+         * @description Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change. tool_call_duration_ms carries whole milliseconds — a duration arriving in finer units is converted ONCE per resource by the trusted adapter before pricing, never per fragment.
          * @example model_input_tokens
          * @enum {string}
          */
-        ResourceKind: "model_input_tokens" | "model_output_tokens" | "model_cache_read_tokens" | "model_cache_write_tokens" | "model_web_search_requests" | "model_request_count";
+        ResourceKind: "model_input_tokens" | "model_output_tokens" | "model_cache_read_tokens" | "model_cache_write_tokens" | "model_web_search_requests" | "model_request_count" | "tool_call_count" | "tool_call_duration_ms";
         /**
          * @description One metered resource line inside a settlement. Quantities are exact integers; the per-step charge is computed from ALL resources first with arbitrary precision and then rounded HALF_UP to whole microcredits — never per token or per fragment.
          * @example {
@@ -1155,6 +1289,345 @@ export interface components {
             code: "SUCCESS" | "FAIL";
             message: string;
         };
+        /**
+         * @description Closed reasons a product quote answers sellable=false. Absence of a complete production release NEVER degrades to a zero price or a demo value.
+         * @example no_published_release
+         * @enum {string}
+         */
+        SellabilityReason: "no_published_release" | "account_release_unavailable" | "ambiguous_release_configuration" | "release_incomplete" | "product_not_in_release" | "quota_version_missing";
+        /**
+         * @description Asia/Shanghai wall-time fields. microsecond is kept separately from the millisecond-resolution conversion so no sub-second precision is ever lost.
+         * @example {
+         *       "year": 2024,
+         *       "month": 1,
+         *       "day": 31,
+         *       "hour": 9,
+         *       "minute": 30,
+         *       "second": 15,
+         *       "microsecond": 123456
+         *     }
+         */
+        LocalWallTime: {
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            month: number;
+            /** Format: int32 */
+            day: number;
+            /** Format: int32 */
+            hour: number;
+            /** Format: int32 */
+            minute: number;
+            /** Format: int32 */
+            second: number;
+            /** Format: int32 */
+            microsecond: number;
+        };
+        /**
+         * @description One half-open period [B(n), B(n+1)) derived from the ORIGINAL activation anchor: month ends clamp (Jan 31 -> Feb 29/28) and the original day number RESUMES afterwards. Boundaries are integer UTC microseconds; an event at exactly end_us belongs to the NEXT period and the boundary is never rewritten by subtracting time.
+         * @example {
+         *       "index": "0",
+         *       "start_us": "1706679015123456",
+         *       "end_us": "1709170215123456",
+         *       "start_iso": "2024-01-31T01:30:15.123456Z",
+         *       "end_iso": "2024-02-29T01:30:15.123456Z",
+         *       "start_local": {
+         *         "year": 2024,
+         *         "month": 1,
+         *         "day": 31,
+         *         "hour": 9,
+         *         "minute": 30,
+         *         "second": 15,
+         *         "microsecond": 123456
+         *       },
+         *       "end_local": {
+         *         "year": 2024,
+         *         "month": 2,
+         *         "day": 29,
+         *         "hour": 9,
+         *         "minute": 30,
+         *         "second": 15,
+         *         "microsecond": 123456
+         *       }
+         *     }
+         */
+        MonthPeriodDescriptor: {
+            index: components["schemas"]["UnsignedInt64"];
+            start_us: components["schemas"]["TimestampUs"];
+            end_us: components["schemas"]["TimestampUs"];
+            start_iso: string;
+            end_iso: string;
+            start_local: components["schemas"]["LocalWallTime"];
+            end_local: components["schemas"]["LocalWallTime"];
+        };
+        /**
+         * @description Closed outcome reasons of the purchase-eligibility table (R5/R6).
+         * @example eligible
+         * @enum {string}
+         */
+        EligibilityReason: "eligible" | "already_prepaid" | "refund_required" | "refund_pending" | "refund_outcome_unknown" | "state_conflict";
+        /**
+         * @description Closed next-step the caller should take after an eligibility outcome.
+         * @example create_order
+         * @enum {string}
+         */
+        EligibilityNextAction: "create_order" | "refund_existing_prepurchase_first" | "wait_for_refund_outcome" | "keep_existing_commitment" | "recheck_state";
+        /**
+         * @description Observable result of the eligibility table over a TRUSTED state snapshot (subscription + prepaid commitment + refund facts), carrying the snapshot revision the order service must recheck inside the purchase transaction. A quote never occupies eligibility; concurrent purchase safety is enforced by the order service's transaction, not by this read.
+         * @example {
+         *       "allowed": true,
+         *       "reason": "eligible",
+         *       "next_action": "create_order",
+         *       "target_period": {
+         *         "index": "1",
+         *         "start_us": "1709170215123456",
+         *         "end_us": "1711848615123456"
+         *       },
+         *       "state_revision": "7",
+         *       "existing_commitment": null
+         *     }
+         */
+        PurchaseEligibility: {
+            allowed: boolean;
+            reason: components["schemas"]["EligibilityReason"];
+            next_action: components["schemas"]["EligibilityNextAction"];
+            target_period: null | {
+                index: components["schemas"]["UnsignedInt64"];
+                start_us: components["schemas"]["TimestampUs"];
+                end_us: components["schemas"]["TimestampUs"];
+            };
+            state_revision: components["schemas"]["UnsignedInt64"];
+            existing_commitment: null | {
+                product_id: string;
+                target_period_start_us: components["schemas"]["TimestampUs"];
+            };
+        };
+        /**
+         * @description Read-only product quote: sellability over the release selected by the SERVER's trusted clock, the full immutable snapshot when sellable, the eligibility outcome, and a period preview ONLY when the target period is already determined (renewal on an active subscription). Quotes are observations: they create nothing and occupy no purchase slot.
+         * @example {
+         *       "sellable": true,
+         *       "test_only": false,
+         *       "quoted_at_us": "1700003600000000",
+         *       "snapshot": {
+         *         "release_id": "aa000000-0000-4000-8000-000000000004",
+         *         "release_content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *         "scope_is_account_specific": false,
+         *         "product_version_id": "aa000000-0000-4000-8000-000000000001",
+         *         "product_id": "pack_1m_credits",
+         *         "product_type": "credit_pack",
+         *         "display_name": "1M credits pack",
+         *         "amount_fen": "9900",
+         *         "currency": "CNY",
+         *         "granted_microcredits": "1000000",
+         *         "period_months": null,
+         *         "long_lived": true,
+         *         "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *         "quota_version_id": null,
+         *         "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *         "run_cap_microcredits": "5000000"
+         *       },
+         *       "period_preview": null,
+         *       "eligibility": {
+         *         "allowed": true,
+         *         "reason": "eligible",
+         *         "next_action": "create_order",
+         *         "target_period": null,
+         *         "state_revision": "3",
+         *         "existing_commitment": null
+         *       }
+         *     }
+         */
+        ProductQuote: {
+            sellable: boolean;
+            /** @description Present exactly when sellable=false. */
+            not_sellable_reason?: components["schemas"]["SellabilityReason"];
+            /** @description True when the selected configuration is explicitly test-only; a test quote is never a production sale. */
+            test_only: boolean;
+            quoted_at_us: components["schemas"]["TimestampUs"];
+            /** @description Present exactly when sellable=true — the full immutable version bundle backing this quote. */
+            snapshot?: {
+                release_id: components["schemas"]["Uuid"];
+                release_content_digest: string;
+                scope_is_account_specific: boolean;
+                product_version_id: components["schemas"]["Uuid"];
+                product_id: string;
+                /** @enum {string} */
+                product_type: "monthly_plan" | "credit_pack";
+                display_name: string;
+                amount_fen: components["schemas"]["Fen"];
+                currency: components["schemas"]["CurrencyCode"];
+                granted_microcredits: components["schemas"]["MicrocreditsNullable"];
+                period_months: components["schemas"]["UnsignedInt64Nullable"];
+                /** @description True for credit packs (no monthly validity); false for monthly plans. */
+                long_lived: boolean;
+                price_version_id: components["schemas"]["Uuid"];
+                quota_version_id: components["schemas"]["UuidNullable"];
+                run_cap_version_id: components["schemas"]["Uuid"];
+                run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
+            };
+            /** @description Determined target period (renewal/prepurchase); null when activation will define a new anchor. */
+            period_preview?: null | components["schemas"]["MonthPeriodDescriptor"];
+            eligibility?: components["schemas"]["PurchaseEligibility"];
+        };
+        /**
+         * @description Closed set of measurement units a price is expressed per. The contract's unit_size says how many of THIS unit one price covers.
+         * @example token
+         * @enum {string}
+         */
+        MeasurementUnit: "token" | "request" | "call" | "millisecond";
+        /**
+         * @description Read-only exact cost of one execution step against a PINNED price version. All resources are summed as ONE exact rational and rounded exactly once (HALF_UP to whole microcredits) — never per token, per line or per stream fragment. The full pricing basis is echoed so the total can be recomputed offline.
+         * @example {
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "rounding": "half_up",
+         *       "lines": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ],
+         *       "total_microcredits": "9007199254740993",
+         *       "total_display": "9007199254740993.000000"
+         *     }
+         */
+        StepQuote: {
+            /** @description The version the cost was computed from; pinned at reservation, never the currently-active list. */
+            price_version_id: components["schemas"]["Uuid"];
+            /** @constant */
+            rounding: "half_up";
+            lines: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+            total_microcredits: components["schemas"]["Microcredits"];
+            /** @description The total rendered with the contract's exact six-decimal credit display. */
+            total_display: string;
+        };
+        /**
+         * @description Deterministic Beijing-time period answer: the original activation anchor (UTC instant AND local wall time), and the located or requested [B(n), B(n+1)) period with integer-microsecond UTC boundaries, ISO renderings and local wall times.
+         * @example {
+         *       "timezone": "Asia/Shanghai",
+         *       "anchor": {
+         *         "utc_us": "1706679015123456",
+         *         "utc_iso": "2024-01-31T01:30:15.123456Z",
+         *         "local": {
+         *           "year": 2024,
+         *           "month": 1,
+         *           "day": 31,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         }
+         *       },
+         *       "period": {
+         *         "index": "0",
+         *         "start_us": "1706679015123456",
+         *         "end_us": "1709170215123456",
+         *         "start_iso": "2024-01-31T01:30:15.123456Z",
+         *         "end_iso": "2024-02-29T01:30:15.123456Z",
+         *         "start_local": {
+         *           "year": 2024,
+         *           "month": 1,
+         *           "day": 31,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         },
+         *         "end_local": {
+         *           "year": 2024,
+         *           "month": 2,
+         *           "day": 29,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         }
+         *       }
+         *     }
+         */
+        PeriodAnswer: {
+            /** @constant */
+            timezone: "Asia/Shanghai";
+            anchor: {
+                utc_us: components["schemas"]["TimestampUs"];
+                utc_iso: string;
+                local: components["schemas"]["LocalWallTime"];
+            };
+            period: components["schemas"]["MonthPeriodDescriptor"];
+        };
+        /**
+         * @description Configuration environment. A production request NEVER selects a test release; test_only configurations exist only for acceptance runs.
+         * @example production
+         * @enum {string}
+         */
+        BillingEnvironment: "production" | "test";
+        /**
+         * @description Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price.
+         * @example {
+         *       "release_id": "aa000000-0000-4000-8000-000000000004",
+         *       "content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *       "status": "active",
+         *       "environment": "production",
+         *       "effective_from_us": "1700000000000000",
+         *       "effective_to_us": null,
+         *       "items": [
+         *         {
+         *           "product_version_id": "aa000000-0000-4000-8000-000000000001",
+         *           "product_id": "pack_1m_credits",
+         *           "product_type": "credit_pack",
+         *           "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *           "quota_version_id": null,
+         *           "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *           "run_cap_microcredits": "5000000",
+         *           "prices": [
+         *             {
+         *               "resource": "model_input_tokens",
+         *               "measurement_unit": "token",
+         *               "unit_size": "1000",
+         *               "numerator": "37",
+         *               "denominator": "1000000"
+         *             }
+         *           ]
+         *         }
+         *       ]
+         *     }
+         */
+        CatalogVersionSnapshot: {
+            release_id: components["schemas"]["Uuid"];
+            content_digest: string;
+            /** @enum {string} */
+            status: "draft" | "active" | "retired";
+            environment: components["schemas"]["BillingEnvironment"];
+            effective_from_us: components["schemas"]["TimestampUs"];
+            effective_to_us: components["schemas"]["TimestampUsNullable"];
+            items: {
+                product_version_id: components["schemas"]["Uuid"];
+                product_id: string;
+                /** @enum {string} */
+                product_type: "monthly_plan" | "credit_pack";
+                price_version_id: components["schemas"]["Uuid"];
+                quota_version_id: components["schemas"]["UuidNullable"];
+                run_cap_version_id: components["schemas"]["Uuid"];
+                run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
+                prices: {
+                    resource: components["schemas"]["ResourceKind"];
+                    measurement_unit: components["schemas"]["MeasurementUnit"];
+                    unit_size: components["schemas"]["UnsignedInt64"];
+                    numerator: components["schemas"]["UnsignedInt64"];
+                    denominator: components["schemas"]["UnsignedInt64"];
+                }[];
+            }[];
+        };
     };
     responses: {
         /** @description Malformed request: missing Idempotency-Key on a business write (missing_idempotency_key) or invalid/cross-scope cursor (invalid_cursor). */
@@ -1245,6 +1718,7 @@ export interface components {
         OrderId: components["schemas"]["Uuid"];
         ReservationId: components["schemas"]["Uuid"];
         RefundId: components["schemas"]["Uuid"];
+        CatalogVersionId: components["schemas"]["Uuid"];
         CallbackChannel: components["schemas"]["ChannelName"];
         Limit: components["schemas"]["LimitQuery"];
         Cursor: components["schemas"]["CursorQuery"];
@@ -1872,6 +2346,123 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    quoteBillingProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingProductRequest"];
+            };
+        };
+        responses: {
+            /** @description The product quote (business closure is sellable=false with a reason, not an HTTP error). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    quoteBillingStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingStepRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact step cost and its full pricing basis. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    queryBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryBillingPeriodRequest"];
+            };
+        };
+        responses: {
+            /** @description The timezone, the anchor and the located/requested period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    getBillingCatalogVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                catalog_version_id: components["parameters"]["CatalogVersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The immutable release snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogVersionSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["LedgerUnavailable"];
         };
     };

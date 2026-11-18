@@ -1,0 +1,30 @@
+{
+  "expect": "accept",
+  "schema": "PeriodAnswer",
+  "instance": {
+    "timezone": "Asia/Shanghai",
+    "anchor": {
+      "utc_us": "1706679015123456",
+      "utc_iso": "2024-01-31T01:30:15.123456Z",
+      "local": {
+        "year": 2024, "month": 1, "day": 31,
+        "hour": 9, "minute": 30, "second": 15, "microsecond": 123456
+      }
+    },
+    "period": {
+      "index": "0",
+      "start_us": "1706679015123456",
+      "end_us": "1709170215123456",
+      "start_iso": "2024-01-31T01:30:15.123456Z",
+      "end_iso": "2024-02-29T01:30:15.123456Z",
+      "start_local": {
+        "year": 2024, "month": 1, "day": 31,
+        "hour": 9, "minute": 30, "second": 15, "microsecond": 123456
+      },
+      "end_local": {
+        "year": 2024, "month": 2, "day": 29,
+        "hour": 9, "minute": 30, "second": 15, "microsecond": 123456
+      }
+    }
+  }
+}

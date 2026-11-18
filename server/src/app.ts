@@ -574,6 +574,13 @@ export function createApp(
   /** The GitHub sign-in callback, built by the caller; mounted behind requireUser ahead of /api/identity. */
   identityGithubCallback?: Hono<{ Variables: AppVariables }>,
   profileStore?: ProfileStore,
+  /**
+   * The billing catalog's internal read surface (#65), already built by the
+   * caller (service + trusted credential verifier injected). Absent leaves
+   * the app without any /internal/v1/billing route — deployments that do not
+   * run the billing catalog expose nothing.
+   */
+  billingCatalogApp?: Hono,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -961,6 +968,12 @@ export function createApp(
   if (identityGithubCallback) {
     app.use("/api/identity/github/callback", requireUser);
     app.route("/api/identity/github/callback", identityGithubCallback);
+  }
+  // The billing catalog's trusted read surface (#65). Never browser-reachable:
+  // the sub-app itself rejects everything without a service credential, and
+  // nothing here adds a session path to /internal.
+  if (billingCatalogApp) {
+    app.route("/", billingCatalogApp);
   }
   /*
    * A person's own linked accounts at outside providers (Slack, GitHub). Theirs alone: there is no

@@ -22,19 +22,19 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parse as parseYaml } from "yaml";
 import Ajv2020 from "ajv/dist/2020";
+import { parse as parseYaml } from "yaml";
 
 import {
   BillingValueError,
+  formatMicrocreditsDisplay,
   lotConserves,
+  MAX_I64,
+  MAX_TIMESTAMP_US,
+  MIN_SIGNED_I64,
   parseSigned,
   parseTimestampUs,
   parseUnsigned,
-  MAX_I64,
-  MIN_SIGNED_I64,
-  MAX_TIMESTAMP_US,
-  formatMicrocreditsDisplay,
   roundHalfUpDiv,
   stepCostMicrocredits,
   timestampUsToIso,
@@ -457,7 +457,19 @@ async function assertFixtures(): Promise<void> {
           revoked_microcredits: BigInt(lot.revoked_microcredits),
         });
       }
-      const semanticValid = boundErrors.length === 0 && conserved;
+      // price_unit is the legacy rendering of unit_size: the two must express
+      // ONE meaning. JSON Schema cannot compare fields, so the checker does.
+      let priceUnitsConsistent = true;
+      if (schemaName === "PriceVersion" && schemaValid) {
+        const pv = instance as {
+          resources?: { price_unit?: string; unit_size?: string }[];
+        };
+        for (const r of pv.resources ?? []) {
+          if (r.price_unit !== r.unit_size) priceUnitsConsistent = false;
+        }
+      }
+      const semanticValid =
+        boundErrors.length === 0 && conserved && priceUnitsConsistent;
       const accepted = schemaValid && semanticValid;
       if (dir === "valid") {
         ok(
@@ -538,14 +550,26 @@ function assertOpenApi(): { ops: OpEntry[] } {
     const isChannelCallback = (
       ((op.tags as string[]) ?? []) as string[]
     ).includes("payment-channel");
-    if (isGet || isChannelCallback) {
+    // x-readonly marks a POST with NO write side effects (quotes/queries):
+    // observations carry no Idempotency-Key and no idempotency scope, and may
+    // only live under /internal (a public readonly POST would still be a
+    // business read, but the contract keeps them behind trusted credentials).
+    const isReadonlyPost =
+      !isGet && !isChannelCallback && op["x-readonly"] === true;
+    if (isReadonlyPost) {
+      ok(
+        String(path).startsWith("/internal/"),
+        `readonly POST ${path} is internal-only`,
+      );
+    }
+    if (isGet || isChannelCallback || isReadonlyPost) {
       ok(
         !idemParam,
-        `${method} ${path} (GET/channel) does not require Idempotency-Key`,
+        `${method} ${path} (GET/channel/readonly) does not require Idempotency-Key`,
       );
       ok(
         !scope,
-        `${method} ${path} (GET/channel) declares no idempotency scope`,
+        `${method} ${path} (GET/channel/readonly) declares no idempotency scope`,
       );
     } else {
       ok(idemParam, `POST ${path} requires Idempotency-Key header`);

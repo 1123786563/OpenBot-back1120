@@ -18,6 +18,7 @@ export * from "./passwords";
 export * from "./plugins";
 export * from "./proactive";
 export * from "./recorder";
+export * from "./billing-catalog";
 export * from "./responsibilities";
 export * from "./scim";
 export * from "./shared-use";

@@ -846,6 +846,194 @@ paths:
         logical_resource_id: refund_id
       x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, out_of_range, rate_limited, ledger_unavailable]
 
+
+  # ===================================================== internal catalog API
+  # (#65) Trusted read-only catalog operations. x-readonly: the operations
+  # have NO write side effects — quotes are observations that create nothing,
+  # occupy no purchase eligibility and pin nothing — so they carry no
+  # Idempotency-Key and no idempotency scope. Organization scope is resolved
+  # server-side from the trusted service credential, never from the body.
+  /internal/v1/billing/product-quotes:
+    post:
+      operationId: quoteBillingProduct
+      tags: [internal-billing]
+      summary: Quote one product over the release the trusted clock selects
+      description: >-
+        Resolves the catalog release for the server-resolved scope at the
+        server's trusted clock (no client-provided now is ever accepted),
+        returns sellability with a closed reason, the full immutable version
+        snapshot when sellable, the eligibility outcome over the trusted
+        subscription projection, and a period preview only when the target
+        period is already determined. An expected_price_version_id that is not
+        the pinned version answers 409 price_version_conflict. A missing or
+        incomplete production configuration answers sellable=false with a
+        closed reason — never a zero price or a demo value. A production
+        request never selects a test release. x-readonly: no write side
+        effects.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      x-readonly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteBillingProductRequest"
+      responses:
+        "200":
+          description: The product quote (business closure is sellable=false with a reason, not an HTTP error).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/ProductQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, price_version_conflict, invalid_integer, out_of_range, state_conflict, ledger_unavailable]
+
+  /internal/v1/billing/step-quotes:
+    post:
+      operationId: quoteBillingStep
+      tags: [internal-billing]
+      summary: Quote the exact microcredit cost of one step against a pinned price version
+      description: >-
+        Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged
+        resource vector as ONE exact rational and rounds exactly once
+        (HALF_UP to whole microcredits). Accepts ANY version by id — retired
+        versions stay quotable forever so pinned steps replay after restarts,
+        repricing and retirement. Quantities travel as contract decimal
+        strings; a quantity outside the closed lexeme/range or a resource with
+        no price in the version is rejected. Historical replay may use this
+        operation; purchasing against a retired version is decided by the
+        order service, never by this quote. x-readonly: no write side effects.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      x-readonly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteBillingStepRequest"
+      responses:
+        "200":
+          description: The exact step cost and its full pricing basis.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/StepQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, invalid_integer, out_of_range, ledger_unavailable]
+
+  /internal/v1/billing/period-queries:
+    post:
+      operationId: queryBillingPeriod
+      tags: [internal-billing]
+      summary: Locate or build a Beijing-time monthly period from an activation anchor
+      description: >-
+        Given the trusted original activation anchor (original_purchased_at_us
+        — the server-confirmed activation instant, never an order or payment
+        time) and either an explicit target_period_index or an occurrence_us
+        to locate, returns the half-open [B(n), B(n+1)) period with integer
+        UTC microsecond boundaries, ISO renderings, and Asia/Shanghai local
+        wall times. Month ends clamp to the target month's length and the
+        original day number resumes; an event at exactly end_us belongs to the
+        next period. Wall times that do not exist or occur twice in the
+        timezone are rejected, never silently shifted. x-readonly: no write
+        side effects.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      x-readonly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryBillingPeriodRequest"
+      responses:
+        "200":
+          description: The timezone, the anchor and the located/requested period.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/PeriodAnswer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, invalid_integer, out_of_range, ledger_unavailable]
+
+  /internal/v1/billing/catalog-versions/{catalog_version_id}:
+    get:
+      operationId: getBillingCatalogVersion
+      tags: [internal-billing]
+      summary: Full immutable catalog release snapshot for history replay
+      description: >-
+        Returns the complete referenced version bundle of one release, scoped
+        to the caller's organization (cross-organization ids answer 404
+        without revealing existence). Historical reads answer retired
+        releases — history never disappears — but a historical read can never
+        be used to purchase against a retired price; new sales always select
+        through quoteBillingProduct.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      parameters:
+        - $ref: "#/components/parameters/CatalogVersionId"
+      responses:
+        "200":
+          description: The immutable release snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/CatalogVersionSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, invalid_integer, out_of_range, ledger_unavailable]
+
 # ---------------------------------------------------------------------------
 components:
   securitySchemes:
@@ -899,6 +1087,12 @@ components:
         $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
     RefundId:
       name: refund_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    CatalogVersionId:
+      name: catalog_version_id
       in: path
       required: true
       schema:
@@ -1459,6 +1653,90 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+
+    QuoteBillingProductRequest:
+      type: object
+      description: >-
+        The caller chooses WHAT to quote and, optionally, which price version
+        it expects — never a price, a payer, or the clock. The organization
+        scope comes from the trusted service credential; billing_account_id
+        narrows the scope when quoting an account-specific catalog.
+      required: [product_id, action]
+      additionalProperties: false
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        action:
+          type: string
+          enum: [initial_purchase, renewal, change_tier]
+          description: The purchase action eligibility is evaluated for.
+        billing_account_id:
+          oneOf:
+            - type: "null"
+            - $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        expected_price_version_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: When present and not the pinned version, the quote answers 409 price_version_conflict.
+      examples:
+        - product_id: "pack_1m_credits"
+          action: initial_purchase
+          billing_account_id: "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+    QuoteBillingStepRequest:
+      type: object
+      description: >-
+        The FINAL merged resource vector of one step. The trusted adapter owes
+        the merge semantics: non-overlapping token classes, deduplicated
+        stream fragments (same event id -> one contribution), and durations
+        accumulated per resource and converted ONCE to whole milliseconds.
+        Quantities are contract decimal strings; a stream without stable
+        event identity cannot be settled at all.
+      required: [price_version_id, resources]
+      additionalProperties: false
+      properties:
+        price_version_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: The version to price against — the reservation's pinned version, or any historical version for replay.
+        resources:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            required: [resource, quantity]
+            additionalProperties: false
+            properties:
+              resource:
+                $ref: "./schemas/objects.yaml#/components/schemas/ResourceKind"
+              quantity:
+                type: string
+                $ref: "./schemas/scalars.yaml#/components/schemas/UnsignedInt64"
+      examples:
+        - price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+          resources:
+            - resource: model_input_tokens
+              quantity: "9007199254740993"
+    QueryBillingPeriodRequest:
+      type: object
+      description: Exactly one selector — an explicit period index or an occurrence time to locate.
+      required: [original_purchased_at_us]
+      additionalProperties: false
+      properties:
+        original_purchased_at_us:
+          $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+          description: The trusted original activation anchor (server-confirmed activation).
+        target_period_index:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/UnsignedInt64"
+          description: Mutually exclusive with occurrence_us.
+        occurrence_us:
+          $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"
+          description: Locate the half-open period containing this instant; mutually exclusive with target_period_index.
+      examples:
+        - original_purchased_at_us: "1706679015123456"
+          target_period_index: "0"
 
   # Contract-level registry of every error code with its expected HTTP status.
   # Checked by server/src/billing-contract/validate-fixtures.ts against

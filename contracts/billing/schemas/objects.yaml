@@ -9,7 +9,7 @@ components:
   schemas:
     ResourceKind:
       type: string
-      description: Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change.
+      description: Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change. tool_call_duration_ms carries whole milliseconds — a duration arriving in finer units is converted ONCE per resource by the trusted adapter before pricing, never per fragment.
       enum:
         - model_input_tokens
         - model_output_tokens
@@ -17,7 +17,19 @@ components:
         - model_cache_write_tokens
         - model_web_search_requests
         - model_request_count
+        - tool_call_count
+        - tool_call_duration_ms
       examples: ["model_input_tokens"]
+
+    MeasurementUnit:
+      type: string
+      description: Closed set of measurement units a price is expressed per. The contract's unit_size says how many of THIS unit one price covers.
+      enum:
+        - token
+        - request
+        - call
+        - millisecond
+      examples: ["token"]
 
     # ---------------------------------------------------------------- account
     BillingAccount:
@@ -1021,14 +1033,22 @@ components:
           minItems: 1
           items:
             type: object
-            required: [resource, price_unit, price_numerator, price_denominator]
+            required: [resource, measurement_unit, unit_size, price_unit, price_numerator, price_denominator]
             additionalProperties: false
             properties:
               resource:
                 $ref: "#/components/schemas/ResourceKind"
+              measurement_unit:
+                $ref: "#/components/schemas/MeasurementUnit"
+              unit_size:
+                type: string
+                pattern: "^(0|[1-9][0-9]{0,18})$"
+                x-value-min: "1"
+                x-value-max: "9223372036854775807"
+                description: The rational price covers THIS many measurement units (the contract's U). Positive integer; one price per resource per version.
               price_unit:
                 type: string
-                description: Unit the rational price is expressed per (e.g. 1000 tokens).
+                description: Legacy rendering of unit_size; MUST equal the decimal string of unit_size (e.g. "1000"). The two fields express one meaning — a divergence is a semantic contract violation.
                 minLength: 1
                 maxLength: 64
                 pattern: "^[A-Za-z0-9._:-]{1,64}$"
@@ -1061,10 +1081,14 @@ components:
           effective_to_us: null
           resources:
             - resource: model_input_tokens
+              measurement_unit: token
+              unit_size: "1000"
               price_unit: "1000"
               price_numerator: "37"
               price_denominator: "1000000"
             - resource: model_output_tokens
+              measurement_unit: token
+              unit_size: "1000"
               price_unit: "1000"
               price_numerator: "111"
               price_denominator: "1000000"
@@ -1461,3 +1485,863 @@ components:
           attempt_count: "0"
           published_at_us: null
           status: pending
+
+    # ------------------------------------------------------- catalog versions
+    # (#65): versioned products, quotas, prices, run caps and the immutable
+    # release bundle that binds them. Business content is append-only; a
+    # retired version stops NEW selection but stays resolvable forever for
+    # historical quotes, pinned steps and orders.
+    BillingProductVersion:
+      type: object
+      description: >-
+        One sellable product version. monthly_plan: exactly one calendar month
+        per period, references its subscription quota version, and may grant
+        null credits (a rights-only tier). credit_pack: long-lived, no monthly
+        validity, always grants a positive microcredit amount. price_fen is
+        CNY integer fen — never implicitly converted to credits. Test numbers
+        live in releases marked environment=test and are never production
+        sale prices.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - environment
+        - product_id
+        - product_type
+        - display_name
+        - price_fen
+        - currency
+        - granted_microcredits
+        - period_months
+        - quota_version_id
+        - status
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+          description: null for organization-global products.
+        environment:
+          $ref: "#/components/schemas/BillingEnvironment"
+        product_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        product_type:
+          type: string
+          enum: [monthly_plan, credit_pack]
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        price_fen:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Fen"
+        currency:
+          $ref: "./scalars.yaml#/components/schemas/CurrencyCode"
+        granted_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/MicrocreditsNullable"
+          description: Null for rights-only monthly plans; positive for credit packs.
+        period_months:
+          $ref: "./scalars.yaml#/components/schemas/UnsignedInt64Nullable"
+          description: Exactly 1 for monthly plans; null for long-lived credit packs.
+        quota_version_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+          description: Referenced subscription quota version; required for monthly plans.
+        status:
+          type: string
+          enum: [draft, active, retired]
+      x-immutability: append-only
+      examples:
+        - id: "aa000000-0000-4000-8000-000000000001"
+          schema_version: billing.v1
+          organization_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d"
+          billing_account_id: null
+          environment: production
+          product_id: "pack_1m_credits"
+          product_type: credit_pack
+          display_name: "1M credits pack"
+          price_fen: "9900"
+          currency: CNY
+          granted_microcredits: "1000000"
+          period_months: null
+          quota_version_id: null
+          status: active
+
+    BillingQuotaVersion:
+      type: object
+      description: >-
+        Entitlement limits of one tier (basic or subscription). Quota resource
+        keys are a CLOSED set — a key outside it is a schema violation, never
+        extra configuration. Quotas are NOT balance: a subscription stays
+        valid regardless of credit exhaustion.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - environment
+        - tier
+        - quotas
+        - status
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+        environment:
+          $ref: "#/components/schemas/BillingEnvironment"
+        tier:
+          type: string
+          enum: [basic, subscription]
+        quotas:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [resource_key, limit, unit]
+            additionalProperties: false
+            properties:
+              resource_key:
+                type: string
+                enum: [concurrent_runs, automatic_task_seats]
+              limit:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+                description: Non-negative integer limit of the key's unit.
+              unit:
+                type: string
+                const: count
+        status:
+          type: string
+          enum: [draft, active, retired]
+      x-immutability: append-only
+      examples:
+        - id: "aa000000-0000-4000-8000-000000000002"
+          schema_version: billing.v1
+          organization_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d"
+          billing_account_id: null
+          environment: production
+          tier: subscription
+          quotas:
+            - resource_key: concurrent_runs
+              limit: "5"
+              unit: count
+            - resource_key: automatic_task_seats
+              limit: "20"
+              unit: count
+          status: active
+
+    BillingRunCapVersion:
+      type: object
+      description: >-
+        Default root-run ceiling in whole microcredits. A new Run pins this
+        value at creation; later repricing or tier changes never widen an
+        existing Run's cap. Every PriceVersion references exactly one of these
+        and must embed the SAME value — divergence is a configuration error.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - environment
+        - cap_microcredits
+        - status
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+        environment:
+          $ref: "#/components/schemas/BillingEnvironment"
+        cap_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+        status:
+          type: string
+          enum: [draft, active, retired]
+      x-immutability: append-only
+      examples:
+        - id: "aa000000-0000-4000-8000-000000000003"
+          schema_version: billing.v1
+          organization_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d"
+          billing_account_id: null
+          environment: production
+          cap_microcredits: "5000000"
+          status: active
+
+    BillingEnvironment:
+      type: string
+      description: Configuration environment. A production request NEVER selects a test release; test_only configurations exist only for acceptance runs.
+      enum: [production, test]
+      examples: ["production"]
+
+    BillingCatalogRelease:
+      type: object
+      description: >-
+        One immutable bundle binding product versions to their pinned price,
+        quota and run-cap versions for a scope, environment and half-open
+        [effective_from_us, effective_to_us) interval. content_digest covers
+        the referenced versions' business content and is echoed by every
+        quote. Selection at quote time uses the server's trusted clock; an
+        account-specific release wins over the organization-global one, and an
+        unavailable account-specific catalog fails the quote CLOSED instead of
+        falling back to the generic release.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - environment
+        - effective_from_us
+        - effective_to_us
+        - content_digest
+        - status
+        - items
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+        environment:
+          $ref: "#/components/schemas/BillingEnvironment"
+        effective_from_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        effective_to_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
+        content_digest:
+          type: string
+          minLength: 64
+          maxLength: 128
+          pattern: "^[0-9a-f]{64,128}$"
+          description: SHA-256 over the sorted referenced-version content.
+        status:
+          type: string
+          enum: [draft, active, retired]
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_version_id, price_version_id, quota_version_id, run_cap_version_id]
+            additionalProperties: false
+            properties:
+              product_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+              price_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+                description: The price version PINNED for this product by the release.
+              quota_version_id:
+                $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+              run_cap_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+      x-immutability: append-only
+      examples:
+        - id: "aa000000-0000-4000-8000-000000000004"
+          schema_version: billing.v1
+          organization_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d"
+          billing_account_id: null
+          environment: production
+          effective_from_us: "1700000000000000"
+          effective_to_us: null
+          content_digest: "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182"
+          status: active
+          items:
+            - product_version_id: "aa000000-0000-4000-8000-000000000001"
+              price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+              quota_version_id: null
+              run_cap_version_id: "aa000000-0000-4000-8000-000000000003"
+
+    SellabilityReason:
+      type: string
+      description: Closed reasons a product quote answers sellable=false. Absence of a complete production release NEVER degrades to a zero price or a demo value.
+      enum:
+        - no_published_release
+        - account_release_unavailable
+        - ambiguous_release_configuration
+        - release_incomplete
+        - product_not_in_release
+        - quota_version_missing
+      examples: ["no_published_release"]
+
+    EligibilityReason:
+      type: string
+      description: Closed outcome reasons of the purchase-eligibility table (R5/R6).
+      enum:
+        - eligible
+        - already_prepaid
+        - refund_required
+        - refund_pending
+        - refund_outcome_unknown
+        - state_conflict
+      examples: ["eligible"]
+
+    EligibilityNextAction:
+      type: string
+      description: Closed next-step the caller should take after an eligibility outcome.
+      enum:
+        - create_order
+        - refund_existing_prepurchase_first
+        - wait_for_refund_outcome
+        - keep_existing_commitment
+        - recheck_state
+      examples: ["create_order"]
+
+    PurchaseEligibility:
+      type: object
+      description: >-
+        Observable result of the eligibility table over a TRUSTED state
+        snapshot (subscription + prepaid commitment + refund facts), carrying
+        the snapshot revision the order service must recheck inside the
+        purchase transaction. A quote never occupies eligibility; concurrent
+        purchase safety is enforced by the order service's transaction, not by
+        this read.
+      required:
+        - allowed
+        - reason
+        - next_action
+        - target_period
+        - state_revision
+        - existing_commitment
+      additionalProperties: false
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          $ref: "#/components/schemas/EligibilityReason"
+        next_action:
+          $ref: "#/components/schemas/EligibilityNextAction"
+        target_period:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [index, start_us, end_us]
+              additionalProperties: false
+              properties:
+                index:
+                  type: string
+                  $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+                start_us:
+                  $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+                end_us:
+                  $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+              description: >-
+                The period this purchase would take effect for. Null for a
+                fresh/expired purchase: the anchor is set at ACTUAL activation,
+                never at payment time.
+        state_revision:
+          $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+        existing_commitment:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [product_id, target_period_start_us]
+              additionalProperties: false
+              properties:
+                product_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  pattern: "^[A-Za-z0-9._:-]{1,128}$"
+                target_period_start_us:
+                  $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+      examples:
+        - allowed: true
+          reason: eligible
+          next_action: create_order
+          target_period:
+            index: "1"
+            start_us: "1709170215123456"
+            end_us: "1711848615123456"
+          state_revision: "7"
+          existing_commitment: null
+
+    LocalWallTime:
+      type: object
+      description: Asia/Shanghai wall-time fields. microsecond is kept separately from the millisecond-resolution conversion so no sub-second precision is ever lost.
+      required: [year, month, day, hour, minute, second, microsecond]
+      additionalProperties: false
+      properties:
+        year:
+          type: integer
+          format: int32
+          minimum: 1970
+          maximum: 9999
+        month:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 12
+        day:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 31
+        hour:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 59
+        second:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 59
+        microsecond:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 999999
+      examples:
+        - year: 2024
+          month: 1
+          day: 31
+          hour: 9
+          minute: 30
+          second: 15
+          microsecond: 123456
+
+    MonthPeriodDescriptor:
+      type: object
+      description: >-
+        One half-open period [B(n), B(n+1)) derived from the ORIGINAL
+        activation anchor: month ends clamp (Jan 31 -> Feb 29/28) and the
+        original day number RESUMES afterwards. Boundaries are integer UTC
+        microseconds; an event at exactly end_us belongs to the NEXT period
+        and the boundary is never rewritten by subtracting time.
+      required:
+        - index
+        - start_us
+        - end_us
+        - start_iso
+        - end_iso
+        - start_local
+        - end_local
+      additionalProperties: false
+      properties:
+        index:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+        start_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        end_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        start_iso:
+          type: string
+          minLength: 20
+          maxLength: 40
+        end_iso:
+          type: string
+          minLength: 20
+          maxLength: 40
+        start_local:
+          $ref: "#/components/schemas/LocalWallTime"
+        end_local:
+          $ref: "#/components/schemas/LocalWallTime"
+      examples:
+        - index: "0"
+          start_us: "1706679015123456"
+          end_us: "1709170215123456"
+          start_iso: "2024-01-31T01:30:15.123456Z"
+          end_iso: "2024-02-29T01:30:15.123456Z"
+          start_local:
+            year: 2024
+            month: 1
+            day: 31
+            hour: 9
+            minute: 30
+            second: 15
+            microsecond: 123456
+          end_local:
+            year: 2024
+            month: 2
+            day: 29
+            hour: 9
+            minute: 30
+            second: 15
+            microsecond: 123456
+
+    ProductQuote:
+      type: object
+      description: >-
+        Read-only product quote: sellability over the release selected by the
+        SERVER's trusted clock, the full immutable snapshot when sellable, the
+        eligibility outcome, and a period preview ONLY when the target period
+        is already determined (renewal on an active subscription). Quotes are
+        observations: they create nothing and occupy no purchase slot.
+      required: [sellable, test_only, quoted_at_us]
+      additionalProperties: false
+      properties:
+        sellable:
+          type: boolean
+        not_sellable_reason:
+          $ref: "#/components/schemas/SellabilityReason"
+          description: Present exactly when sellable=false.
+        test_only:
+          type: boolean
+          description: True when the selected configuration is explicitly test-only; a test quote is never a production sale.
+        quoted_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        snapshot:
+          type: object
+          description: Present exactly when sellable=true — the full immutable version bundle backing this quote.
+          required:
+            - release_id
+            - release_content_digest
+            - scope_is_account_specific
+            - product_version_id
+            - product_id
+            - product_type
+            - display_name
+            - amount_fen
+            - currency
+            - granted_microcredits
+            - period_months
+            - long_lived
+            - price_version_id
+            - quota_version_id
+            - run_cap_version_id
+            - run_cap_microcredits
+          additionalProperties: false
+          properties:
+            release_id:
+              $ref: "./scalars.yaml#/components/schemas/Uuid"
+            release_content_digest:
+              type: string
+              minLength: 64
+              maxLength: 128
+              pattern: "^[0-9a-f]{64,128}$"
+            scope_is_account_specific:
+              type: boolean
+            product_version_id:
+              $ref: "./scalars.yaml#/components/schemas/Uuid"
+            product_id:
+              type: string
+              minLength: 1
+              maxLength: 128
+              pattern: "^[A-Za-z0-9._:-]{1,128}$"
+            product_type:
+              type: string
+              enum: [monthly_plan, credit_pack]
+            display_name:
+              type: string
+              minLength: 1
+              maxLength: 200
+            amount_fen:
+              type: string
+              $ref: "./scalars.yaml#/components/schemas/Fen"
+            currency:
+              $ref: "./scalars.yaml#/components/schemas/CurrencyCode"
+            granted_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/MicrocreditsNullable"
+            period_months:
+              $ref: "./scalars.yaml#/components/schemas/UnsignedInt64Nullable"
+            long_lived:
+              type: boolean
+              description: True for credit packs (no monthly validity); false for monthly plans.
+            price_version_id:
+              $ref: "./scalars.yaml#/components/schemas/Uuid"
+            quota_version_id:
+              $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+            run_cap_version_id:
+              $ref: "./scalars.yaml#/components/schemas/Uuid"
+            run_cap_microcredits:
+              type: string
+              $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+        period_preview:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/MonthPeriodDescriptor"
+          description: Determined target period (renewal/prepurchase); null when activation will define a new anchor.
+        eligibility:
+          $ref: "#/components/schemas/PurchaseEligibility"
+      examples:
+        - sellable: true
+          test_only: false
+          quoted_at_us: "1700003600000000"
+          snapshot:
+            release_id: "aa000000-0000-4000-8000-000000000004"
+            release_content_digest: "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182"
+            scope_is_account_specific: false
+            product_version_id: "aa000000-0000-4000-8000-000000000001"
+            product_id: "pack_1m_credits"
+            product_type: credit_pack
+            display_name: "1M credits pack"
+            amount_fen: "9900"
+            currency: CNY
+            granted_microcredits: "1000000"
+            period_months: null
+            long_lived: true
+            price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+            quota_version_id: null
+            run_cap_version_id: "aa000000-0000-4000-8000-000000000003"
+            run_cap_microcredits: "5000000"
+          period_preview: null
+          eligibility:
+            allowed: true
+            reason: eligible
+            next_action: create_order
+            target_period: null
+            state_revision: "3"
+            existing_commitment: null
+
+    StepQuote:
+      type: object
+      description: >-
+        Read-only exact cost of one execution step against a PINNED price
+        version. All resources are summed as ONE exact rational and rounded
+        exactly once (HALF_UP to whole microcredits) — never per token, per
+        line or per stream fragment. The full pricing basis is echoed so the
+        total can be recomputed offline.
+      required: [price_version_id, rounding, lines, total_microcredits, total_display]
+      additionalProperties: false
+      properties:
+        price_version_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: The version the cost was computed from; pinned at reservation, never the currently-active list.
+        rounding:
+          type: string
+          const: half_up
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [resource, quantity, measurement_unit, unit_size, numerator, denominator]
+            additionalProperties: false
+            properties:
+              resource:
+                $ref: "#/components/schemas/ResourceKind"
+              quantity:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              measurement_unit:
+                $ref: "#/components/schemas/MeasurementUnit"
+              unit_size:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              numerator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              denominator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+        total_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Microcredits"
+        total_display:
+          type: string
+          description: The total rendered with the contract's exact six-decimal credit display.
+          minLength: 8
+          maxLength: 64
+          pattern: "^[0-9]+\\.[0-9]{6}$"
+      examples:
+        - price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+          rounding: half_up
+          lines:
+            - resource: model_input_tokens
+              quantity: "9007199254740993"
+              measurement_unit: token
+              unit_size: "1"
+              numerator: "1"
+              denominator: "1000000"
+          total_microcredits: "9007199254740993"
+          total_display: "9007199254740993.000000"
+
+    PeriodAnswer:
+      type: object
+      description: >-
+        Deterministic Beijing-time period answer: the original activation
+        anchor (UTC instant AND local wall time), and the located or requested
+        [B(n), B(n+1)) period with integer-microsecond UTC boundaries, ISO
+        renderings and local wall times.
+      required: [timezone, anchor, period]
+      additionalProperties: false
+      properties:
+        timezone:
+          type: string
+          const: Asia/Shanghai
+        anchor:
+          type: object
+          required: [utc_us, utc_iso, local]
+          additionalProperties: false
+          properties:
+            utc_us:
+              $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+            utc_iso:
+              type: string
+              minLength: 20
+              maxLength: 40
+            local:
+              $ref: "#/components/schemas/LocalWallTime"
+        period:
+          $ref: "#/components/schemas/MonthPeriodDescriptor"
+      examples:
+        - timezone: Asia/Shanghai
+          anchor:
+            utc_us: "1706679015123456"
+            utc_iso: "2024-01-31T01:30:15.123456Z"
+            local:
+              year: 2024
+              month: 1
+              day: 31
+              hour: 9
+              minute: 30
+              second: 15
+              microsecond: 123456
+          period:
+            index: "0"
+            start_us: "1706679015123456"
+            end_us: "1709170215123456"
+            start_iso: "2024-01-31T01:30:15.123456Z"
+            end_iso: "2024-02-29T01:30:15.123456Z"
+            start_local:
+              year: 2024
+              month: 1
+              day: 31
+              hour: 9
+              minute: 30
+              second: 15
+              microsecond: 123456
+            end_local:
+              year: 2024
+              month: 2
+              day: 29
+              hour: 9
+              minute: 30
+              second: 15
+              microsecond: 123456
+
+    CatalogVersionSnapshot:
+      type: object
+      description: Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price.
+      required:
+        - release_id
+        - content_digest
+        - status
+        - environment
+        - effective_from_us
+        - effective_to_us
+        - items
+      additionalProperties: false
+      properties:
+        release_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        content_digest:
+          type: string
+          minLength: 64
+          maxLength: 128
+          pattern: "^[0-9a-f]{64,128}$"
+        status:
+          type: string
+          enum: [draft, active, retired]
+        environment:
+          $ref: "#/components/schemas/BillingEnvironment"
+        effective_from_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        effective_to_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - product_version_id
+              - product_id
+              - product_type
+              - price_version_id
+              - quota_version_id
+              - run_cap_version_id
+              - run_cap_microcredits
+              - prices
+            additionalProperties: false
+            properties:
+              product_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+              product_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+                pattern: "^[A-Za-z0-9._:-]{1,128}$"
+              product_type:
+                type: string
+                enum: [monthly_plan, credit_pack]
+              price_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+              quota_version_id:
+                $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+              run_cap_version_id:
+                $ref: "./scalars.yaml#/components/schemas/Uuid"
+              run_cap_microcredits:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+              prices:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  required: [resource, measurement_unit, unit_size, numerator, denominator]
+                  additionalProperties: false
+                  properties:
+                    resource:
+                      $ref: "#/components/schemas/ResourceKind"
+                    measurement_unit:
+                      $ref: "#/components/schemas/MeasurementUnit"
+                    unit_size:
+                      type: string
+                      $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+                    numerator:
+                      type: string
+                      $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+                    denominator:
+                      type: string
+                      $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+      examples:
+        - release_id: "aa000000-0000-4000-8000-000000000004"
+          content_digest: "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182"
+          status: active
+          environment: production
+          effective_from_us: "1700000000000000"
+          effective_to_us: null
+          items:
+            - product_version_id: "aa000000-0000-4000-8000-000000000001"
+              product_id: "pack_1m_credits"
+              product_type: credit_pack
+              price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+              quota_version_id: null
+              run_cap_version_id: "aa000000-0000-4000-8000-000000000003"
+              run_cap_microcredits: "5000000"
+              prices:
+                - resource: model_input_tokens
+                  measurement_unit: token
+                  unit_size: "1000"
+                  numerator: "37"
+                  denominator: "1000000"
