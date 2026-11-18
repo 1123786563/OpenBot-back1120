@@ -652,6 +652,13 @@
       "when": 1795001481695,
       "tag": "0092_billing_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1795006035290,
+      "tag": "0093_billing_catalog_freeze",
+      "breakpoints": true
     }
   ]
 }

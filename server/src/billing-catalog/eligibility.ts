@@ -94,6 +94,14 @@ export interface TrustedSubscriptionSnapshot {
 export interface EligibilityInput {
   /** The product this purchase attempt is for. */
   requestedProductId: string;
+  /**
+   * The product type of the attempt. MONTHLY PLANS live on the subscription
+   * cycle and follow the renewal/tier-change/refund table; LONG-LIVED CREDIT
+   * PACKS are independent of it — a subscription commitment (prepaid next
+   * period, its renewal or a refund scoped to that period) must never block
+   * buying a pack.
+   */
+  requestedProductType: "monthly_plan" | "credit_pack";
   /** Trusted evaluation instant (server clock, never a client-provided now). */
   nowUs: bigint;
   snapshot: TrustedSubscriptionSnapshot;
@@ -161,21 +169,34 @@ export function evaluatePurchaseEligibility(
 
   const nextIndex = sub.currentPeriodIndex + 1n;
 
+  // Long-lived credit packs stand OUTSIDE the subscription cycle: whatever the
+  // subscription's prepaid commitment, its renewal state or that period's
+  // refund facts say, buying a pack is allowed (pack-level duplicate/refund
+  // checks belong to the order service #68; no target period applies).
+  if (input.requestedProductType === "credit_pack") {
+    return {
+      allowed: true,
+      reason: "eligible",
+      nextAction: "create_order",
+      targetPeriod: null,
+      stateRevision: snap.stateRevision,
+      existingCommitment: null,
+    };
+  }
+
   // A prepaid commitment exists: the purchase continues it, whatever the wall
   // clock says — an attempt at the boundary with a prepaid next period is a
-  // continuation of the original anchor, never an expired re-purchase.
+  // continuation of the original anchor, never an expired re-purchase. A
+  // refund that is processing/unknown for that period takes precedence over
+  // every other answer: while its outcome is open, NO repurchase of the
+  // period is allowed, not even of the already-committed product.
   if (sub.prepaid) {
     const prepaid = sub.prepaid;
-    const sameProduct = prepaid.productId === input.requestedProductId;
-    if (sameProduct) {
-      return fail("already_prepaid", "keep_existing_commitment", {
-        productId: prepaid.productId,
-        targetPeriodStartUs: prepaid.targetPeriodStartUs,
-      });
-    }
-    // Different product while a commitment is live: refund first, then buy.
-    const targetRefunds = snap.refundsForTargetPeriod;
-    const blocking = targetRefunds.find(
+    const commitment = {
+      productId: prepaid.productId,
+      targetPeriodStartUs: prepaid.targetPeriodStartUs,
+    };
+    const blocking = snap.refundsForTargetPeriod.find(
       (r) => r.status === "processing" || r.status === "unknown",
     );
     if (blocking) {
@@ -184,16 +205,18 @@ export function evaluatePurchaseEligibility(
           ? "refund_pending"
           : "refund_outcome_unknown",
         "wait_for_refund_outcome",
-        {
-          productId: prepaid.productId,
-          targetPeriodStartUs: prepaid.targetPeriodStartUs,
-        },
+        commitment,
       );
     }
-    return fail("refund_required", "refund_existing_prepurchase_first", {
-      productId: prepaid.productId,
-      targetPeriodStartUs: prepaid.targetPeriodStartUs,
-    });
+    if (prepaid.productId === input.requestedProductId) {
+      return fail("already_prepaid", "keep_existing_commitment", commitment);
+    }
+    // Different product while a commitment is live: refund first, then buy.
+    return fail(
+      "refund_required",
+      "refund_existing_prepurchase_first",
+      commitment,
+    );
   }
 
   // Subscription expired with no commitment: a NEW anchor starts at activation.

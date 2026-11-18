@@ -76,6 +76,8 @@ export interface BillingCatalogService {
   queryPeriod(input: QueryPeriodInput): Promise<PeriodAnswer>;
   getCatalogVersion(input: {
     organizationId: string;
+    /** Trusted account authorization (null = unrestricted in the organization). */
+    billingAccountIds: string[] | null;
     releaseId: string;
   }): Promise<CatalogVersionSnapshot>;
 }
@@ -130,6 +132,12 @@ export interface ProductQuote {
 
 export interface QuoteStepInput {
   organizationId: string;
+  /**
+   * Trusted billing-account authorization carried from the credential context
+   * (null = unrestricted within the organization). A price version scoped to
+   * another account is invisible, exactly like a cross-organization one.
+   */
+  billingAccountIds: string[] | null;
   priceVersionId: string;
   /** Final merged resource vector for one step: resource -> quantity string. */
   resources: { resource: string; quantity: string }[];
@@ -208,6 +216,7 @@ export class CatalogServiceError extends Error {
   readonly code:
     | "invalid_integer"
     | "out_of_range"
+    | "forbidden"
     | "resource_not_found"
     | "state_conflict"
     | "price_version_conflict"
@@ -226,11 +235,13 @@ export class CatalogServiceError extends Error {
     this.status =
       code === "resource_not_found"
         ? 404
-        : code === "state_conflict" || code === "price_version_conflict"
-          ? 409
-          : code === "ledger_unavailable"
-            ? 503
-            : 422;
+        : code === "forbidden"
+          ? 403
+          : code === "state_conflict" || code === "price_version_conflict"
+            ? 409
+            : code === "ledger_unavailable"
+              ? 503
+              : 422;
     this.field = field;
   }
 }
@@ -349,6 +360,9 @@ export function createBillingCatalogService(deps: {
         }
         eligibility = evaluatePurchaseEligibility({
           requestedProductId: input.productId,
+          requestedProductType: item.productVersion.productType as
+            | "monthly_plan"
+            | "credit_pack",
           nowUs: now,
           snapshot: snap,
         });
@@ -392,6 +406,7 @@ export function createBillingCatalogService(deps: {
           database,
           input.organizationId,
           input.priceVersionId,
+          input.billingAccountIds,
         );
       } catch (e) {
         throw mapStorageError(e);
@@ -518,6 +533,7 @@ export function createBillingCatalogService(deps: {
           database,
           input.organizationId,
           input.releaseId,
+          input.billingAccountIds,
         );
       } catch (e) {
         throw mapStorageError(e);

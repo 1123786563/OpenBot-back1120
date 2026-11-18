@@ -21,7 +21,18 @@
  * back to the generic release.
  */
 
-import { and, asc, eq, gt, isNull, lt, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   BillingValueError,
   parseTimestampUs,
@@ -38,7 +49,12 @@ import {
   billingQuotaVersions,
   billingRunCapVersions,
 } from "../db/schema";
-import { type MeasurementUnit, validatePriceEntry } from "./pricing.js";
+import {
+  type MeasurementUnit,
+  PRICED_RESOURCES,
+  RESOURCE_UNITS,
+  validatePriceEntry,
+} from "./pricing.js";
 
 type DatabaseLike = Database;
 /** What a helper running INSIDE the publish transaction receives. */
@@ -86,7 +102,62 @@ function hashDigest(parts: string[]): string {
   return hasher.digest("hex");
 }
 
-async function loadPriceVersion(tx: TxLike, id: string, scope: ScopeKey) {
+/**
+ * The completeness a price version must satisfy to enter (or keep serving) a
+ * release: EVERY closed priced resource carries a POSITIVE price in its
+ * canonical measurement unit. A catalog that is missing one price or grants no
+ * credits can never yield a sellable quote — the gap fails the publish and,
+ * defensively, fails any current selection closed instead of quoting a partial
+ * price list.
+ */
+function assertCompletePriceContent(
+  id: string,
+  resources: {
+    resource: string;
+    measurementUnit: string;
+    unitSize: bigint;
+    numerator: bigint;
+    denominator: bigint;
+  }[],
+): void {
+  const byResource = new Map(resources.map((r) => [r.resource, r]));
+  if (byResource.size !== PRICED_RESOURCES.length) {
+    throw new CatalogConfigurationError(
+      `price version ${id} must price exactly the closed resource set once per resource`,
+    );
+  }
+  for (const key of PRICED_RESOURCES) {
+    const row = byResource.get(key);
+    if (!row) {
+      throw new CatalogConfigurationError(
+        `price version ${id} does not price required resource ${key}`,
+      );
+    }
+    if (row.measurementUnit !== RESOURCE_UNITS[key]) {
+      throw new CatalogConfigurationError(
+        `price version ${id} prices ${key} in ${row.measurementUnit}, but the canonical unit for ${key} is ${RESOURCE_UNITS[key]}`,
+      );
+    }
+    if (row.numerator <= 0n) {
+      throw new CatalogConfigurationError(
+        `price version ${id} prices ${key} with a non-positive unit price`,
+      );
+    }
+    validatePriceEntry({
+      numerator: row.numerator,
+      denominator: row.denominator,
+      unitSize: row.unitSize,
+      measurementUnit: row.measurementUnit as MeasurementUnit,
+    });
+  }
+}
+
+async function loadPriceVersion(
+  tx: TxLike,
+  id: string,
+  scope: ScopeKey,
+  releaseInterval: { fromUs: bigint; toUs: bigint | null },
+) {
   const [row] = await tx
     .select()
     .from(billingPriceVersions)
@@ -102,27 +173,34 @@ async function loadPriceVersion(tx: TxLike, id: string, scope: ScopeKey) {
       `price version ${id} is outside the release scope (cross-scope references are rejected)`,
     );
   }
-  if (row.status === "draft") {
-    throw new CatalogConfigurationError(`price version ${id} is still draft`);
+  if (row.status !== "active") {
+    throw new CatalogConfigurationError(
+      `price version ${id} is ${row.status}; only an active version may enter a release`,
+    );
+  }
+  // The price must be valid across the whole release interval it is pinned
+  // for: an open release demands an open price interval, and a bounded price
+  // must cover the bounded release.
+  if (row.effectiveFromUs > releaseInterval.fromUs) {
+    throw new CatalogConfigurationError(
+      `price version ${id} becomes effective after the release interval starts`,
+    );
+  }
+  if (
+    releaseInterval.toUs === null
+      ? row.effectiveToUs !== null
+      : row.effectiveToUs === null || row.effectiveToUs < releaseInterval.toUs
+  ) {
+    throw new CatalogConfigurationError(
+      `price version ${id}'s valid interval does not cover the release interval`,
+    );
   }
   const resources = await tx
     .select()
     .from(billingPriceResources)
     .where(eq(billingPriceResources.priceVersionId, id))
     .orderBy(asc(billingPriceResources.resource));
-  if (resources.length === 0) {
-    throw new CatalogConfigurationError(
-      `price version ${id} prices no resources`,
-    );
-  }
-  for (const r of resources) {
-    validatePriceEntry({
-      numerator: r.numerator,
-      denominator: r.denominator,
-      unitSize: r.unitSize,
-      measurementUnit: r.measurementUnit as MeasurementUnit,
-    });
-  }
+  assertCompletePriceContent(id, resources);
   const [cap] = await tx
     .select()
     .from(billingRunCapVersions)
@@ -139,6 +217,11 @@ async function loadPriceVersion(tx: TxLike, id: string, scope: ScopeKey) {
   ) {
     throw new CatalogConfigurationError(
       `price version ${id} references a run cap outside the release scope`,
+    );
+  }
+  if (cap.status !== "active") {
+    throw new CatalogConfigurationError(
+      `price version ${id} references a ${cap.status} run cap version`,
     );
   }
   if (cap.capMicrocredits !== row.defaultRootRunCapMicrocredits) {
@@ -180,6 +263,7 @@ export async function publishRelease(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${slot}))`);
 
     const seen = new Set<string>();
+    const seenProductIds = new Set<string>();
     const digestParts: string[] = [];
     for (const item of input.items) {
       if (seen.has(item.productVersionId)) {
@@ -206,12 +290,39 @@ export async function publishRelease(
           `product version ${item.productVersionId} is outside the release scope`,
         );
       }
-      if (product.status === "draft") {
+      if (product.status !== "active") {
         throw new CatalogConfigurationError(
-          `product version ${item.productVersionId} is still draft`,
+          `product version ${item.productVersionId} is ${product.status}; only an active version may enter a release`,
         );
       }
-      const price = await loadPriceVersion(tx, item.priceVersionId, input);
+      // One version of each sellable product per release: two versions of the
+      // same product_id would let selection pick one at random.
+      if (seenProductIds.has(product.productId)) {
+        throw new CatalogConfigurationError(
+          `product ${product.productId} appears in more than one version of this release`,
+        );
+      }
+      seenProductIds.add(product.productId);
+      // A sellable product ALWAYS grants a benefit: a monthly plan without
+      // granted credits or a pack without a positive grant is not a price
+      // mistake, it is an unfillable promise — publish rejects it.
+      if (product.grantedMicrocredits === null) {
+        throw new CatalogConfigurationError(
+          `product ${product.productId} grants no credits and cannot be sold`,
+        );
+      }
+      if (
+        product.productType === "credit_pack" &&
+        product.grantedMicrocredits <= 0n
+      ) {
+        throw new CatalogConfigurationError(
+          `credit pack ${product.productId} must grant a positive credit amount`,
+        );
+      }
+      const price = await loadPriceVersion(tx, item.priceVersionId, input, {
+        fromUs: input.effectiveFromUs,
+        toUs: input.effectiveToUs,
+      });
       if (item.quotaVersionId !== null) {
         const [quota] = await tx
           .select()
@@ -242,6 +353,11 @@ export async function publishRelease(
         if (quota.id !== product.quotaVersionId) {
           throw new CatalogConfigurationError(
             `release quota ${quota.id} diverges from the product version's own quota reference`,
+          );
+        }
+        if (quota.status !== "active") {
+          throw new CatalogConfigurationError(
+            `quota version ${quota.id} is ${quota.status}; only an active quota may enter a release`,
           );
         }
         validateQuotaSpec(quota.spec);
@@ -480,7 +596,11 @@ export async function selectReleaseForQuote(
       if (covering.length > 1) {
         return { ok: false, reason: "ambiguous_release_configuration" };
       }
-      const resolved = await resolveReleaseItems(db, covering[0].id);
+      const resolved = await resolveReleaseItems(
+        db,
+        covering[0].id,
+        "selection",
+      );
       if (!resolved.ok) return resolved;
       return {
         ok: true,
@@ -496,7 +616,7 @@ export async function selectReleaseForQuote(
     return { ok: false, reason: "no_published_release" };
   if (covering.length > 1)
     return { ok: false, reason: "ambiguous_release_configuration" };
-  const resolved = await resolveReleaseItems(db, covering[0].id);
+  const resolved = await resolveReleaseItems(db, covering[0].id, "selection");
   if (!resolved.ok) return resolved;
   return {
     ok: true,
@@ -504,9 +624,21 @@ export async function selectReleaseForQuote(
   };
 }
 
+/**
+ * How a release's referenced versions are being read:
+ * - "selection": the release is about to back a CURRENT quote — every
+ *   referenced version must still be active and COMPLETE (full positive price
+ *   coverage, granted credits, quota). A gap fails the quote closed; it is
+ *   never served at a zero price or with a missing benefit.
+ * - "history": the release snapshot is read for replay/audit — retired
+ *   versions answer forever; only vanished references fail.
+ */
+type ResolutionMode = "selection" | "history";
+
 async function resolveReleaseItems(
   db: DatabaseLike,
   releaseId: string,
+  mode: ResolutionMode,
 ): Promise<
   | {
       ok: true;
@@ -581,6 +713,37 @@ async function resolveReleaseItems(
       // loss; fail closed rather than serve a partial catalog.
       return { ok: false, reason: "release_incomplete" };
     }
+    if (mode === "selection") {
+      // A current quote may only be backed by active content. Retirement (or
+      // any other inactive status) stops the sale closed; history still reads.
+      if (
+        productVersion.status !== "active" ||
+        priceVersion.status !== "active" ||
+        runCap.status !== "active" ||
+        (quotaVersion !== null && quotaVersion.status !== "active")
+      ) {
+        return { ok: false, reason: "release_incomplete" };
+      }
+      try {
+        assertCompletePriceContent(priceVersion.id, priceResources);
+      } catch {
+        return { ok: false, reason: "release_incomplete" };
+      }
+      if (
+        productVersion.grantedMicrocredits === null ||
+        (productVersion.productType === "credit_pack" &&
+          productVersion.grantedMicrocredits <= 0n) ||
+        (productVersion.productType === "monthly_plan" &&
+          (quotaVersion === null || item.quotaVersionId === null))
+      ) {
+        return { ok: false, reason: "release_incomplete" };
+      }
+      if (
+        runCap.capMicrocredits !== priceVersion.defaultRootRunCapMicrocredits
+      ) {
+        return { ok: false, reason: "release_incomplete" };
+      }
+    }
     resolved.push({
       productVersion,
       priceVersion,
@@ -605,16 +768,31 @@ async function resolveReleaseItems(
  * effective interval. Retired versions stay quotable forever — pinned steps
  * and orders recompute their exact cost from the same rows after restarts,
  * repricing and retirement. A version of another organization is invisible
- * (resource_not_found at the service boundary, never an existence leak).
+ * (resource_not_found at the service boundary, never an existence leak), and
+ * so is a version scoped to another billing account: `allowedBillingAccountIds`
+ * carries the caller's trusted account authorization (null = unrestricted
+ * within the organization); a version bound to an account outside it answers
+ * null exactly like a missing row.
  */
 export async function loadPriceVersionForReplay(
   db: DatabaseLike,
   organizationId: string,
   priceVersionId: string,
+  allowedBillingAccountIds: string[] | null,
 ): Promise<{
   priceVersion: typeof billingPriceVersions.$inferSelect;
   resources: (typeof billingPriceResources.$inferSelect)[];
 } | null> {
+  const accountFilter =
+    allowedBillingAccountIds === null
+      ? undefined
+      : or(
+          isNull(billingPriceVersions.billingAccountId),
+          inArray(
+            billingPriceVersions.billingAccountId,
+            allowedBillingAccountIds,
+          ),
+        );
   const [priceVersion] = await db
     .select()
     .from(billingPriceVersions)
@@ -622,6 +800,7 @@ export async function loadPriceVersionForReplay(
       and(
         eq(billingPriceVersions.id, priceVersionId),
         eq(billingPriceVersions.organizationId, organizationId),
+        ...(accountFilter ? [accountFilter] : []),
       ),
     );
   if (!priceVersion) return null;
@@ -633,12 +812,28 @@ export async function loadPriceVersionForReplay(
   return { priceVersion, resources };
 }
 
-/** Full immutable version bundle by release id, for the history endpoint. */
+/**
+ * Full immutable version bundle by release id, for the history endpoint.
+ * Account-scoped like replay: a release bound to another billing account is
+ * invisible (404 at the service boundary, never an existence leak);
+ * organization-global releases stay readable.
+ */
 export async function loadReleaseSnapshot(
   db: DatabaseLike,
   organizationId: string,
   releaseId: string,
+  allowedBillingAccountIds: string[] | null,
 ) {
+  const accountFilter =
+    allowedBillingAccountIds === null
+      ? undefined
+      : or(
+          isNull(billingCatalogReleases.billingAccountId),
+          inArray(
+            billingCatalogReleases.billingAccountId,
+            allowedBillingAccountIds,
+          ),
+        );
   const [release] = await db
     .select()
     .from(billingCatalogReleases)
@@ -646,10 +841,11 @@ export async function loadReleaseSnapshot(
       and(
         eq(billingCatalogReleases.id, releaseId),
         eq(billingCatalogReleases.organizationId, organizationId),
+        ...(accountFilter ? [accountFilter] : []),
       ),
     );
   if (!release) return null;
-  const resolved = await resolveReleaseItems(db, releaseId);
+  const resolved = await resolveReleaseItems(db, releaseId, "history");
   if (!resolved.ok) return null;
   return { release, items: resolved.release.items };
 }

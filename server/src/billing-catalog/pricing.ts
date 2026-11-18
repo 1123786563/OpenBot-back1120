@@ -47,6 +47,24 @@ export const PRICED_RESOURCES = [
 ] as const;
 export type PricedResource = (typeof PRICED_RESOURCES)[number];
 
+/**
+ * The ONE measurement unit each resource may be priced per. Tokens are priced
+ * per token units (U scales to 1000 where a catalog wants per-1000 pricing);
+ * request counts per request, call counts per call, durations per whole
+ * millisecond. A version that prices a resource in any other unit is a
+ * configuration error, not an alternative reading of the same price.
+ */
+export const RESOURCE_UNITS: Record<PricedResource, MeasurementUnit> = {
+  model_input_tokens: "token",
+  model_output_tokens: "token",
+  model_cache_read_tokens: "token",
+  model_cache_write_tokens: "token",
+  model_web_search_requests: "request",
+  model_request_count: "request",
+  tool_call_count: "call",
+  tool_call_duration_ms: "millisecond",
+};
+
 /** Hard cap on distinct resource lines per step: bounds denominator growth. */
 export const MAX_STEP_RESOURCE_LINES = 64;
 

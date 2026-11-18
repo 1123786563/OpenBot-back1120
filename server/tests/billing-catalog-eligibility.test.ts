@@ -52,9 +52,11 @@ const attempt = (
   productId: string,
   now: bigint = NOW_MID,
   snap: TrustedSubscriptionSnapshot,
+  productType: "monthly_plan" | "credit_pack" = "monthly_plan",
 ) =>
   evaluatePurchaseEligibility({
     requestedProductId: productId,
+    requestedProductType: productType,
     nowUs: now,
     snapshot: snap,
   });
@@ -225,6 +227,56 @@ describe("eligibility: no subscription / expired / prepaid table", () => {
     expect(out.allowed).toBe(false);
     expect(out.reason).toBe("refund_pending");
     expect(out.nextAction).toBe("wait_for_refund_outcome");
+    // The committed product itself is equally blocked while the refund on its
+    // period is open: already_prepaid never shadows an open refund outcome.
+    const same = attempt(PLAN_A, NOW_MID, s);
+    expect(same.allowed).toBe(false);
+    expect(same.reason).toBe("refund_pending");
+    expect(same.nextAction).toBe("wait_for_refund_outcome");
+    expect(same.existingCommitment?.productId).toBe(PLAN_A);
+  });
+
+  test("credit pack with an active prepaid subscription AND an open refund: allowed, independent of the cycle", () => {
+    const s = snapshot({
+      subscription: {
+        anchor: ANCHOR,
+        currentPeriodIndex: 0n,
+        status: "active",
+        currentProductId: PLAN_A,
+        prepaid: {
+          productId: PLAN_A,
+          targetPeriodStartUs: B1.startUs,
+          targetPeriodIndex: 1n,
+        },
+      },
+      refunds: [{ refundId: "r6", status: "processing" }],
+    });
+    const out = attempt("pack_1m_credits", NOW_MID, s, "credit_pack");
+    expect(out.allowed).toBe(true);
+    expect(out.reason).toBe("eligible");
+    expect(out.nextAction).toBe("create_order");
+    expect(out.targetPeriod).toBeNull(); // packs have no subscription period
+    expect(out.existingCommitment).toBeNull();
+  });
+
+  test("credit pack refund outcome unknown for the subscription period still allows the pack", () => {
+    const s = snapshot({
+      refunds: [{ refundId: "r7", status: "unknown" }],
+    });
+    const out = attempt("pack_1m_credits", NOW_MID, s, "credit_pack");
+    expect(out.allowed).toBe(true);
+    expect(out.reason).toBe("eligible");
+  });
+
+  test("credit pack with no subscription at all: allowed", () => {
+    const out = attempt(
+      "pack_1m_credits",
+      NOW_MID,
+      snapshot({ subscription: null }),
+      "credit_pack",
+    );
+    expect(out.allowed).toBe(true);
+    expect(out.targetPeriod).toBeNull();
   });
 
   test("boundary with a prepaid next period: continuation, never an expired re-purchase", () => {

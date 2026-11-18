@@ -243,7 +243,7 @@ export const billingProductVersions = pgTable(
     /** CNY integer fen. Independent of credits; never implicitly converted. */
     priceFen: contractInteger("price_fen").notNull(),
     currency: text("currency").notNull().default("CNY"),
-    /** Whole microcredits granted. Null for subscription tiers that only grant rights. */
+    /** Whole microcredits granted; REQUIRED for both monthly plans and packs. */
     grantedMicrocredits: contractInteger("granted_microcredits"),
     /** 1 for monthly plans; null for long-lived packs (no monthly validity). */
     periodMonths: integer("period_months"),
@@ -272,7 +272,7 @@ export const billingProductVersions = pgTable(
     ),
     check(
       "billing_product_versions_type_shape_check",
-      sql`(${table.productType} = 'monthly_plan' AND ${table.periodMonths} = 1 AND ${table.quotaVersionId} IS NOT NULL) OR (${table.productType} = 'credit_pack' AND ${table.periodMonths} IS NULL AND ${table.grantedMicrocredits} IS NOT NULL)`,
+      sql`(${table.productType} = 'monthly_plan' AND ${table.periodMonths} = 1 AND ${table.quotaVersionId} IS NOT NULL AND ${table.grantedMicrocredits} IS NOT NULL) OR (${table.productType} = 'credit_pack' AND ${table.periodMonths} IS NULL AND ${table.grantedMicrocredits} IS NOT NULL AND ${table.grantedMicrocredits} > 0)`,
     ),
     check(
       "billing_product_versions_price_fen_check",

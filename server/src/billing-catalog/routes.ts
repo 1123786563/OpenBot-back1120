@@ -6,7 +6,9 @@
  * (`Authorization: Bearer`, verified by the injected verifier) under the
  * /internal prefix; CORS is not access control. The organization/account scope
  * is resolved server-side by the credential verifier from the trusted
- * credential context — the request body never designates a caller.
+ * credential context — the request body never designates a caller, an account
+ * outside the credential's trusted authorization is 403 forbidden, and every
+ * operation requires the contract's `billing:quote` capability.
  *
  * These operations have NO write side effects (quotes are observations; they
  * occupy no purchase eligibility and pin nothing), which the contract marks
@@ -21,7 +23,13 @@ import type {
   ProductQuote,
 } from "./service";
 
-type CatalogEnv = { Variables: { trustedOrganizationId: string } };
+type CatalogEnv = {
+  Variables: {
+    trustedOrganizationId: string;
+    /** Trusted account authorization: null = unrestricted in the organization. */
+    trustedBillingAccountIds: string[] | null;
+  };
+};
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,11 +41,27 @@ export interface TrustedCredentialVerifierResult {
   ok: boolean;
   /** The organization the credential is bound to, when ok. */
   organizationId?: string;
+  /**
+   * The billing accounts this credential may act for (the trusted personal
+   * account authorization). null = unrestricted within the organization;
+   * an account outside this set is 403 forbidden, and account-scoped catalog
+   * content of another account is invisible (404), never leaked.
+   */
+  billingAccounts?: string[] | null;
+  /**
+   * Capabilities the credential carries; every catalog operation requires
+   * `billing:quote` (the contract's x-required-capability). A credential
+   * without it is 403 forbidden.
+   */
+  capabilities?: string[];
 }
 
 export function createBillingCatalogRoutes(deps: {
   service: BillingCatalogService;
-  /** Verifies the service credential and resolves the trusted organization scope. */
+  /**
+   * Verifies the service credential and resolves the trusted organization,
+   * account authorization and capability scope.
+   */
   verifyCredential: (
     authorizationHeader: string | undefined,
   ) => TrustedCredentialVerifierResult;
@@ -85,7 +109,9 @@ export function createBillingCatalogRoutes(deps: {
     );
   }
 
-  // Every route: trusted service credential, server-resolved organization.
+  // Every route: trusted service credential, server-resolved organization,
+  // capability AND personal-account authorization. The request body never
+  // designates a caller or an account it is not authorized for.
   routes.use("*", async (c, next) => {
     const verdict = deps.verifyCredential(c.req.header("authorization"));
     if (!verdict.ok || !verdict.organizationId) {
@@ -96,9 +122,43 @@ export function createBillingCatalogRoutes(deps: {
         "No or invalid trusted service credential.",
       );
     }
+    if (!(verdict.capabilities ?? []).includes("billing:quote")) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential does not carry the billing:quote capability required by every catalog operation.",
+      );
+    }
     c.set("trustedOrganizationId", verdict.organizationId);
+    c.set("trustedBillingAccountIds", verdict.billingAccounts ?? null);
     await next();
   });
+
+  /**
+   * The account the request names must be inside the credential's trusted
+   * account authorization; a mismatch is forbidden, not "not found".
+   */
+  function accountForbidden(
+    c: Context<CatalogEnv>,
+    billingAccountId: string | null,
+  ): Response | null {
+    const allowed = c.get("trustedBillingAccountIds");
+    if (
+      billingAccountId !== null &&
+      allowed !== null &&
+      !allowed.includes(billingAccountId)
+    ) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential is not authorized to act for the requested billing account.",
+        [{ field: "billing_account_id", issue: "forbidden" }],
+      );
+    }
+    return null;
+  }
 
   async function readJson(
     c: Context<CatalogEnv>,
@@ -174,10 +234,13 @@ export function createBillingCatalogRoutes(deps: {
         [{ field: "expected_price_version_id", issue: "not_a_uuid" }],
       );
     }
+    const requestedAccount = typeof rawAccount === "string" ? rawAccount : null;
+    const accountCheck = accountForbidden(c, requestedAccount);
+    if (accountCheck) return accountCheck;
     try {
       const quote = await deps.service.quoteProduct({
         organizationId,
-        billingAccountId: typeof rawAccount === "string" ? rawAccount : null,
+        billingAccountId: requestedAccount,
         productId,
         action,
         expectedPriceVersionId:
@@ -228,6 +291,7 @@ export function createBillingCatalogRoutes(deps: {
     try {
       const quote = await deps.service.quoteStep({
         organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
         priceVersionId,
         resources: (resources as Record<string, string>[]).map((r) => ({
           resource: r.resource,
@@ -333,6 +397,7 @@ export function createBillingCatalogRoutes(deps: {
     try {
       const snapshot = await deps.service.getCatalogVersion({
         organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
         releaseId,
       });
       return c.json({
@@ -373,6 +438,8 @@ function problemTitle(code: string): string {
       return "Malformed integer";
     case "out_of_range":
       return "Value outside the contract range";
+    case "forbidden":
+      return "Forbidden";
     case "resource_not_found":
       return "Not found in this scope";
     case "state_conflict":

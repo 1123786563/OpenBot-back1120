@@ -367,7 +367,7 @@ async function catalogPhase(runId: string): Promise<number> {
     }
     if (!migrated)
       throw new Error(`migrations never applied: ${migrateDetail}`);
-    ok(true, "migrations applied (0000..0092 including billing catalog)");
+    ok(true, "migrations applied (0000..0093 including billing catalog)");
 
     const test = sh(
       `TEST_DATABASE_URL=${url} bun test ` +
