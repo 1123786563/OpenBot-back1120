@@ -110,6 +110,10 @@ services:
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
     command: ["./scripts/migrate.sh"]
     restart: "no"
+    # one-shot service: excluded from plain `up -d --wait` (the reconciler
+    # keeps re-running an exited service and recreating its dependents in a
+    # loop); the runner invokes it explicitly via `compose run --rm`.
+    profiles: [migrate]
     environment: &lago-env
       # v1.57 database.yml reads the plain DATABASE_URL (user+password in it).
       DATABASE_URL: postgres://${BILLING62_LAGO_USER}:${BILLING62_LAGO_PASSWORD}@lago-db:5432/${BILLING62_LAGO_DB_NAME}

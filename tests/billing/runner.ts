@@ -544,7 +544,7 @@ async function runFull(): Promise<number> {
     // service_completed_successfully dependency under `up --wait` makes the
     // reconciler re-run the exited migrator and recreate its dependents in a
     // loop — observed live on compose v5.5.0.
-    const lagoMigrate = composeArgs(project, ["run", "--rm", "lago-migrate"], composeEnv);
+    const lagoMigrate = composeArgs(project, ["run", "--rm", "--profile", "migrate", "lago-migrate"], composeEnv);
     console.log(`    lago-migrate exit=${lagoMigrate.code}`);
     if (lagoMigrate.code !== 0) {
       console.error(`  FAIL lago-migrate failed:\n${lagoMigrate.out.slice(-1500)}`);
