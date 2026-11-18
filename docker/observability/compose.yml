@@ -1,88 +1,37 @@
-# Self-hosted OpenObserve and the collector that feeds it, for OpenBot's server runtime logs and
-# audit trail. See `docs/observability-openobserve.md` for the runbook (credentials, storage,
-# retention, queries) and `scripts/observability/verify-openobserve.sh` for the reproducible
-# acceptance run.
-#
-# Run it against an existing OpenBot Compose deployment so the collector can also receive the
-# server's audit OTLP on the same Docker network:
-#
-#   docker compose -f docker/observability/compose.yml --env-file docker/observability/env.openobserve up -d
-#
-# The two services join OpenBot's default network, which is external to this file: this stack must
-# attach to the deployment that is already running rather than create a second one.
-#
-# Versions are pinned by tag AND digest on purpose. An upgrade means: change both, then re-run
-# `scripts/observability/verify-openobserve.sh`. The digests below are the registry
-# `docker-content-digest` values of these tags, recorded when this file was written.
-
 name: openbot-observability
 
 services:
   openobserve:
-    # v1.1.2, the current stable release line (`v1.2.0` was still an rc when this was pinned).
-    # These images are amd64 builds — the `platform` line makes the requirement explicit instead
-    # of hiding it in the tag, so an arm64 host fails at compose parsing with this comment in
-    # front of it rather than at image pull. An arm64 deployment pins the `-arm64` tag with its
-    # own digest and re-runs `scripts/observability/verify-openobserve.sh`.
-    platform: linux/amd64
-    image: openobserve/openobserve:v1.1.2-amd64@sha256:26618f379c86b253c0d91624c487dd14b71293699845ecbc8457c94dca14819f
-    # Loopback only, like every other port in the OpenBot deployment: the query UI/API is for the
-    # platform administrator on the host (or over the operator's VPN), never published to the
-    # network the Bots' computers are on.
+    platform: ${OO_PLATFORM:-linux/amd64}
+    image: ${OO_IMAGE:-openobserve/openobserve:v1.1.2-amd64@sha256:26618f379c86b253c0d91624c487dd14b71293699845ecbc8457c94dca14819f}
     ports:
-      - "127.0.0.1:5080:5080"
+      - "127.0.0.1:${OO_QUERY_PORT:-5080}:5080"
     environment:
       ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL}
       ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD}
       ZO_DATA_DIR: /data
       ZO_HTTP_PORT: "5080"
-      # Global retention floor for every stream, in days. The `default` stream also carries a
-      # stream-level `data_retention` (see the runbook); the smaller of the two wins.
       ZO_COMPACT_DATA_RETENTION_DAYS: ${ZO_COMPACT_DATA_RETENTION_DAYS:-30}
       ZO_MEMORY_CACHE_MAX_SIZE: "512"
     volumes:
       - openobserve-data:/data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:5080/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-    networks:
-      - openbot
+    networks: [query]
     restart: unless-stopped
 
   otel-collector:
-    # contrib, because the runtime pipeline needs the `filelog` receiver. amd64 build — see the
-    # note on the openobserve service above for the arm64 path.
-    platform: linux/amd64
-    image: otel/opentelemetry-collector-contrib:0.165.0-amd64@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
-    command:
-      - "--config=/etc/otelcol/otel-collector.yaml"
-      - "--config=/etc/otelcol/otel-collector.docker.yaml"
+    platform: ${OO_PLATFORM:-linux/amd64}
+    image: ${OO_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:0.165.0-amd64@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea}
+    command: ["--config=/etc/otelcol/openbot.yaml"]
     user: "0"
-    depends_on:
-      openobserve:
-        condition: service_healthy
+    ports:
+      - "127.0.0.1:${OO_FORWARD_PORT:-24224}:24224"
     environment:
-      OO_DOCKER_SOCKET: unix:///var/run/docker.sock
-      OO_ENVIRONMENT_LABEL: ${OO_ENVIRONMENT_LABEL}
-      OO_COLLECTOR_VERSION: "0.165.0"
-      OO_RUNTIME_LOG_INCLUDE: "/var/lib/docker/containers/*/*.log"
-      OO_OTLP_LISTEN_ENDPOINT: "0.0.0.0:4318"
-      OO_INGEST_ENDPOINT: "http://openobserve:5080/api/default"
-      OO_INGEST_BASIC: ${OO_INGEST_BASIC}
-      OO_COLLECTOR_QUEUE_DIR: /var/lib/otelcol/queue
-      OO_PAYLOAD_SNAPSHOT: /var/lib/otelcol/payload/sent-payload.json
+      OO_ENVIRONMENT_LABEL: ${OO_ENVIRONMENT_LABEL:-production}
+      OO_INGEST_BASIC: ${OO_INGEST_BASIC:-}
     volumes:
-      # Read-only: the collector reads what Docker wrote, it never writes there. `start_at: end`
-      # in the receiver is what keeps existing history out of OpenObserve.
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      # Read-only: container discovery (names for `service.name`).
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      # The bounded disk queue and the sent-payload snapshot live on their own volume.
+      - ./otel-collector.yaml:/etc/otelcol/openbot.yaml:ro
       - collector-state:/var/lib/otelcol
-    networks:
-      - openbot
+    networks: [query, data]
     restart: unless-stopped
 
 volumes:
@@ -90,8 +39,7 @@ volumes:
   collector-state:
 
 networks:
-  openbot:
-    # The network the OpenBot deployment already created. Override with OO_NETWORK if the
-    # deployment runs under a different Compose project name.
-    name: ${OO_NETWORK:-openbot_default}
+  query:
+  data:
     external: true
+    name: ${OO_NETWORK:-openbot_data}

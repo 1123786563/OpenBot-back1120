@@ -1,103 +1,122 @@
-# OpenTelemetry Collector configuration that carries OpenBot's server runtime logs and audit trail
-# into self-hosted OpenObserve.
-#
-# The same file serves the Compose deployment and a bare-binary deployment (see
-# `docs/observability-openobserve.md` and `scripts/observability/verify-openobserve.sh`): every
-# deployment-specific value is an `${env:...}` placeholder the deployment sets.
-#
-# Two pipelines, one per `log_class`:
-#   * `filelog/runtime` — the JSON-file logs of every container (or, without Docker, every process
-#     log file) on the host. `start_at: end` means the receiver only sees lines written after the
-#     collector starts: existing history is never scanned or uploaded.
-#   * `otlp/audit` — the audit OTLP the server already exports through
-#     `server/src/telemetry/otel.ts`. The server points `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` at this
-#     collector, so OpenObserve's write credentials never enter any business process.
-#
-# Every record leaves this process redacted (the OTTL statements below) and through one bounded,
-# retrying exporter. Nothing here is on any request path: a stopped or wedged collector never
-# blocks the server, the worker or a Bot call.
-#
-# Versions and digests are pinned in `docker/observability/compose.yml`; a change to either must
-# re-run `scripts/observability/verify-openobserve.sh`.
-
+# Only registered labels, severity and correlation IDs leave the collector.
+# Free-form lines are accounted for with a fixed summary. Read the original
+# message via the deployment's restricted local logs when more detail is needed.
 extensions:
-  # Disk-backed buffer for the exporter queue, so records queued while OpenObserve is unreachable
-  # survive a collector restart instead of vanishing.
   file_storage/queue:
-    directory: ${env:OO_COLLECTOR_QUEUE_DIR}
-    timeout: 1s
+    directory: /var/lib/otelcol
 
 receivers:
-  # Every container's json-file log on this host. Docker writes one JSON object per line
-  # (`{"log": "...", "stream": "stdout", "time": "..."}`); OpenBot's own lines inside `log` are
-  # either one-line JSON with a `type` field or plain text, and both keep their `console.*` level
-  # semantics (stdout: info/log/warn, stderr: error) — see the severity statements below.
-  filelog/runtime:
-    include:
-      - ${env:OO_RUNTIME_LOG_INCLUDE}
-    start_at: end
-    include_file_path: true
-    poll_interval: 500ms
-    max_log_size: 8KiB
-    operators:
-      # 1. Unwrap the Docker json-file envelope. The native (no-Docker) path writes the same
-      #    envelope through `scripts/observability/container-log-driver.mjs`, so the parsing below
-      #    is identical in both deployments.
-      - type: json_parser
-        parse_from: body
-        if: 'body matches "^\\s*\\{"'
-        on_error: send
-      - type: move
-        from: attributes.log
-        to: body
-        if: 'attributes["log"] != nil'
-      - type: move
-        from: attributes.time
-        to: attributes["docker.time"]
-        if: 'attributes["time"] != nil'
-      - type: move
-        from: attributes.stream
-        to: attributes["log.iostream"]
-        if: 'attributes["stream"] != nil'
-      # 2. OpenBot's one-line JSON convention (`{"type": "...", ...}`). Only `type` is taken out of
-      #    the line, into `openbot.log_type`. The rest of the parsed tree is parsed into a sub-key
-      #    that the transform deletes again and never exported: the attribute-level redaction
-      #    cannot recurse into nested OTLP values (maps, arrays), so a parsed nested field would
-      #    leave the collector raw while its `body` was redacted. The full line — redacted by the
-      #    text-level statements below — stays in `body` and is what OpenObserve indexes.
-      - type: json_parser
-        parse_from: body
-        parse_to: attributes.oo_parsed
-        if: 'body matches "^\\s*\\{"'
-        on_error: send
-      - type: move
-        from: attributes.oo_parsed.type
-        to: attributes["openbot.log_type"]
-        if: 'attributes["oo_parsed"] != nil and attributes["oo_parsed"]["type"] != nil'
-      # 3. Service attribution. With the Docker socket the discovery receiver provides
-      #    `container.name`. Without it, the file name is the service (`server.log`, `worker.log`).
-      - type: regex_parser
-        parse_from: attributes["log.file.path"]
-        regex: '/(?P<oo_service>[^/]+)\.log$'
-        if: 'attributes["log.file.path"] != nil'
-        on_error: drop
-      - type: move
-        from: attributes.oo_service
-        to: attributes["container.name"]
-        if: 'attributes["oo_service"] != nil'
-
-  # The audit OTLP the server exports. Port stays the SDK default the server already uses.
+  fluent_forward/runtime:
+    endpoint: 0.0.0.0:24224
   otlp/audit:
     protocols:
       http:
-        endpoint: ${env:OO_OTLP_LISTEN_ENDPOINT}
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  filter/runtime:
+    logs:
+      log_record:
+        - 'not IsString(attributes["fluent.tag"]) or not IsMatch(attributes["fluent.tag"], "^openbot[.](postgres|migrate|server|worker|agent-bot|agent-computer|agent-langgraph|agent-harness|supervisor)$")'
+
+  groupbyattrs/runtime:
+    keys: [fluent.tag]
+
+  transform/runtime:
+    error_mode: silent
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], Split(resource.attributes["fluent.tag"], ".")[1])
+            where IsString(resource.attributes["fluent.tag"])
+          - keep_keys(resource.attributes, ["service.name"])
+          - set(resource.attributes["deployment.environment"], "${env:OO_ENVIRONMENT_LABEL}")
+          - set(resource.attributes["log_class"], "runtime")
+          - keep_keys(attributes, ["source"])
+          - set(cache["data"], ParseJSON(body)) where IsString(body) and IsMatch(body, "^\\s*\\{")
+          - set(attributes["openbot.log_type"], cache["data"]["type"])
+            where IsString(cache["data"]["type"]) and IsMatch(cache["data"]["type"], "^(audit-ask-model-failed|bot-browser-policy-push-failed|bot-browser-record-no-address|brokered-app-relist-failed|browser-computer-failed|browser-computer-slow|browser-disconnect-refused|browser-not-reopened-after-clear|browser-open-no-address|browser-turn-overrun|channel-summary-gave-up|computer-browser-network-unavailable|computer-browser-not-answering|computer-cull-gave-up|computer-profile-carry-over-failed|computer-sandbox-still-starting|computer-shell-env-ignored|computer-shell-env-refused|computer-web-bot-auth-refused|computer-web-bot-auth-sign-failed|egress-policy-push-failed|egress-policy-push-on-wake-failed|egress-policy-push-on-wake-stalled|egress-policy-push-on-wake-waiting|egress-policy-push-stalled|egress-policy-push-waiting|entra-token-client-not-allowed|entra-token-refused|entra-token-sign-in-refused|identity-github-callback-refused|identity-link-unknown-provider|inactive-computer-stop-failed|isolation-capability-read-failed|learning-auto-approve-failed|learning-open-skills-unread|learning-personal-skills-unavailable|learning-withheld-unread|mcp-tools-unofferable-names-skipped|migrations-applied|model-list-unreadable|otel-export-failed|own-app-tools-refresh-failed|package-skill-skipped|policy-translate-model-failed|proactive-capability-read-failed|proactive-daily-runs-read-failed|product-telemetry|recorder-trajectory-learning-cut-short|routine-fire-finish-lost|routine-fire-gave-up|routine-fire-redelivery-possible|routine-fire-release-failed|routine-fire-release-lost|routine-run-reap-failed|routine-runs-reaped|routine-sweep|routine-sweep-disable-failed|routine-sweep-heartbeat-failed|routine-sweep-offer-failed|routine-sweep-purge-failed|routine-sweep-tick-failed|single-user-connections-retired|tool-limit-trimmed|tool-selection-unavailable|unhandled-rejection|voice-summary-failed|what-if-model-failed)$")
+          - set(attributes["openbot.log_type"], "server-listening")
+            where resource.attributes["service.name"] == "server" and IsString(body) and IsMatch(body, "^OpenBot server listening on ")
+          - set(attributes["openbot.log_type"], "postgres-ready")
+            where resource.attributes["service.name"] == "postgres" and IsString(body) and IsMatch(body, "LOG:\\s+database system is ready to accept connections")
+          - set(severity_text, "Info")
+          - set(severity_text, "Error") where attributes["source"] == "stderr" and resource.attributes["service.name"] != "postgres"
+          - set(severity_text, "Error")
+            where resource.attributes["service.name"] == "postgres" and IsString(body) and IsMatch(body, "(ERROR|FATAL|PANIC):\\s")
+          - set(severity_text, "Warn")
+            where resource.attributes["service.name"] == "postgres" and IsString(body) and IsMatch(body, "WARNING:\\s")
+          - set(severity_text, "Warn")
+            where IsString(attributes["openbot.log_type"]) and IsMatch(attributes["openbot.log_type"], "^(audit-ask-model-failed|bot-browser-policy-push-failed|bot-browser-record-no-address|brokered-app-relist-failed|browser-computer-failed|browser-computer-slow|browser-disconnect-refused|browser-not-reopened-after-clear|browser-open-no-address|browser-turn-overrun|channel-summary-gave-up|computer-browser-network-unavailable|computer-browser-not-answering|computer-cull-gave-up|computer-profile-carry-over-failed|computer-sandbox-still-starting|computer-shell-env-ignored|computer-shell-env-refused|computer-web-bot-auth-refused|computer-web-bot-auth-sign-failed|egress-policy-push-on-wake-failed|egress-policy-push-on-wake-stalled|egress-policy-push-on-wake-waiting|egress-policy-push-stalled|egress-policy-push-waiting|entra-token-client-not-allowed|entra-token-refused|entra-token-sign-in-refused|identity-github-callback-refused|identity-link-unknown-provider|inactive-computer-stop-failed|isolation-capability-read-failed|learning-open-skills-unread|learning-personal-skills-unavailable|learning-withheld-unread|mcp-tools-unofferable-names-skipped|model-list-unreadable|own-app-tools-refresh-failed|package-skill-skipped|policy-translate-model-failed|proactive-capability-read-failed|proactive-daily-runs-read-failed|product-telemetry|recorder-trajectory-learning-cut-short|routine-fire-finish-lost|routine-fire-gave-up|routine-fire-redelivery-possible|routine-fire-release-failed|routine-fire-release-lost|routine-run-reap-failed|routine-runs-reaped|routine-sweep-disable-failed|routine-sweep-heartbeat-failed|routine-sweep-offer-failed|routine-sweep-purge-failed|routine-sweep-tick-failed|single-user-connections-retired|tool-limit-trimmed|tool-selection-unavailable|voice-summary-failed|what-if-model-failed)$")
+          - set(severity_text, "Error")
+            where IsString(attributes["openbot.log_type"]) and IsMatch(attributes["openbot.log_type"], "^(otel-export-failed|unhandled-rejection|learning-auto-approve-failed|egress-policy-push-failed)$")
+          - set(severity_number, SEVERITY_NUMBER_INFO) where severity_text == "Info"
+          - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "Warn"
+          - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "Error"
+          - set(attributes["request_id"], cache["data"]["requestId"])
+            where IsString(cache["data"]["requestId"]) and IsMatch(cache["data"]["requestId"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - set(attributes["request_id"], cache["data"]["request_id"])
+            where attributes["request_id"] == nil and IsString(cache["data"]["request_id"]) and IsMatch(cache["data"]["request_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - set(attributes["run_id"], cache["data"]["runId"])
+            where IsString(cache["data"]["runId"]) and IsMatch(cache["data"]["runId"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - set(attributes["run_id"], cache["data"]["run_id"])
+            where attributes["run_id"] == nil and IsString(cache["data"]["run_id"]) and IsMatch(cache["data"]["run_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - keep_keys(attributes, ["openbot.log_type", "request_id", "run_id"])
+          - set(body, "Runtime log. Inspect local logs for details.")
+          - set(body, attributes["openbot.log_type"]) where IsString(attributes["openbot.log_type"])
+
+  transform/audit:
+    error_mode: silent
+    log_statements:
+      - context: log
+        statements:
+          - keep_keys(resource.attributes, [])
+          - keep_keys(scope.attributes, [])
+          - set(scope.name, "openbot.audit")
+          - set(scope.version, "")
+          - set(resource.attributes["service.name"], "server")
+          - set(resource.attributes["deployment.environment"], "${env:OO_ENVIRONMENT_LABEL}")
+          - set(resource.attributes["log_class"], "audit")
+          - set(attributes["request_id"], attributes["openbot.payload.requestId"])
+            where IsString(attributes["openbot.payload.requestId"]) and IsMatch(attributes["openbot.payload.requestId"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - delete_key(attributes, "request_id")
+            where not IsString(attributes["request_id"]) or not IsMatch(attributes["request_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - set(attributes["run_id"], attributes["openbot.payload.runId"])
+            where IsString(attributes["openbot.payload.runId"]) and IsMatch(attributes["openbot.payload.runId"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - delete_key(attributes, "run_id")
+            where not IsString(attributes["run_id"]) or not IsMatch(attributes["run_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - keep_keys(attributes, ["openbot.event_type", "openbot.target_type", "openbot.target_id", "openbot.actor_user_id", "openbot.initiator_kind", "openbot.initiator_id", "request_id", "run_id"])
+          - delete_key(attributes, "openbot.event_type")
+            where not IsString(attributes["openbot.event_type"]) or not IsMatch(attributes["openbot.event_type"], "^(configuration\\.changed|credential\\.created|credential\\.rotated|credential\\.rotation_refused|credential\\.revoked|channel\\.routed|delivery\\.received|delivery\\.sent|delivery\\.opted_out|delivery\\.failed|channel\\.deleted|agent\\.dial_refused|agent\\.stream_stalled|agent\\.tool_limit_refused|mcp\\.tools_discovered|mcp\\.call_succeeded|mcp\\.call_rejected|mcp\\.call_failed|mcp\\.callback_refused|mcp\\.oauth_client_registered|mcp\\.oauth_client_read_failed|mcp\\.connection_verified|mcp\\.account_connected|mcp\\.authorization_unreconciled|mcp\\.account_disconnected|mcp\\.authorization_cancelled|mcp\\.cancelled_grant_left_live|mcp\\.account_mode_changed|shared_use\\.requested|shared_use\\.approved|shared_use\\.declined|shared_use\\.owner_approved|shared_use\\.owner_withdrawn|app_access\\.requested|app_access\\.cancelled|app_access\\.approved|app_access\\.dismissed|app_access\\.refused|app_access\\.owner_granted|app_access\\.owner_revoked|plugin\\.grants_translated|plugin\\.grants_changed|computer\\.action_allowed|computer\\.action_refused|computer\\.action_failed|computer\\.action_stopped|computer\\.help_requested|computer\\.help_cancelled|computer\\.control_taken|computer\\.control_released|computer\\.secret_requested|computer\\.secret_supplied|computer\\.sign_in_requested|computer\\.sign_in_code_requested|computer\\.sign_in_completed|computer\\.sign_in_failed|computer\\.sign_in_cancelled|password\\.saved|password\\.deleted|computer\\.stopped|computer\\.reset|computer\\.browser_cleared|computer\\.updated|computer\\.policy_loaded|computer\\.policy_changed|computer\\.policy_translated|computer\\.isolation_loaded|bot\\.declined|component\\.granted|component\\.revoked|component\\.published|component\\.unpublished|component\\.draft_saved|component\\.description_updated|component\\.refused|component\\.function_granted|component\\.function_revoked|component\\.function_called|component\\.function_refused|component\\.function_failed|person\\.role_changed|person\\.access_revoked|person\\.access_restored|audit\\.exported|audit\\.asked|what_if\\.asked|what_if\\.checked|session\\.signed_in|session\\.refused|person\\.admin_by_configuration|t01\\.login_initialized|identity_provider\\.registered|identity_provider\\.removed|bot\\.created|bot\\.updated|bot\\.duplicated|bot\\.hidden|bot\\.unhidden|bot\\.pinned|bot\\.unpinned|bot\\.deleted|bot\\.callback_token_issued|bot\\.callback_token_revoked|bot\\.isolation_refused|bot\\.paused|bot\\.resumed|bot\\.reset|bot\\.notifications_changed|bot\\.follow_up_scheduled|bot\\.follow_up_cancelled|bot\\.handoff_stopped|agent\\.handoff_offered|agent\\.handoff_refused|agent\\.handoff_delivered|agent\\.handoff_failed|agent\\.handoff_retried|agent\\.escalated|agent\\.escalation_failed|routines\\.dispatch_refused|routines\\.run_requested|routines\\.run_cancelled|responsibility\\.triggered|approval\\.evaluated|approval\\.person_decided|approval\\.withdrawn|approval\\.rule_changed|approval\\.settings_changed|approval\\.rules_translated|approval\\.guidance_changed|capability\\.changed|capability\\.changes_translated|enterprise\\.setting_changed|auth\\.sessions_revoked|network_policy\\.changed|network_policy\\.removed|network_policy\\.translated|session\\.break_glass|person\\.provisioned|person\\.deprovisioned|person\\.reprovisioned|computer\\.terminated|computer\\.terminated_inactive|delivery\\.linked|delivery\\.unlinked|identity\\.linked|identity\\.unlinked|identity\\.link_retired|routine\\.created|routine\\.updated|routine\\.deleted|routine\\.enabled_changed|model\\.refused|recorder\\.bearer_refused|recorder\\.connected|recorder\\.connect_refused|recorder\\.revoked|recorder\\.sign_out_failed|recorder\\.trajectory_refused|learning\\.sharing_changed|learning\\.skill_opened|learning\\.skill_closed|learning\\.sharing_requested|learning\\.sharing_decided)$")
+          - delete_key(attributes, "openbot.target_type")
+            where not IsString(attributes["openbot.target_type"]) or not IsMatch(attributes["openbot.target_type"], "^(agent|app|bot|computer|configuration|conversation|credential|deployment|mcp_tool|organization|person|routine|run|setting|settings|skill|user|workspace)$")
+          - delete_key(attributes, "openbot.initiator_kind")
+            where not IsString(attributes["openbot.initiator_kind"]) or not IsMatch(attributes["openbot.initiator_kind"], "^(person|bot|deployment)$")
+          - delete_key(attributes, "openbot.target_id")
+            where not IsString(attributes["openbot.target_id"]) or not IsMatch(attributes["openbot.target_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - delete_key(attributes, "openbot.actor_user_id")
+            where not IsString(attributes["openbot.actor_user_id"]) or not IsMatch(attributes["openbot.actor_user_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - delete_key(attributes, "openbot.initiator_id")
+            where not IsString(attributes["openbot.initiator_id"]) or not IsMatch(attributes["openbot.initiator_id"], "(?i)^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")
+          - set(event_name, "")
+          - set(body, "OpenBot audit event")
+          - set(body, attributes["openbot.event_type"]) where IsString(attributes["openbot.event_type"])
+          - set(severity_text, "Info") where severity_number < SEVERITY_NUMBER_WARN
+          - set(severity_text, "Warn") where severity_number >= SEVERITY_NUMBER_WARN and severity_number < SEVERITY_NUMBER_ERROR
+          - set(severity_text, "Error") where severity_number >= SEVERITY_NUMBER_ERROR
+
+  batch:
+    timeout: 2s
+    send_batch_size: 256
 
 exporters:
-  # The only writer of OpenObserve. The queue is bounded and disk-backed; retries are finite; what
-  # still does not fit is dropped and counted in the collector's own logs and metrics — never
-  # retried for ever, and never allowed to become the business's problem.
   otlphttp/openobserve:
-    endpoint: ${env:OO_INGEST_ENDPOINT}
+    endpoint: http://openobserve:5080/api/default
     headers:
       Authorization: Basic ${env:OO_INGEST_BASIC}
     sending_queue:
@@ -106,188 +125,22 @@ exporters:
       storage: file_storage/queue
     retry_on_failure:
       enabled: true
-      initial_interval: 5s
-      max_interval: 30s
       max_elapsed_time: 1h
-
-  # A local JSON snapshot of what actually left this process, after redaction. Verification reads
-  # it as the "sent payload" evidence; in a steady deployment it rotates away on its own.
   file/payload:
-    path: ${env:OO_PAYLOAD_SNAPSHOT}
+    path: /var/lib/otelcol/sent-payload.json
     rotation:
-      max_megabytes: 100
-      max_days: 7
-      max_backups: 3
-
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 256
-    spike_limit_mib: 64
-
-  # Re-group incoming runtime records by `container.name` before any resource-level attribute is
-  # written. One stanza poll cycle can carry lines from several log files, and records sharing a
-  # batch would otherwise share one ResourceLogs — a `service.name` written on the shared resource
-  # would leak one file's name onto another's lines. After this processor every record sits in a
-  # group of its own container, and the grouping key itself is promoted to
-  # `resource.attributes["container.name"]` (which the transform below turns into `service.name`;
-  # in the Compose deployment the discovery observer sets the same key at resource level already).
-  groupbyattrs/runtime:
-    keys:
-      - container.name
-
-  # Runtime logs: service/environment/severity/log_class attribution, then redaction, all before any
-  # export. Severity comes from the audited inventory of OpenBot's `console.*` call sites
-  # (`docs/observability-openobserve.md` §Inventory), never from turning Debug on. Severity text
-  # uses `Info`/`Warn`/`Error` — the values OpenObserve stores verbatim and every query below and in
-  # the runbook filters on.
-  transform/runtime:
-    log_statements:
-      - context: log
-        statements:
-          # --- attribution -----------------------------------------------------
-          - set(resource.attributes["service.name"], resource.attributes["container.name"])
-            where IsString(resource.attributes["container.name"]) and resource.attributes["container.name"] != ""
-          - set(resource.attributes["service.name"], attributes["container.name"])
-            where IsString(attributes["container.name"]) and attributes["container.name"] != ""
-          - set(resource.attributes["service.name"], "unknown") where resource.attributes["service.name"] == nil
-          - set(resource.attributes["deployment.environment"], "${env:OO_ENVIRONMENT_LABEL}")
-          - set(resource.attributes["log_class"], "runtime")
-          - set(resource.attributes["collector.version"], "${env:OO_COLLECTOR_VERSION}")
-          - set(resource.attributes["container.id"], attributes["container.id"])
-            where IsString(attributes["container.id"]) and attributes["container.id"] != ""
-          # --- severity --------------------------------------------------------
-          # The audited call-site lists first, by event type: `console.error` call sites are Error,
-          # `console.warn` call sites are Warn — including the ones Bun writes to stderr, so this
-          # must run BEFORE the stderr fallback below. The Warn list is the mechanical census of
-          # every `console.warn` event type in server/src, worker/src and agent-computer/src (49 +
-          # 7 types; agent-bot and agent-langgraph have no `console.warn` call sites at all) plus
-          # the four egress-policy push states and `model-list-unreadable`, which reach the console
-          # through log-callback indirection; regenerate the census when the code changes. The
-          # Error list names the audited `console.error` event types; untyped lines are decided by
-          # the stream fallback.
-          - set(attributes["oo.severity"], "Error")
-            where IsString(attributes["openbot.log_type"])
-            and IsMatch(attributes["openbot.log_type"], "^(otel-export-failed|unhandled-rejection|learning-auto-approve-failed|egress-policy-push-failed)$")
-          - set(attributes["oo.severity"], "Warn")
-            where attributes["oo.severity"] == nil and IsString(attributes["openbot.log_type"])
-            and IsMatch(attributes["openbot.log_type"], "^(audit-ask-model-failed|bot-browser-policy-push-failed|bot-browser-record-no-address|brokered-app-relist-failed|browser-computer-failed|browser-computer-slow|browser-disconnect-refused|browser-not-reopened-after-clear|browser-open-no-address|browser-turn-overrun|channel-summary-gave-up|computer-browser-network-unavailable|computer-browser-not-answering|computer-cull-gave-up|computer-profile-carry-over-failed|computer-sandbox-still-starting|computer-shell-env-ignored|computer-shell-env-refused|computer-web-bot-auth-refused|computer-web-bot-auth-sign-failed|egress-policy-push-on-wake-failed|egress-policy-push-on-wake-stalled|egress-policy-push-on-wake-waiting|egress-policy-push-stalled|egress-policy-push-waiting|entra-token-client-not-allowed|entra-token-refused|entra-token-sign-in-refused|identity-github-callback-refused|identity-link-unknown-provider|inactive-computer-stop-failed|isolation-capability-read-failed|learning-open-skills-unread|learning-personal-skills-unavailable|learning-withheld-unread|mcp-tools-unofferable-names-skipped|model-list-unreadable|own-app-tools-refresh-failed|package-skill-skipped|policy-translate-model-failed|proactive-capability-read-failed|proactive-daily-runs-read-failed|product-telemetry|recorder-trajectory-learning-cut-short|routine-fire-finish-lost|routine-fire-gave-up|routine-fire-redelivery-possible|routine-fire-release-failed|routine-fire-release-lost|routine-run-reap-failed|routine-runs-reaped|routine-sweep-disable-failed|routine-sweep-heartbeat-failed|routine-sweep-offer-failed|routine-sweep-purge-failed|routine-sweep-tick-failed|single-user-connections-retired|tool-limit-trimmed|tool-selection-unavailable|voice-summary-failed|what-if-model-failed)$")
-          # Then the stream fallback: what really reached stderr (where console.error writes) and
-          # was not named by the lists above is Error; everything else is Info.
-          - set(attributes["oo.severity"], "Error")
-            where attributes["oo.severity"] == nil and attributes["log.iostream"] == "stderr"
-          - set(attributes["oo.severity"], "Info") where attributes["oo.severity"] == nil
-          - set(severity_number, SEVERITY_NUMBER_ERROR) where attributes["oo.severity"] == "Error"
-          - set(severity_text, "Error") where attributes["oo.severity"] == "Error"
-          - set(severity_number, SEVERITY_NUMBER_WARN) where attributes["oo.severity"] == "Warn"
-          - set(severity_text, "Warn") where attributes["oo.severity"] == "Warn"
-          - set(severity_number, SEVERITY_NUMBER_INFO) where attributes["oo.severity"] == "Info"
-          - set(severity_text, "Info") where attributes["oo.severity"] == "Info"
-          - delete_key(attributes, "oo.severity")
-          # --- redaction -------------------------------------------------------
-          # Text layer first: the raw line, one regex per credential shape from
-          # `server/src/telemetry/scrub.ts`. Because this runs on the whole line, nested objects,
-          # arrays, serialized JSON inside a value and exception text are covered at any depth.
-          - replace_pattern(body, "-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED]")
-          - replace_pattern(body, "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bgh[pousr]_[A-Za-z0-9]{36,255}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bgithub_pat_[A-Za-z0-9_]{22,255}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bglpat-[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bxox[abposr]-[A-Za-z0-9-]{10,}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bsk-(proj-|ant-)?[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bAIza[0-9A-Za-z_-]{35}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\b(sk|rk)_(live|test)_[0-9a-zA-Z]{16,}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\bnpm_[A-Za-z0-9]{36}\\b", "[REDACTED]")
-          - replace_pattern(body, "\\beyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b", "[REDACTED]")
-          # Credentials by the name they travel under, and userinfo in any URL.
-          - replace_pattern(body, "(?i)((?:authorization|x-api-key)\\s*[:=]\\s*(?:bearer|basic|token|digest)?\\s*)(\"[^\"]*\"|'[^']*'|[^\\s'\"]+)", "$$1[REDACTED]")
-          - replace_pattern(body, "(?i)((?:--?)?[A-Za-z0-9_]*(?:PASSWORD|PASSWD|PWD|SECRET|TOKEN|API[_-]?KEY|APIKEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIALS?|AUTH)[A-Za-z0-9_]*\\s*[=:]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s'\"]+)", "$$1[REDACTED]")
-          - replace_pattern(body, "([a-z][a-z0-9+.-]*://)([^\\s/@:]*):([^\\s/@]+)@", "$$1$$2:[REDACTED]@")
-          - replace_pattern(body, "(?i)\\b(bearer\\s+)[A-Za-z0-9._~+/=-]{8,}", "$$1[REDACTED]")
-
-          # Attribute layer: the parsed OpenBot fields, flat by convention, and any value the text
-          # layer could not reach because parsing split it.
-          - replace_all_patterns(attributes, "value", "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bgh[pousr]_[A-Za-z0-9]{36,255}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bgithub_pat_[A-Za-z0-9_]{22,255}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bglpat-[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bxox[abposr]-[A-Za-z0-9-]{10,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bsk-(proj-|ant-)?[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bAIza[0-9A-Za-z_-]{35}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\beyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "(?i)((?:authorization|password|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential[s]?|auth)[A-Za-z0-9_]*\\s*[:=]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s'\"]+)", "$$1[REDACTED]")
-          - replace_all_patterns(attributes, "value", "([a-z][a-z0-9+.-]*://)([^\\s/@:]*):([^\\s/@]+)@", "$$1$$2:[REDACTED]@")
-          - replace_all_patterns(attributes, "value", "(?i)\\b(bearer\\s+)[A-Za-z0-9._~+/=-]{8,}", "$$1[REDACTED]")
-
-          # --- hygiene ---------------------------------------------------------
-          # Drop the parsed sub-tree (see the json_parser comment above): the body already carries
-          # its content, redacted, and the attribute-level net cannot recurse into nested values.
-          - delete_key(attributes, "oo_parsed")
-          # Keep bodies bounded and drop fields that are pure credential carriers even when their
-          # value redacted to nothing useful.
-          - delete_key(attributes, "password")
-          - delete_key(attributes, "secret")
-          - delete_key(attributes, "token")
-          - delete_key(attributes, "authorization")
-
-  # Audit logs: the server already redacts payloads (`scrubCommands`) and sets INFO/WARN itself;
-  # this processor only stamps the class, the environment and the same text-level net over the
-  # flattened `openbot.payload.*` strings.
-  transform/audit:
-    log_statements:
-      - context: log
-        statements:
-          - set(resource.attributes["log_class"], "audit")
-          - set(resource.attributes["deployment.environment"], "${env:OO_ENVIRONMENT_LABEL}")
-          - set(resource.attributes["service.name"], "server") where resource.attributes["service.name"] == nil
-          - set(resource.attributes["collector.version"], "${env:OO_COLLECTOR_VERSION}")
-          # The server emits `INFO`/`WARN` (SDK-style); normalize to the same `Info`/`Warn` values
-          # the runtime pipeline uses, so one severity filter answers for both classes.
-          - set(severity_text, "Warn") where severity_text == "WARN"
-          - set(severity_text, "Info") where severity_text == "INFO"
-          - set(severity_text, "Error") where severity_text == "ERROR"
-          - replace_all_patterns(attributes, "value", "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bgh[pousr]_[A-Za-z0-9]{36,255}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bgithub_pat_[A-Za-z0-9_]{22,255}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bglpat-[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bxox[abposr]-[A-Za-z0-9-]{10,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bsk-(proj-|ant-)?[A-Za-z0-9_-]{20,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\bAIza[0-9A-Za-z_-]{35}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "\\beyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b", "[REDACTED]")
-          - replace_all_patterns(attributes, "value", "(?i)((?:authorization|password|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential[s]?|auth)[A-Za-z0-9_]*\\s*[:=]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s'\"]+)", "$$1[REDACTED]")
-          - replace_all_patterns(attributes, "value", "([a-z][a-z0-9+.-]*://)([^\\s/@:]*):([^\\s/@]+)@", "$$1$$2:[REDACTED]@")
-          - replace_all_patterns(attributes, "value", "(?i)\\b(bearer\\s+)[A-Za-z0-9._~+/=-]{8,}", "$$1[REDACTED]")
-
-
-  batch:
-    timeout: 2s
-    send_batch_size: 256
+      max_megabytes: 10
+      max_days: 1
+      max_backups: 1
 
 service:
-  extensions:
-    - file_storage/queue
-  telemetry:
-    logs:
-      level: info
+  extensions: [file_storage/queue]
   pipelines:
     logs/runtime:
-      receivers:
-        - filelog/runtime
-      processors:
-        - memory_limiter
-        - groupbyattrs/runtime
-        - transform/runtime
-        - batch
-      exporters:
-        - otlphttp/openobserve
-        - file/payload
+      receivers: [fluent_forward/runtime]
+      processors: [memory_limiter, filter/runtime, groupbyattrs/runtime, transform/runtime, batch]
+      exporters: [otlphttp/openobserve, file/payload]
     logs/audit:
-      receivers:
-        - otlp/audit
-      processors:
-        - memory_limiter
-        - transform/audit
-        - batch
-      exporters:
-        - otlphttp/openobserve
-        - file/payload
+      receivers: [otlp/audit]
+      processors: [memory_limiter, transform/audit, batch]
+      exporters: [otlphttp/openobserve, file/payload]

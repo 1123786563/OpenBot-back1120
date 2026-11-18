@@ -1,198 +1,71 @@
-# Observability: server runtime logs in self-hosted OpenObserve
+# Collect OpenBot server logs in OpenObserve
 
-What this adds, what it deliberately does not do, and how to operate it. The reproducible
-acceptance run is `scripts/observability/verify-openobserve.sh`; everything below is the
-operational form of what that script proves.
+Use OpenObserve to query runtime log metadata and an audit copy. PostgreSQL remains the authoritative audit store. Opik and Activity keep their existing data paths.
 
-## What is collected, and what is not
+## Choose which services to collect
 
-| Source | Class | Path into OpenObserve |
-| --- | --- | --- |
-| `server` (API, auth, Bots, background tasks) | `runtime` | container json-file → collector `filelog` |
-| `worker` (routine sweep, purge) | `runtime` | same |
-| `agent-bot`, `agent-langgraph`, `agent-computer`, every container the agent harness starts | `runtime` | same — the collector reads every container's json-file, so an agent enabled later is covered without new configuration |
-| `migrate`, one-shot maintenance jobs | `runtime` | same |
-| PostgreSQL's own server log | `runtime` | same (statement bodies are not logged by default) |
-| Audit trail (`server/src/telemetry/otel.ts` over PostgreSQL `audit_events`) | `audit` | the server's OTLP export, pointed at the collector |
-| Opik/Intelligence traces, conversation Activity | — | **not collected.** Their authoritative stores stay authoritative (ADR 0006); no conversation or model bodies are copied |
-| Desktop app and CLI logs | — | **not collected.** They run on a person's machine, outside Docker and outside this pipeline; there is no upload path |
+The Compose overlay enables Docker's Fluentd log driver per service. Traffic goes from the Docker daemon to the collector's loopback port. The collector has no Docker socket or host log-directory mount.
 
-The three-way class boundary is `log_class`: `runtime` (service health and processing paths),
-`audit` (the queryable copy of the append-only `audit_events` trail), and everything else —
-Opik/Activity — absent by design.
+| Compose service | Source of runtime records |
+| --- | --- |
+| `server` | API startup, authentication, business events, background work |
+| `worker` | Routine sweeps, purge and worker failures |
+| `migrate` | Migration completion and failures |
+| `postgres` | Database startup, readiness and diagnostics |
+| `agent-bot`, `agent-langgraph`, `agent-computer` | Managed Agent startup and runtime diagnostics |
+| `supervisor`, `agent-harness` | Supervisor and the optional Compose harness when enabled |
 
-Severity is the existing `console.*` level, mapped by the collector from a mechanical census of the
-call sites (`server/src` + `worker/src` + `agent-computer/src`): every typed `console.warn` event is
-Warn (49 server/worker types + 7 computer types, plus the egress-policy push states and
-`model-list-unreadable` that reach the console through log callbacks), the audited `console.error`
-event types are Error, a line that reaches stderr and is named by neither list is Error, and
-everything else is Info. `agent-bot` and `agent-langgraph` have no `console.warn` call sites at all
-(their runtime failures go to the caller as AG-UI `RUN_ERROR` events, not to stdout), so no Warn
-record from them is expected — the verify run asserts that absence. Both levels exist in the code as
-`console.warn`/`console.error`, and Bun writes both to stderr — the type census is what tells them
-apart. Typed warn lines whose type was renamed in the code would fall to the stderr (Error) rule
-until the census is regenerated; the computer's two untyped SPIRE warns (`identity.ts`) share that
-residual approximation. That is checked by re-running the census in `verify-openobserve.sh` rounds.
-Stored and queried as `Info`/`Warn`/`Error`. Nothing turns Debug on; no log library was added and no
-business source file changed.
+Only containers recreated with the overlay forward new records. Earlier logs, other Compose projects, desktop or CLI logs, and computers created dynamically by the supervisor stay outside this configuration. Apply the same explicit forwarding policy to any additional deployment-specific jobs before adding them to your collection inventory.
 
-There are no request IDs or run IDs on runtime log lines in the code today, and none are invented:
-a record that has none shows none. Audit records keep the identifiers they already carry
-(`event_type`, `target_type`, `target_id`, `actor_user_id`, `initiator_id`) verbatim.
+The overlay also sets the server's audit OTLP endpoint. Audit export uses the deployment's data network, away from the default Agent network.
 
-## Deployment (Compose)
+## Start OpenObserve and the collector
 
-Prerequisites, in the order a clean host needs them:
+1. Confirm the OpenBot deployment's data network exists. The default is `openbot_data`. If you used a different Compose project name, set `OO_NETWORK` to its data network name.
+2. Copy `docker/observability/env.openobserve.example` to `docker/observability/env.openobserve`, set mode `0600`, and set the dedicated operator account and a strong password. On ARM64, uncomment the pinned ARM64 image settings in the example.
+3. Start OpenObserve on its own.
 
-- **The OpenBot deployment's network must already exist.** This stack joins the network the
-  OpenBot Compose project created (`OO_NETWORK`, default `openbot_default`) instead of creating a
-  second one, so on a clean host it must exist before `compose up`:
+   ```sh
+   docker compose -f docker/observability/compose.yml \
+     --env-file docker/observability/env.openobserve up -d openobserve
+   curl --fail http://127.0.0.1:5080/healthz
+   ```
 
-  ```sh
-  docker network inspect openbot_default >/dev/null 2>&1 || docker network create openbot_default
-  ```
+4. Sign in as the dedicated operator. In the `default` organization, create an ingestion token using `POST /api/default/ingestion-tokens` with `{"name":"openbot-collector","description":""}`. Set `OO_INGEST_BASIC` to the Base64 encoding of `default:<token>`, using the returned `data.token`. Keep the token and its Base64 form in the private env file.
+5. Start the collector, then apply the logging overlay to the OpenBot services you are running. If you override `OO_FORWARD_PORT`, use the same value in both Compose commands.
 
-  (Bringing the OpenBot deployment up first is the normal way this becomes true. The verify
-  script checks the network and exits with this instruction if it is missing.)
-- **amd64 host.** Both images are pinned as amd64 builds (tag and digest), and `compose.yml` says
-  `platform: linux/amd64` so an arm64 host fails at parse time with a pointer here instead of at
-  pull time. On an arm64 node, pin the `-arm64` tag of the same versions with their own digests
-  and re-run `scripts/observability/verify-openobserve.sh` — or run the same pinned binaries
-  directly, which is what the script's native mode does.
+   ```sh
+   docker compose -f docker/observability/compose.yml \
+     --env-file docker/observability/env.openobserve up -d otel-collector
+   docker compose -f docker-compose.yml -f docker/observability/openbot-logging.compose.yml \
+     --profile openbot up -d
+   ```
 
-```sh
-cp docker/observability/env.openobserve.example docker/observability/env.openobserve
-# edit credentials, then:
-printf '%s:%s' "$ZO_ROOT_USER_EMAIL" "$ZO_ROOT_USER_PASSWORD" | base64   # -> OO_INGEST_BASIC
-docker compose -f docker/observability/compose.yml \
-  --env-file docker/observability/env.openobserve up -d
+OpenObserve v1.1.2 and Collector Contrib 0.165.0 are pinned by digest. The `openobserve-data` volume holds stored logs. The `collector-state` volume holds the bounded exporter queue and rotates a sanitized export snapshot. Compose recreation preserves both volumes. Docker forwarding is asynchronous with bounded buffers and retries. Extended outages can drop records. Set the global retention window with `ZO_COMPACT_DATA_RETENTION_DAYS` and size the storage volume for the expected rate.
+
+## Query as the operator
+
+Open `http://127.0.0.1:5080`, sign in with the dedicated administrator, and select Logs → `default`. The query listener is published only on host loopback. OpenObserve shares its network with the collector. The collector receives audit OTLP over the separate data network.
+
+The collector uses an organization ingestion token, which cannot sign in to the UI, query logs, or list users. Keep the `default` organization restricted to administrators and avoid provisioning ordinary OpenBot users there. OSS v1.1.2 does not provide a same-organization basic member role. A native account in another organization cannot query the `default` organization's logs.
+
+Useful fields include `_timestamp`, `service_name`, `deployment_environment`, `severity`, `log_class`, and `openbot_log_type`. Use `request_id` or `run_id` when the source includes a UUID for that field.
+
+```sql
+SELECT _timestamp, service_name, severity, openbot_log_type, body
+FROM "default"
+WHERE service_name = 'server' AND severity = 'Error'
+ORDER BY _timestamp DESC
 ```
 
-- **Versions are pinned by tag and digest** in `compose.yml`: OpenObserve `v1.1.2` and
-  otel-collector-contrib `0.165.0`. Upgrading means changing both and re-running
-  `scripts/observability/verify-openobserve.sh`.
-- **Storage**: named volume `openobserve-data` (`ZO_DATA_DIR=/data`) for the log store, named
-  volume `collector-state` for the collector's bounded disk queue and sent-payload snapshot.
-  Recreating either container keeps the data; deleting the volume deletes it.
-- **Ports and network**: `5080` (UI/API) is published to loopback only. gRPC `5081` and the
-  collector's OTLP `4318` stay inside the Compose network. The stack attaches to the existing
-  OpenBot network (`OO_NETWORK`, default `openbot_default`).
-- **Credentials**: the OpenObserve root account lives only in `env.openobserve` (git-ignored).
-  The collector's ingest credential (`OO_INGEST_BASIC`) lives only in the same file and the
-  collector's environment. **No business process ever holds an OpenObserve credential** — the
-  server exports audit OTLP to the collector unauthenticated over the internal network, and the
-  collector is the only writer.
-- **Retention**: `ZO_COMPACT_DATA_RETENTION_DAYS=30` globally (v1.1.2's key, verified in the
-  1.1.2 binary), plus a stream-level `data_retention` you can set per stream in the UI
-  (Stream Settings) or via `PUT /api/{org}/streams/{stream}/settings`; the smaller of the two
-  wins. Compaction deletes past-retention data on its schedule; the disk volume should be sized
-  for the deployment's log rate × retention.
+The collector replaces all raw runtime and audit bodies with a registered event label or a fixed summary. It discards free text, exception details, arbitrary attributes, audit payloads, tool data, model input and output, and nested values before the exporter. Forks adding an event label must register it in the allowlist. Inspect the original diagnostic through the deployment's restricted local logs when you need the free-form text.
 
-## Reproducible acceptance
+## Run Docker acceptance
+
+Run from the repository root with Docker Compose and Python 3. Build the application images from the checkout with `--build`. Omit the flag when the default OpenBot application images are already available locally.
 
 ```sh
-DATABASE_URL=postgres://... bash scripts/observability/verify-openobserve.sh
+bash scripts/observability/verify-openobserve.sh --build
 ```
 
-`OO_VERIFY_MODE=native` (default) runs the same pinned OpenObserve and collector as binaries and
-the real server/worker/migrate as Bun processes through
-`scripts/observability/container-log-driver.mjs`, which writes Docker's json-file envelope — the
-collector config, parsing, attribution, redaction and exporter are byte-identical to the Compose
-deployment. `OO_VERIFY_MODE=docker` uses the Compose stack against a live deployment. The run
-leaves every query and response in its evidence directory and exits non-zero if any assertion
-fails: before/after ingestion markers, Info/Warn/Error and ordinary-business triggers from real
-code paths, restart survival, the auth matrix, and the synthetic-sentinel redaction experiment.
-
-## Querying
-
-UI: `http://127.0.0.1:5080` as the root account → Logs → the `default` stream (or your org).
-
-API (administrator credentials):
-
-```sh
-curl -s -u "$ZO_ROOT_USER_EMAIL:$ZO_ROOT_USER_PASSWORD" \
-  -H 'content-type: application/json' \
-  -X POST http://127.0.0.1:5080/api/default/_search -d '{
-    "query": {
-      "sql": "SELECT _timestamp, service_name, severity, openbot_log_type, body FROM \"default\" WHERE service_name = '\''server'\'' AND severity = '\''Error'\''",
-      "start_time": 1794900000000000, "end_time": 1794986400000000 }}'
-```
-
-Useful field names after OTLP flattening: `_timestamp` (µs, UTC), `service_name`,
-`deployment_environment`, `severity` (`Info`/`Warn`/`Error`), `log_class` (`runtime`/`audit`),
-`openbot_log_type` (the JSON `type` field of OpenBot's log convention), `body` (the raw line),
-`container_name`, `collector_version`, and on audit records `event_type`, `target_type`,
-`target_id`, `actor_user_id`, `initiator_kind`, `openbot_payload_*`.
-
-## Redaction
-
-The collector redacts before anything leaves it, in two layers:
-
-1. **Text layer** on the whole raw line — token shapes (PEM, `AKIA`/`ASIA`, `ghp_`,
-   `github_pat_`, `glpat-`, `xox*-`, `sk-`, `AIza`, Stripe, npm, JWT), `Authorization`/`x-api-key`
-   headers, credentials by the name they travel under (`password=`, `--token`, JSON `"key":
-   "value"` forms), `Bearer` tokens, and userinfo in any URL — the same shapes
-   `server/src/telemetry/scrub.ts` uses. Because it runs on the raw line, nested objects, arrays,
-   serialized JSON inside a value, and exception text are covered at any depth.
-2. **Attribute layer** on the parsed flat fields, for anything parsing split apart, plus deletion
-   of pure credential-carrier keys (`password`, `secret`, `token`, `authorization`).
-
-The runtime pipeline exports only `openbot.log_type` taken out of a parsed line; the rest of the
-parsed tree is deleted and never leaves the collector. The attribute-level net cannot recurse into
-nested OTLP values (maps, arrays), so a parsed nested field would leave the collector raw while its
-`body` was redacted — the verified guarantee instead is: the redacted full line is the body, and
-the body is what OpenObserve indexes. Nothing of the log line is lost to a query, and nothing
-unredacted is exported. (The audit pipeline's payload attributes are flat strings — the server
-serializes nested values itself through `scrubCommands` — so the text net reaches them.)
-
-Survivors become `[REDACTED]`. On top of the code's own convention of not logging conversation or
-model bodies, `verify-openobserve.sh` injects synthetic credential-shaped sentinels
-(`sk-sentinel-…`) that each travel in a different position — a nested JSON field, a
-serialized-JSON value, an array element, exception text, a bare token — plus a real business body
-(a saved settings text through the real API), and asserts none of them appear in the collector's
-actual sent payload or anywhere in OpenObserve (`match_all`, every stored field).
-
-## Collector operation
-
-- `start_at: end` on `filelog`: only lines written after the collector starts are read. Existing
-  container history is never scanned or uploaded; the script's PRE-marker assertion proves it.
-- Exporting goes through a bounded, disk-backed sending queue (512 batches) with finite retry
-  (`max_elapsed_time: 1h`); what still cannot be delivered is dropped and counted in the
-  collector's own logs and `/metrics`. OpenObserve being down never touches a request, a Bot call
-  or a database commit: the collector is a sidecar reader of log files and an OTLP sink, on no
-  synchronous path. The server's audit export was already never-fatal (`otel.ts`).
-- The collector's container and OpenObserve's own are excluded from discovery, so the collector
-  never ingests its own output.
-- Docker-path service attribution uses the Docker socket **read-only** (container names for
-  `service.name`); the log store's data directory is mounted read-only too.
-
-## Accounts: what v1.1.2 OSS actually does (verified, not assumed)
-
-Probed against the pinned release by `verify-openobserve.sh` (evidence files `auth-*.json`):
-
-- **No role below the organisation's admin can be issued.** Creating a user with `role: member`
-  is refused outright — `400 {"message":"Custom roles not allowed"}`. The role ladder is an
-  enterprise feature, so there is no such thing as an under-privileged account to worry about:
-  any account that can be created reads its organisation's logs.
-- **Organisation scoping works.** A valid, authenticated account created in a *different*
-  organisation is denied this one's `_search` (401) and its user list (401). An OpenBot end user
-  with no OpenObserve account has no credential and no network path (5080 binds to loopback).
-- **An organisation-internal account cannot manage users** (403, root-only) — but it *can* read
-  the organisation's logs. That is exactly why the deployment issues no account at all: the
-  platform administrator's root account is the only account, and the collector's ingest
-  credential is the only other secret.
-
-If a deployment later needs per-team read scoping or a genuine read-only role, that is an
-OpenObserve enterprise feature (or a proxy layer in front), not a configuration of this stack.
-
-## Limits and follow-ups
-
-- `ZO_COMPACT_DATA_RETENTION_DAYS` is the global floor; alerting, dashboards, backfill of
-  pre-existing logs, and desktop/CLI collection are out of scope by decision (parent issue and
-  ADR 0006).
-- Full outage/capacity stress of the pipeline belongs to a later fault-tolerance ticket; this
-  ticket ships the bounded queue/retry configuration and its restart-survival proof.
-- The Compose/docker runtime path (socket discovery, container attribution) is validated by
-  `otelcol-contrib validate` and the native run shares every parsing/redaction/export statement
-  with it, but a round of `OO_VERIFY_MODE=docker` on a host with a Docker daemon and a live
-  OpenBot deployment is the outstanding confirmation for the container-discovery half.
+The command creates a disposable project, generates scoped credentials, and uses free loopback ports. It checks actual service logs, an audit event from the settings API, content removal in the exporter and in stored results, authorization, and reads before and after restarting the collector and OpenObserve. It uses synthetic sensitive text and removes the test projects and volumes on exit. `--keep` retains them for diagnosis. The command prints the location of its local evidence.
