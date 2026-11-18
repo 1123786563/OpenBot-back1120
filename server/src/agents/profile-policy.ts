@@ -4,6 +4,11 @@ export function canAccessAgent(
   actor: AgentActor,
   agent: AgentProfile,
 ): boolean {
+  if (
+    (actor.workspaceId || agent.organizationId) &&
+    agent.organizationId !== actor.workspaceId
+  )
+    return false;
   if (agent.deletedAt !== null) return false;
 
   return (
@@ -17,6 +22,11 @@ export function canManageAgent(
   actor: AgentActor,
   agent: AgentProfile,
 ): boolean {
+  if (
+    (actor.workspaceId || agent.organizationId) &&
+    agent.organizationId !== actor.workspaceId
+  )
+    return false;
   if (agent.systemOwned || agent.deletedAt !== null) return false;
 
   return agent.ownerUserId === actor.id || actor.role === "admin";

@@ -18,3 +18,7 @@ assets/*.svg
 deploy/t01/.runtime
 deploy/t01/.env.t01
 deploy/t01/.env.worker.t01
+
+# T02 local identity, mail and session material.
+deploy/t02/.runtime
+deploy/t02/.env.t02

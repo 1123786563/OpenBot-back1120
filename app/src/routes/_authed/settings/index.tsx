@@ -1,4 +1,3 @@
-import { ui, useLocale } from "@/lib/i18n";
 import { IconMoon } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import React from "react";
@@ -12,6 +11,7 @@ import { MessageListPreference } from "@/components/settings/message-list-prefer
 import { NameRow } from "@/components/settings/profile";
 import { StandingInstructionsRow } from "@/components/settings/standing-instructions";
 import { UsageDataSection } from "@/components/settings/usage-data";
+import { WorkspaceRow } from "@/components/settings/workspace";
 import { useTheme } from "@/components/theme-provider";
 import {
   Item,
@@ -24,8 +24,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { formatHotkey, HOTKEYS } from "@/lib/hotkeys/hotkeys";
-import { SkinPicker } from "@/skins/skin-picker";
+import { ui, useLocale } from "@/lib/i18n";
 import { LanguagePicker } from "@/lib/i18n/provider";
+import { SkinPicker } from "@/skins/skin-picker";
 
 export const Route = createFileRoute("/_authed/settings/")({
   component: RouteComponent,
@@ -62,6 +63,7 @@ function RouteComponent() {
         </PageRows>
       </PageSection>
       {/* Only in OpenBot Desktop, which holds the AI connection and changes it in its own window. */}
+      <WorkspaceRow />
       <AiModelSection />
       {/* Only in OpenBot Desktop, which sends usage data and keeps this choice. */}
       <UsageDataSection />

@@ -206,6 +206,7 @@ const joinedProjection = {
   avatarSeed: agentProfiles.avatarSeed,
   visibility: agentProfiles.visibility,
   ownerUserId: agentProfiles.ownerUserId,
+  organizationId: agentProfiles.organizationId,
   packageId: deploymentPackages.id,
   hiddenAt: agentPreferences.hiddenAt,
   pinnedAt: agentPreferences.pinnedAt,
@@ -236,14 +237,22 @@ function joinedProfiles(executor: DatabaseExecutor, actor: AgentActor) {
     .leftJoin(deploymentPackages, eq(deploymentPackages.id, agents.packageId));
 }
 
-function accessFilter(actor: AgentActor) {
+export function profileAccessFilter(actor: AgentActor) {
+  if (actor.workspaceId)
+    return and(
+      eq(agentProfiles.organizationId, actor.workspaceId),
+      eq(agentProfiles.ownerUserId, actor.id),
+    );
   if (actor.role === "admin") return undefined;
 
-  return or(
-    eq(agentProfiles.visibility, "public"),
-    eq(agentProfiles.ownerUserId, actor.id),
-    // A private Bot its owner published to the team, to this person, or to a group they are in.
-    teamBotAccess(actor.id, agentProfiles.agentId),
+  return and(
+    isNull(agentProfiles.organizationId),
+    or(
+      eq(agentProfiles.visibility, "public"),
+      eq(agentProfiles.ownerUserId, actor.id),
+      // A private Bot its owner published to the team, to this person, or to a group they are in.
+      teamBotAccess(actor.id, agentProfiles.agentId),
+    ),
   );
 }
 
@@ -260,6 +269,7 @@ function mapProfile(
     avatarSeed: row.avatarSeed,
     visibility: row.visibility,
     ownerUserId: row.ownerUserId,
+    organizationId: row.organizationId,
     // Fresh personal starters are editable defaults, even though the package seeded them.
     systemOwned:
       row.packageId !== null &&
@@ -465,7 +475,7 @@ async function findAccessibleProfile(
     and(
       eq(agents.id, id),
       isNull(agentProfiles.deletedAt),
-      accessFilter(actor),
+      profileAccessFilter(actor),
     ),
   );
   return row ? mapProfile(row) : null;
@@ -564,7 +574,7 @@ export function createAgentProfileStore(
       const rows = await joinedProfiles(database, actor).where(
         and(
           isNull(agentProfiles.deletedAt),
-          accessFilter(actor),
+          profileAccessFilter(actor),
           hidden
             ? isNotNull(agentPreferences.hiddenAt)
             : isNull(agentPreferences.hiddenAt),
@@ -648,6 +658,7 @@ export function createAgentProfileStore(
         await transaction.insert(agentProfiles).values({
           agentId: id,
           ownerUserId: actor.id,
+          organizationId: actor.workspaceId ?? null,
           title: input.title,
           roleDescription: input.roleDescription,
           avatarSeed: id,
@@ -856,6 +867,7 @@ export function createAgentProfileStore(
         await transaction.insert(agentProfiles).values({
           agentId: duplicateId,
           ownerUserId: actor.id,
+          organizationId: actor.workspaceId ?? null,
           title: source.title,
           roleDescription: source.roleDescription,
           avatarSeed: source.avatarSeed,

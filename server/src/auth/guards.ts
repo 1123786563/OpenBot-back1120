@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import type { Database } from "../db/client";
 import { userRoles } from "../db/schema";
+import type { BusinessAccess } from "./business-access";
 import type { OpenBotRole } from "./roles";
 
 export type AuthenticatedActor = {
@@ -10,15 +11,19 @@ export type AuthenticatedActor = {
   name?: string | null;
   image?: string | null;
   role: OpenBotRole;
+  workspaceId?: string;
+  workspace?: { id: string; name: string; ownerUserId: string; role: "owner" };
 };
 
 export type AuthService = {
+  resolveBusinessAccess?: (headers: Headers) => Promise<BusinessAccess>;
   handler: (request: Request) => Response | Promise<Response>;
   api: {
     getSession: (input: {
       headers: Headers;
       query?: { disableCookieCache: boolean };
     }) => Promise<{
+      session?: { id: string };
       user: {
         id: string;
         email: string;
@@ -57,6 +62,16 @@ export function createRequireUser(
   roleRepository: RoleRepository,
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
+    if (auth.resolveBusinessAccess) {
+      const access = await auth.resolveBusinessAccess(context.req.raw.headers);
+      if (access.kind === "anonymous")
+        return context.json({ error: "Authentication required." }, 401);
+      if (access.kind === "denied")
+        return context.json({ error: access.code }, 403);
+      context.set("actor", access.actor);
+      await next();
+      return;
+    }
     const session = await auth.api.getSession({
       headers: context.req.raw.headers,
       query: { disableCookieCache: true },

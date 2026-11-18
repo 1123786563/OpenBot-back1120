@@ -12,10 +12,12 @@ import {
   primaryKey,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { agents, users } from "./core";
 import { jsonb } from "./json";
 import { responsibilities } from "./responsibilities";
+import { personalOrganizations } from "./workspaces";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -33,6 +35,9 @@ export const agentProfiles = pgTable(
     agentId: text("agent_id")
       .primaryKey()
       .references(() => agents.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(
+      () => personalOrganizations.id,
+    ),
     ownerUserId: text("owner_user_id").references(() => users.id, {
       onDelete: "set null",
     }),

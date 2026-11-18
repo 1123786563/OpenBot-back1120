@@ -1,4 +1,5 @@
 import type { AuthProviderId } from "@/lib/auth/queries";
+import { ui } from "@/lib/i18n";
 
 /**
  * The mark each identity provider requires on a sign-in button.
@@ -17,6 +18,12 @@ import type { AuthProviderId } from "@/lib/auth/queries";
  * it is centred in the box rather than stretched to fill it.
  */
 export function ProviderLogo({ provider }: { provider: AuthProviderId }) {
+  if (provider === "casdoor")
+    return (
+      <span aria-hidden="true" className="size-[18px]">
+        {ui("C")}
+      </span>
+    );
   if (provider === "google") return <GoogleMark />;
   if (provider === "microsoft") return <MicrosoftMark />;
   return <OktaMark />;
