@@ -406,7 +406,7 @@ async function openAs(openbot: OpenBot, as?: Person) {
     body: (await response.json()) as
       | BrowserOpenResponse
       | RealBrowserOpenResponse
-      | { error: string },
+      | { error: string; code?: string },
   };
 }
 
@@ -974,7 +974,10 @@ describe("Browser on OpenBot Desktop, with the person's own browser", () => {
     };
     expect(await quietly(() => openAs(desktop, "ada"))).toEqual({
       status: 502,
-      body: { error: "Google Chrome did not open. Try again." },
+      body: {
+        code: "unavailable",
+        error: "Google Chrome did not open. Try again.",
+      },
     });
     await removeConnections(ada.id);
   });

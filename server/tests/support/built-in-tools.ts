@@ -124,7 +124,8 @@ function propertyNamed(
     (property) =>
       (ts.isPropertyAssignment(property) ||
         ts.isShorthandPropertyAssignment(property) ||
-        ts.isMethodDeclaration(property)) &&
+        ts.isMethodDeclaration(property) ||
+        ts.isGetAccessorDeclaration(property)) &&
       ts.isIdentifier(property.name) &&
       property.name.text === name,
   );

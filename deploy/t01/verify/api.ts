@@ -18,7 +18,7 @@ async function identity(
   expected: number,
   email?: string,
 ) {
-  const r = await fetch(base + "/api/me", {
+  const r = await fetch(`${base}/api/me`, {
     headers: file ? { cookie: cookie(file) } : {},
   });
   assert.equal(r.status, expected);

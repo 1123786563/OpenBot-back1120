@@ -33,7 +33,7 @@ async function newUser(auth: ReturnType<typeof createAuth>, email: string) {
     updatedAt: new Date(),
   };
   const hooks = auth.options.databaseHooks!.user!.create!;
-  await hooks.before!(user, null);
+  await hooks.before!(user);
   await database.insert(users).values(user);
   made.push(user.id);
   await hooks.after!(user, null);
@@ -82,7 +82,6 @@ test("denied domains never reach initialization", async () => {
       events.push(event);
     },
   });
-  const ctx = await auth.$context;
   await expect(
     newUser(auth, `t01-${randomUUID()}@other.test`),
   ).rejects.toThrow();

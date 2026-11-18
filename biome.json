@@ -12,6 +12,7 @@
       "!desktop/src-tauri/gen",
       "!**/target",
       "!server/drizzle",
+      "!docs/design/rendered/*.svg",
       "!server/tests/fixtures/arcade-catalogue.json",
       "!**/generated"
     ]

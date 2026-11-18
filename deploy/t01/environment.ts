@@ -12,9 +12,10 @@ export function serverEnvironment(
     ).matchAll(/^([A-Z][A-Z_0-9]*)=/gm),
   ].map((m) => m[1]);
   return Object.fromEntries(
-    [...names, "PATH", "HOME", "TMPDIR"]
-      .filter((k) => source[k] !== undefined)
-      .map((k) => [k, source[k]!]),
+    [...names, "PATH", "HOME", "TMPDIR"].flatMap((key) => {
+      const value = source[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
   );
 }
 export type ProcessRecord = {

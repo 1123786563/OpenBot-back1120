@@ -32,7 +32,7 @@ if (action === "stop") {
   if (!existsSync(state)) process.exit(0);
   const saved: ProcessRecord[] = JSON.parse(readFileSync(state, "utf8"));
   for (const record of saved) {
-    let current;
+    let current: ReturnType<typeof identity>;
     try {
       current = identity(record.pid);
     } catch {
@@ -56,8 +56,10 @@ if (action === "stop") {
   if (existsSync(state) && JSON.parse(readFileSync(state, "utf8")).length)
     throw new Error("Stop tracked processes before starting again");
   const env: Record<string, string> = {};
-  for (const k of ["PATH", "HOME", "TMPDIR"])
-    if (process.env[k]) env[k] = process.env[k]!;
+  for (const key of ["PATH", "HOME", "TMPDIR"]) {
+    const value = process.env[key];
+    if (value) env[key] = value;
+  }
   const saved = [];
   for (const [name, entry, vars] of [
     [
