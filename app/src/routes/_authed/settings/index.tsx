@@ -12,6 +12,7 @@ import { MessageListPreference } from "@/components/settings/message-list-prefer
 import { NameRow } from "@/components/settings/profile";
 import { StandingInstructionsRow } from "@/components/settings/standing-instructions";
 import { UsageDataSection } from "@/components/settings/usage-data";
+import { WorkspaceRow } from "@/components/settings/workspace";
 import { useTheme } from "@/components/theme-provider";
 import {
   Item,
@@ -62,6 +63,7 @@ function RouteComponent() {
         </PageRows>
       </PageSection>
       {/* Only in OpenBot Desktop, which holds the AI connection and changes it in its own window. */}
+      <WorkspaceRow />
       <AiModelSection />
       {/* Only in OpenBot Desktop, which sends usage data and keeps this choice. */}
       <UsageDataSection />

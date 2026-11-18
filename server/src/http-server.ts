@@ -246,6 +246,7 @@ export function startHttpServer(deps: {
 
   // Answered so a test can stop the server it started; the deployment keeps it for its whole life.
   return serve<SocketData>({
+    ...(config.listenHostname ? { hostname: config.listenHostname } : {}),
     port,
     async fetch(request, server) {
       const url = new URL(request.url);

@@ -6,7 +6,7 @@ import { sso } from "@better-auth/sso";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth, okta } from "better-auth/plugins";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { createEnterpriseStore } from "../admin/settings-store";
 import type { AuditEventInput, AuditStore } from "../audit";
 import { recordAuditEvent } from "../audit";
@@ -26,6 +26,13 @@ import {
   users,
   verifications,
 } from "../db/schema";
+import { createWorkspaceStore } from "../workspaces/store";
+import {
+  casdoorAuthRequestAllowed,
+  casdoorProvider,
+  casdoorRequest,
+  isCasdoorSignInBody,
+} from "./casdoor";
 import { DOMAIN_REFUSAL_MESSAGE, emailDomainAllowed } from "./email-domain";
 import { encryptSsoConfig } from "./encrypt-sso-config";
 import { SIGN_OUT_UNFINISHED } from "./organization";
@@ -233,14 +240,22 @@ export function createAuth(
    * a deployment that runs the native app (EXPO_PROJECT_ID, as for push). Elsewhere a sign-in can
    * never be sent there.
    */
-  const nativeApp = Boolean(process.env.EXPO_PROJECT_ID?.trim());
+  const nativeApp =
+    !authConfig.casdoor && Boolean(process.env.EXPO_PROJECT_ID?.trim());
   const plugins = [
     ...(nativeApp ? [expo()] : []),
     /*
      * SCIM 2.0 at /api/auth/scim/v2, only when SCIM_BEARER_TOKEN is set. See scim.ts.
      */
-    ...(scimPluginOptions ? [scim(scimPluginOptions)] : []),
-    electron({ clientID: "openbot-desktop", codeExpiresIn: 120 }),
+    ...(!authConfig.casdoor && scimPluginOptions
+      ? [scim(scimPluginOptions)]
+      : []),
+    ...(!authConfig.casdoor
+      ? [electron({ clientID: "openbot-desktop", codeExpiresIn: 120 })]
+      : []),
+    ...(authConfig.casdoor
+      ? [genericOAuth({ config: [casdoorProvider(authConfig.casdoor)] })]
+      : []),
     ...(authConfig.okta
       ? [
           genericOAuth({
@@ -266,16 +281,20 @@ export function createAuth(
      * here or they land with no role at all and the request guard refuses them with a 403, which
      * reads as a broken deployment rather than a first sign-in.
      */
-    sso({
-      provisionUser: async ({ user }) => {
-        await seedRole(
-          database,
-          user.id,
-          user.email,
-          authConfig.initialAdminEmails,
-        );
-      },
-    }),
+    ...(!authConfig.casdoor
+      ? [
+          sso({
+            provisionUser: async ({ user }) => {
+              await seedRole(
+                database,
+                user.id,
+                user.email,
+                authConfig.initialAdminEmails,
+              );
+            },
+          }),
+        ]
+      : []),
   ];
 
   /*
@@ -298,7 +317,7 @@ export function createAuth(
     }
   };
 
-  return betterAuth({
+  const auth = betterAuth({
     /*
      * A sign-out ends the Recorders before Better Auth ends the session, here rather than in the session's delete hook
      * below: the sign-out route goes on when deleting the session throws (it logs, clears the cookie and answers
@@ -337,6 +356,18 @@ export function createAuth(
         },
       },
       validateUserInfo: async ({ user, source }) => {
+        if (authConfig.casdoor) {
+          if (
+            source.method === "oauth" &&
+            source.oauth?.providerId === "casdoor" &&
+            casdoorRequest.getStore()?.identity
+          )
+            return;
+          return {
+            error: "AUTH_SOURCE_REQUIRED",
+            errorDescription: "Use Casdoor to sign in.",
+          };
+        }
         const verdict = await decideSignInMethod({
           method: source.method,
           email: typeof user.email === "string" ? user.email : undefined,
@@ -423,7 +454,21 @@ export function createAuth(
        * accounts of everybody who has already signed in.
        */
       encryptOAuthTokens: true,
+      ...(authConfig.casdoor
+        ? { accountLinking: { enabled: false, disableImplicitLinking: true } }
+        : {}),
     },
+    session: {
+      additionalFields: {
+        activeOrganizationId: { type: "string", required: false, input: false },
+        authSource: { type: "string", required: false, input: false },
+      },
+    },
+    onAPIError: authConfig.casdoor
+      ? {
+          errorURL: `${authConfig.trustedOrigins[0] ?? authConfig.baseUrl}/sign?error=AUTH_CALLBACK_FAILED`,
+        }
+      : undefined,
     plugins,
     socialProviders: {
       ...(authConfig.google ? { google: authConfig.google } : {}),
@@ -520,6 +565,43 @@ export function createAuth(
            * new one, so without this a removed person signs straight back in.
            */
           before: async (session) => {
+            if (authConfig.casdoor) {
+              const identity = casdoorRequest.getStore()?.identity;
+              if (!identity)
+                throw new APIError("FORBIDDEN", {
+                  message: "AUTH_SOURCE_REQUIRED",
+                });
+              const [account] = await database
+                .select({ userId: accounts.userId })
+                .from(accounts)
+                .where(
+                  and(
+                    eq(accounts.providerId, "casdoor"),
+                    eq(accounts.issuer, authConfig.casdoor.issuer),
+                    eq(accounts.accountId, identity.sub),
+                    eq(accounts.userId, session.userId),
+                  ),
+                );
+              if (!account || (await isRevoked?.(identity.email)))
+                throw new APIError("FORBIDDEN", {
+                  message: "AUTH_SOURCE_REQUIRED",
+                });
+              const verified = identity.email_verified === true;
+              await database
+                .update(users)
+                .set({ emailVerified: verified })
+                .where(eq(users.id, session.userId));
+              const workspace = verified
+                ? await createWorkspaceStore(database).ensure(session.userId)
+                : null;
+              return {
+                data: {
+                  ...session,
+                  authSource: authConfig.casdoor.issuer,
+                  activeOrganizationId: workspace?.id ?? null,
+                },
+              };
+            }
             const [user] = await database
               .select({ email: users.email })
               .from(users)
@@ -639,6 +721,29 @@ export function createAuth(
       },
     },
   });
+  if (authConfig.casdoor) {
+    const handler = auth.handler;
+    auth.handler = async (request) => {
+      if (!casdoorAuthRequestAllowed(request))
+        return Response.json(
+          { error: "AUTH_SOURCE_REQUIRED" },
+          { status: 403 },
+        );
+      if (new URL(request.url).pathname === "/api/auth/sign-in/social") {
+        const body = await request
+          .clone()
+          .json()
+          .catch(() => null);
+        if (!isCasdoorSignInBody(body))
+          return Response.json(
+            { error: "AUTH_SOURCE_REQUIRED" },
+            { status: 403 },
+          );
+      }
+      return casdoorRequest.run({}, () => handler(request));
+    };
+  }
+  return auth;
 }
 
 /**

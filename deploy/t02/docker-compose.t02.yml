@@ -1,0 +1,63 @@
+name: openbot-t02
+services:
+  postgres:
+    image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: openbot_t02
+      POSTGRES_DB: openbot_t02
+      POSTGRES_PASSWORD: ${T02_DB_PASSWORD:?run setup.ts}
+    ports: ["127.0.0.1:56432:5432"]
+    volumes: ["openbot-db:/var/lib/postgresql/data"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbot_t02 -d openbot_t02"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  casdoor-db:
+    image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: casdoor_t02
+      POSTGRES_DB: casdoor_t02
+      POSTGRES_PASSWORD: ${T02_CASDOOR_DB_PASSWORD:?run setup.ts}
+    volumes: ["casdoor-db:/var/lib/postgresql/data"]
+    networks: [identity]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U casdoor_t02 -d casdoor_t02"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  casdoor:
+    image: casbin/casdoor@sha256:d8fd4f387026e1ffdf887b924c1c74ad5c15e8d3be54fb739b57b2037073a51f
+    depends_on:
+      casdoor-db: {condition: service_healthy}
+    ports: ["127.0.0.1:19000:8000"]
+    volumes:
+      - ./.runtime/app.conf:/conf/app.conf:ro
+      - casdoor-files:/files
+    networks: [identity]
+  mailpit:
+    image: axllent/mailpit:v1.29.2@sha256:030f06031ce5c60913ac9363da1ab0d4be6fd2a78147dd0e1ca0fcac665d6b34
+    ports: ["127.0.0.1:18025:8025"]
+    networks: [identity]
+  supervisor:
+    profiles: [execution]
+    build: {context: ../.., dockerfile: supervisor/Dockerfile}
+    image: openbot-t02-supervisor:8e442729
+    environment:
+      PORT: "4300"
+      COMPUTER_NAMESPACE: openbot-t02
+      COMPUTER_IMAGE: openbot-t02-computer:8e442729
+      COMPUTER_TOKEN: ${COMPUTER_TOKEN:?run setup.ts}
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN:?run setup.ts}
+    ports: ["127.0.0.1:46430:4300"]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    networks: [execution]
+networks:
+  data:
+  identity:
+  execution:
+volumes:
+  openbot-db:
+  casdoor-db:
+  casdoor-files:

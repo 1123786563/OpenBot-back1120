@@ -1,4 +1,3 @@
-import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -15,8 +14,9 @@ import {
 } from "@/lib/auth/client";
 import { resumeUrlFor, verifierPathFor } from "@/lib/auth/resume";
 import { appConfig } from "@/lib/generated/application-config";
-import { searchTextEntry } from "@/lib/search-text";
+import { ui, useLocale } from "@/lib/i18n";
 import { LanguagePicker } from "@/lib/i18n/provider";
+import { searchTextEntry } from "@/lib/search-text";
 import {
   type AuthProviderId,
   authProvidersQueryOptions,
@@ -81,7 +81,11 @@ function SignScreen() {
   // Which provider is being opened, rather than whether one is: with three buttons, a single
   // boolean would put "Opening…" on all of them.
   const [opening, setOpening] = useState<AuthProviderId | "sso" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).has("error")
+      ? "Sign-in was cancelled or could not finish. You can try again."
+      : null,
+  );
   const { data: options } = useQuery(authProvidersQueryOptions());
   const providers = options?.providers ?? [];
   const [email, setEmail] = useState("");
@@ -133,6 +137,7 @@ function SignScreen() {
     }
   }
 
+  const casdoor = providers.includes("casdoor");
   const providerButtons = (
     <div className="flex flex-col gap-2">
       {providers.map((provider) => (
@@ -210,6 +215,13 @@ function SignScreen() {
           transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
           variants={{ hidden, shown }}
         >
+          {casdoor ? (
+            <p className="mb-3 text-center text-sm text-muted-foreground">
+              {ui(
+                "Register or sign in with any email. To verify your email, choose Code on the Casdoor sign-in page and enter the emailed code.",
+              )}
+            </p>
+          ) : null}
           {options?.ssoRequired ? (
             <p className="mb-3 text-center text-sm text-muted-foreground">
               {ui(

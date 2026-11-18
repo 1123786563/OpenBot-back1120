@@ -1,3 +1,4 @@
+import type { BusinessAccess } from "./auth/business-access";
 import { DEV_ACTOR } from "./auth/dev-actor";
 import type { OpenBotRole } from "./auth/roles";
 import type { IdentifyActor, IdentifyUser } from "./copilot";
@@ -7,7 +8,12 @@ import {
 } from "./recorder/guard";
 import { isTrajectoryConnectPath } from "./recorder/trajectory-gate";
 
-type RequestActor = { id: string; name: string; role: OpenBotRole };
+type RequestActor = {
+  id: string;
+  name: string;
+  role: OpenBotRole;
+  workspaceId?: string;
+};
 
 type SessionLike = {
   user: {
@@ -46,6 +52,7 @@ export function actorName(user: {
  */
 export function createRequestActor(deps: {
   singleUser: boolean;
+  resolveBusinessAccess?: (headers: Headers) => Promise<BusinessAccess>;
   resolveRecorder?: RecorderResolver;
   getSession(headers: Headers): Promise<SessionLike | null | undefined>;
   rolesForUser(userId: string): Promise<OpenBotRole[]>;
@@ -70,6 +77,14 @@ export function createRequestActor(deps: {
         }
       }
       throw new Error("A CopilotKit run requires a signed-in user.");
+    }
+    if (deps.resolveBusinessAccess) {
+      const access = await deps.resolveBusinessAccess(request.headers);
+      if (access.kind !== "ready")
+        throw new Error(
+          access.kind === "denied" ? access.code : "Authentication required.",
+        );
+      return { ...access.actor, name: actorName(access.actor) };
     }
     if (deps.singleUser) {
       return { id: DEV_ACTOR.id, name: DEV_ACTOR.email, role: DEV_ACTOR.role };
@@ -98,8 +113,8 @@ export function createRequestActor(deps: {
 
   const identifyActor: IdentifyActor = async (request) => {
     try {
-      const { id, role } = await resolveRequestActor(request);
-      return { id, role };
+      const { id, role, workspaceId } = await resolveRequestActor(request);
+      return { id, role, ...(workspaceId ? { workspaceId } : {}) };
     } catch {
       return ANONYMOUS_ACTOR;
     }

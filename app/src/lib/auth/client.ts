@@ -1,6 +1,6 @@
-import { ui } from "@/lib/i18n";
 import { ssoClient } from "@better-auth/sso/client";
 import { createAuthClient } from "better-auth/react";
+import { ui } from "@/lib/i18n";
 import type { AuthProviderId } from "./queries";
 
 export const authClient = createAuthClient({ plugins: [ssoClient()] });
@@ -16,6 +16,7 @@ const PROVIDER_NAMES: Record<AuthProviderId, string> = {
   get okta() {
     return ui("Okta");
   },
+  casdoor: "Casdoor",
 };
 
 export function providerName(provider: AuthProviderId): string {
@@ -48,6 +49,22 @@ export async function signInWith(
   // trusted-origin check treats it as it treated the bare origin.
   callbackURL: string = window.location.origin,
 ) {
+  if (provider === "casdoor") {
+    const response = await fetch("/api/auth/sign-in/social", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        callbackURL,
+        errorCallbackURL: `${window.location.origin}/sign?error=AUTH_CALLBACK_FAILED`,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok || typeof result.url !== "string")
+      throw new Error(ui("Could not open Casdoor. Try again."));
+    window.location.assign(result.url);
+    return;
+  }
   const result = await start({ provider, callbackURL });
 
   if (result.error) {

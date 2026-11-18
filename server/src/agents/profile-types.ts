@@ -1,11 +1,13 @@
 export type AgentVisibility = "public" | "private";
 
 export type AgentActor = {
+  workspaceId?: string;
   id: string;
   role: "admin" | "user";
 };
 
 export type AgentProfile = {
+  organizationId?: string | null;
   id: string;
   name: string;
   title: string;

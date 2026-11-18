@@ -14,6 +14,7 @@ export type OnboardingStatus = {
 };
 
 export type AuthenticatedUser = {
+  workspace?: { id: string; name: string; ownerUserId: string; role: "owner" };
   id: string;
   email: string;
   name?: string | null;
@@ -42,7 +43,7 @@ export const authKeys = {
 };
 
 /** An identity provider this deployment can sign somebody in with. */
-export type AuthProviderId = "google" | "microsoft" | "okta";
+export type AuthProviderId = "google" | "microsoft" | "okta" | "casdoor";
 
 /** What the sign-in screen may offer, answered by the process that knows. */
 export type SignInOptions = {
@@ -100,7 +101,7 @@ async function currentUser(): Promise<AuthenticatedUser | null> {
    * arrives as a 401 that has to be read before anything decides the request went wrong.
    */
   const response = await tryClient("/api/me");
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     return null;
   }
   if (!response.ok) {

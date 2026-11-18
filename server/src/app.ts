@@ -4,6 +4,7 @@ import type { Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "hono/bun";
+import { z } from "zod";
 import { createCapabilityChangeRoutes } from "./admin/capability-translate";
 import { enterpriseControls } from "./admin/controls";
 import { createEnterpriseGate } from "./admin/gate";
@@ -27,12 +28,11 @@ import {
 import type { BotAccessCheck } from "./agents/profile-policy";
 import type { AgentProfileStore } from "./agents/profile-store";
 import { createAgentRoutes } from "./agents/routes";
-import { createApprovalRoutes } from "./approvals/routes";
 import { createReviewerGuidanceRoutes } from "./approvals/reviewer-guidance";
+import { createApprovalRoutes } from "./approvals/routes";
 import { createApprovalRuleDraftRoutes } from "./approvals/rule-translate";
 import type { RuleVocabulary } from "./approvals/rule-vocabulary";
 import type { ApprovalService } from "./approvals/service";
-import { type AuditVocabulary, createAuditAskRoutes } from "./audit-ask";
 import {
   type AuditEvent,
   type AuditEventType,
@@ -46,6 +46,8 @@ import {
   readAuditExportRows,
   recordAuditEvent,
 } from "./audit";
+import { type AuditVocabulary, createAuditAskRoutes } from "./audit-ask";
+import { casdoorAuthRequestAllowed } from "./auth/casdoor";
 import { createDevRequireUser } from "./auth/dev-actor";
 import {
   type AppVariables,
@@ -111,13 +113,13 @@ import type { IdentityStore } from "./identity/store";
 import { createIntelligenceClient } from "./intelligence-client";
 import { createCapturePassOrigin } from "./intelligence-gateway-proxy";
 import {
-  createLearningRoutes,
-  type LearningAdminDependencies,
-} from "./learning/routes";
-import {
   type LearningModelEndpoint,
   mountLearningModelEndpoint,
 } from "./learning/model-endpoint";
+import {
+  createLearningRoutes,
+  type LearningAdminDependencies,
+} from "./learning/routes";
 import {
   createPersonalLearningRoutes,
   type PersonalLearningRouteDeps,
@@ -160,6 +162,7 @@ import {
   RECORDER_BEARER_PREFIX,
 } from "./recorder/guard";
 import { createRecorderRoutes } from "./recorder/routes";
+import { isTrajectoryConnectPath } from "./recorder/trajectory-gate";
 import type { RecorderExtensionDeps } from "./recorder/wiring";
 import { createReleaseStatusRoutes } from "./release-status";
 import { createOriginGuard, createSingleUserGate } from "./request-trust";
@@ -202,6 +205,7 @@ import {
 } from "./web-bot-auth";
 import { createWhatIfRoutes } from "./what-if";
 import type { GovernanceReaders } from "./what-if-check";
+import type { WorkspaceStore } from "./workspaces/store";
 
 /**
  * How much of a multipart body is boundary, headers and other fields rather than file.
@@ -457,6 +461,7 @@ export function createApp(
     recorder?: RecorderExtensionDeps;
     /** A person's own OpenBot browser, with the Recorder in it already connected (browser/routes.ts). Absent, nothing
      * about it is mounted and the app shows no Browser button. */
+    workspaceStore?: WorkspaceStore;
     browser?: Omit<BrowserRouteDeps, "requireUser" | "auditStore">;
     /** A Bot's browser worked by a person: its bar and Record (browser/bot-browser.ts), under the computer routes. Absent,
      * or with no computer, nothing about it is mounted. */
@@ -647,12 +652,15 @@ export function createApp(
        * that routes by domain; naming the providers would tell anybody who loads the page which
        * companies use this deployment, which is not theirs to have before they sign in.
        */
-      ssoConfigured: ((await identityProviders?.list()) ?? []).length > 0,
+      ssoConfigured:
+        !config.auth?.casdoor &&
+        ((await identityProviders?.list()) ?? []).length > 0,
       /*
        * Whether an administrator requires SSO. The screen then leads with SSO and keeps social
        * sign-in only as the administrators' audited break-glass; the server refuses everybody else.
        */
       ssoRequired:
+        !config.auth?.casdoor &&
         enterpriseControls()?.snapshot()?.settings.ssoRequired === true,
     }),
   );
@@ -677,6 +685,11 @@ export function createApp(
     "/api/auth/sso/delete-provider": "identity_provider.removed",
   };
 
+  app.use("/api/auth/*", async (context, next) => {
+    if (config.auth?.casdoor && !casdoorAuthRequestAllowed(context.req.raw))
+      return context.json({ error: "AUTH_SOURCE_REQUIRED" }, 403);
+    await next();
+  });
   app.on(["GET", "POST"], "/api/auth/*", async (context) => {
     if (
       context.req.method === "GET" &&
@@ -772,9 +785,11 @@ export function createApp(
   // from where that one person can be: see `singleUserRefusal`.
   const requireUser = config.singleUser
     ? createDevRequireUser(config.singleUserAccess)
-    : auth && roleRepository
-      ? createRequireUser(auth, roleRepository)
-      : authenticationUnavailable;
+    : config.auth?.casdoor && !auth?.resolveBusinessAccess
+      ? authenticationUnavailable
+      : auth && roleRepository
+        ? createRequireUser(auth, roleRepository)
+        : authenticationUnavailable;
   // Enterprise controls: capability switches and the model allowlist in front of the routes they
   // govern, the admin screen's API, and the SCIM verbs the GET/POST auth handler above does not take.
   app.use("/api/*", createEnterpriseGate(requireUser));
@@ -840,6 +855,33 @@ export function createApp(
     ),
   );
 
+  app.get("/api/workspace", requireUser, (context) =>
+    context.var.actor.workspace
+      ? context.json({ workspace: context.var.actor.workspace })
+      : context.json({ error: "WORKSPACE_REQUIRED" }, 403),
+  );
+  app.patch("/api/workspace", requireUser, async (context) => {
+    if (!context.var.actor.workspace || !coworker?.workspaceStore)
+      return context.json({ error: "WORKSPACE_REQUIRED" }, 403);
+    const body = z
+      .object({ name: z.string().trim().min(1).max(80) })
+      .strict()
+      .safeParse(await context.req.json().catch(() => null));
+    if (!body.success)
+      return context.json({ error: "Invalid workspace name." }, 400);
+    const workspace = await coworker.workspaceStore.rename(
+      context.var.actor.id,
+      body.data.name,
+    );
+    return context.json({
+      workspace: workspace && {
+        id: workspace.id,
+        name: workspace.name,
+        ownerUserId: workspace.ownerUserId,
+        role: "owner",
+      },
+    });
+  });
   app.get("/api/me", requireUser, async (context) =>
     context.json({
       user: {
@@ -1591,6 +1633,19 @@ export function createApp(
      * address is a path. The page resolves a path against itself; the Recorder is not on the page, so
      * its pass is answered knowing this server's own origin as the Recorder reached it.
      */
+    if (config.auth?.casdoor)
+      app.use("/api/copilotkit/*", async (context, next) => {
+        const path = new URL(context.req.url).pathname;
+        if (
+          path === "/api/copilotkit/info" ||
+          (context.req
+            .header("authorization")
+            ?.startsWith(RECORDER_BEARER_PREFIX) &&
+            isTrajectoryConnectPath(path))
+        )
+          return next();
+        return requireUser(context, next);
+      });
     app.use("/api/copilotkit/*", createCapturePassOrigin(config));
     // Mounted at the ROOT with the handler carrying its own basePath. Mounting it at
     // "/api/copilotkit" as well double-prefixes it: Hono strips the prefix before the handler sees

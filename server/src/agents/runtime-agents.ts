@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type { ManagedAgentConfig } from "../config";
 import { type RegisteredAgent, registeredAgentFromRow } from "../copilot";
 import type { CredentialSecretReader } from "../credentials";
@@ -10,9 +10,9 @@ import {
   channelMemberships,
   channels,
 } from "../db/schema";
-import { teamBotAccess } from "../team-bots/access";
 import { agentAuthHeaders, authFromConfiguration } from "./auth-header";
 import { isManagedEndpoint } from "./managed-endpoint";
+import { profileAccessFilter } from "./profile-store";
 import type { AgentActor } from "./profile-types";
 
 /**
@@ -103,19 +103,7 @@ function selectActiveAgents(database: Database, actor: AgentActor) {
     })
     .from(agents)
     .innerJoin(agentProfiles, eq(agentProfiles.agentId, agents.id))
-    .where(
-      and(
-        isNull(agentProfiles.deletedAt),
-        actor.role === "admin"
-          ? undefined
-          : or(
-              eq(agentProfiles.visibility, "public"),
-              eq(agentProfiles.ownerUserId, actor.id),
-              // The same Team Bot rule as the roster: see team-bots/access.ts.
-              teamBotAccess(actor.id, agentProfiles.agentId),
-            ),
-      ),
-    );
+    .where(and(isNull(agentProfiles.deletedAt), profileAccessFilter(actor)));
 }
 
 /**
@@ -142,5 +130,12 @@ function selectTombstoneAgents(database: Database, actor: AgentActor) {
         eq(channelMemberships.userId, actor.id),
       ),
     )
-    .where(isNotNull(agentProfiles.deletedAt));
+    .where(
+      and(
+        isNotNull(agentProfiles.deletedAt),
+        actor.workspaceId
+          ? eq(agentProfiles.organizationId, actor.workspaceId)
+          : isNull(agentProfiles.organizationId),
+      ),
+    );
 }

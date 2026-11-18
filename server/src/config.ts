@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 /**
  * What the runtime can do. There is exactly one answer because CopilotKit Intelligence is required
  * for durable threads and memory. Configuration the product cannot function without belongs at the
@@ -107,7 +108,7 @@ export type ComputerConfig =
  * has Google or Entra or Okta and is not going to acquire another, so the shape here is a set of
  * optional providers rather than one required one, and the deployment turns on whichever it has.
  */
-export type AuthProviderId = "google" | "microsoft" | "okta";
+export type AuthProviderId = "google" | "microsoft" | "okta" | "casdoor";
 
 /** An OAuth client, as every provider here needs one. */
 export type OAuthClient = { clientId: string; clientSecret: string };
@@ -124,6 +125,7 @@ export type GithubAppConfig = {
 };
 
 export type AuthConfig = {
+  casdoor?: OAuthClient & { issuer: string };
   baseUrl: string;
   secret: string;
   trustedOrigins: string[];
@@ -168,6 +170,7 @@ export function configuredAuthProviders(
 ): AuthProviderId[] {
   if (!auth) return [];
   const providers: AuthProviderId[] = [];
+  if (auth.casdoor) return ["casdoor"];
   if (auth.google) providers.push("google");
   if (auth.microsoft) providers.push("microsoft");
   if (auth.okta) providers.push("okta");
@@ -227,6 +230,7 @@ export type SingleUserAccess = {
 };
 
 export type DeploymentConfig = {
+  listenHostname?: string;
   /**
    * Browser extension ids OpenBot trusts as the Recorder besides its own fixed id, for a fork or a
    * build signed with another key. From OPENBOT_RECORDER_EXTRA_EXTENSION_IDS, never from NODE_ENV.
@@ -888,7 +892,7 @@ function managedAgentConfig(
 
 function oauthClient(
   environment: Environment,
-  provider: "GOOGLE" | "MICROSOFT" | "OKTA",
+  provider: "GOOGLE" | "MICROSOFT" | "OKTA" | "CASDOOR",
 ): OAuthClient | undefined {
   const clientId = optional(environment, `${provider}_OAUTH_CLIENT_ID`);
   const clientSecret = optional(environment, `${provider}_OAUTH_CLIENT_SECRET`);
@@ -967,6 +971,46 @@ function authConfig(
   environment: Environment,
   google: OAuthClient | undefined,
 ): AuthConfig | undefined {
+  const mode = optional(environment, "AUTH_MODE");
+  if (mode && mode !== "casdoor") throw new Error("Unknown AUTH_MODE");
+  if (mode === "casdoor") {
+    for (const key of [
+      "OPENBOT_ORGANIZATION_AUTH_URL",
+      "GOOGLE_OAUTH_CLIENT_ID",
+      "GOOGLE_OAUTH_CLIENT_SECRET",
+      "MICROSOFT_OAUTH_CLIENT_ID",
+      "MICROSOFT_OAUTH_CLIENT_SECRET",
+      "OKTA_OAUTH_CLIENT_ID",
+      "OKTA_OAUTH_CLIENT_SECRET",
+      "INITIAL_ADMIN_EMAILS",
+      "SIGNIN_ALLOWED_EMAIL_DOMAINS",
+      "SCIM_BEARER_TOKEN",
+      "EXPO_PROJECT_ID",
+    ]) {
+      if (optional(environment, key))
+        throw new Error(`Casdoor mode conflicts with ${key}`);
+    }
+    if (environment.OPENBOT_SINGLE_USER !== "false")
+      throw new Error("Casdoor requires OPENBOT_SINGLE_USER=false");
+    const issuer = url(environment, "CASDOOR_OAUTH_ISSUER");
+    const client = oauthClient(environment, "CASDOOR");
+    const baseUrl = url(environment, "BETTER_AUTH_URL");
+    const secret = optional(environment, "BETTER_AUTH_SECRET");
+    if (!issuer || !client || !baseUrl || !secret || secret.length < 32)
+      throw new Error(
+        "Casdoor requires issuer, client, Better Auth URL and secret (32+ characters)",
+      );
+    if (new URL(issuer).origin !== issuer)
+      throw new Error("Casdoor issuer must be an origin");
+    return {
+      baseUrl,
+      secret,
+      trustedOrigins: commaSeparated(environment, "TRUSTED_ORIGINS"),
+      initialAdminEmails: [],
+      allowedEmailDomains: [],
+      casdoor: { ...client, issuer },
+    };
+  }
   const microsoft = microsoftAuth(environment);
   const okta = oktaAuth(environment);
 
@@ -1654,9 +1698,13 @@ export function loadConfig(
   )?.replace(/\/+$/, "");
 
   const edition = parseEdition(optional(environment, "OPENBOT_EDITION"));
+  const listenHostname = optional(environment, "OPENBOT_LISTEN_HOSTNAME");
+  if (listenHostname && !isIP(listenHostname))
+    throw new Error("OPENBOT_LISTEN_HOSTNAME must be an IP address");
 
   // Built first and checked after, so every refusal the team edition gives keeps its order.
   const loaded = {
+    ...(listenHostname ? { listenHostname } : {}),
     port: serverPort(environment),
     transcription: transcriptionConfig(environment),
     voice: voiceConfig(environment),
@@ -1739,6 +1787,7 @@ const PROVIDER_VARIABLE: Record<AuthProviderId, string> = {
   google: "GOOGLE_OAUTH_CLIENT_ID",
   microsoft: "MICROSOFT_OAUTH_CLIENT_ID",
   okta: "OKTA_OAUTH_CLIENT_ID",
+  casdoor: "CASDOOR_OAUTH_CLIENT_ID",
 };
 
 /**

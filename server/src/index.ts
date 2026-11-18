@@ -32,7 +32,6 @@ import {
   readRunAssertion,
 } from "./agents/callback-token";
 import { canUseComputer } from "./agents/computer-access";
-import { isUnattended, runModeOf } from "./agents/run-mode";
 import { wireCoordination } from "./agents/coordination-wiring";
 import { createAgentFetch } from "./agents/endpoint";
 import { createHandoffDesk } from "./agents/handoff";
@@ -46,6 +45,7 @@ import {
 import { createBotReset } from "./agents/lifecycle-reset";
 import { createAgentProfileStore } from "./agents/profile-store";
 import type { AgentActor } from "./agents/profile-types";
+import { isUnattended, runModeOf } from "./agents/run-mode";
 import { createRuntimeAgentLoader } from "./agents/runtime-agents";
 import { createSubagents, SUBAGENT_HANDED_BACK } from "./agents/subagent";
 import { toolLimitRecorder } from "./agents/tool-limit";
@@ -82,6 +82,8 @@ import {
 import { readAuditVocabulary } from "./audit-ask";
 import { startRetentionSweeps } from "./audit-retention";
 import { createAuth, sessionLifetimeMs } from "./auth";
+import { createBusinessAccess } from "./auth/business-access";
+import { validateCasdoorDiscovery } from "./auth/casdoor";
 import { DEV_ACTOR, initializeDevActorUser } from "./auth/dev-actor";
 import { createEntra, withEntraBearer } from "./auth/entra";
 import type { AuthService } from "./auth/guards";
@@ -213,12 +215,12 @@ import {
   createLearningModelCalls,
   learningModelEndpointFor,
 } from "./learning/model-endpoint";
-import { learningModelUnavailable } from "./learning/routes";
 import { createLearningPeople } from "./learning/people";
 import {
   createPersonalLearningSpaces,
   createPersonSpaceStore,
 } from "./learning/personal-space";
+import { learningModelUnavailable } from "./learning/routes";
 import { clearLearningRevisionFallback } from "./learning/runtime";
 import { learningScopes } from "./learning/scopes";
 import {
@@ -357,6 +359,7 @@ import { createVoiceSummarizer } from "./voice/summary";
 import { readAuditEvent, readWhatIfVocabulary } from "./what-if";
 import { repeatAfterEach } from "./work/loop";
 import { createWorkQueue, type WorkOfferedListener } from "./work/queue";
+import { createWorkspaceStore } from "./workspaces/store";
 
 const config = loadConfig();
 // Before anything resolves a capability or reads an enterprise setting. See edition.ts.
@@ -590,6 +593,8 @@ const organizationAuth = config.organizationAuthUrl
     })
   : undefined;
 // Its own const so the Recorder's connections can last as long as one of its sessions does.
+if (config.auth?.casdoor)
+  await validateCasdoorDiscovery(config.auth.casdoor.issuer);
 const betterAuth =
   !organizationAuth && config.auth
     ? createAuth(
@@ -623,9 +628,16 @@ const entra: ReturnType<typeof createEntra> | undefined =
 const auth: AuthService | undefined =
   organizationAuth ??
   (betterAuth && entra ? withEntraBearer(betterAuth, entra) : betterAuth);
+if (auth && config.auth?.casdoor)
+  auth.resolveBusinessAccess = createBusinessAccess(
+    auth,
+    database,
+    config.auth.casdoor.issuer,
+  );
 const { resolveRequestActor, identifyUser, identifyActor } = createRequestActor(
   {
     singleUser: config.singleUser,
+    resolveBusinessAccess: auth?.resolveBusinessAccess,
     // Answered only on the capture pass. Called per request, after the Recorder's wiring below exists.
     resolveRecorder: (request) => recorderExtension.resolve(request),
     getSession: async (headers) =>
@@ -734,6 +746,15 @@ const actorFor = async (ownerUserId: string): Promise<AgentActor> => {
   // rewritten to DEV_ACTOR's: in this mode they are the same person, and if they ever were not,
   // silently borrowing the dev actor's identity would be worse than finding nothing.
   if (config.singleUser) return { id: ownerUserId, role: DEV_ACTOR.role };
+  if (config.auth?.casdoor) {
+    const [user] = await database
+      .select({ verified: users.emailVerified })
+      .from(users)
+      .where(eq(users.id, ownerUserId));
+    const workspace = await createWorkspaceStore(database).read(ownerUserId);
+    if (!user?.verified || !workspace) throw new Error("WORKSPACE_REQUIRED");
+    return { id: ownerUserId, role: "user", workspaceId: workspace.id };
+  }
   const roles = await roleRepository.rolesForUser(ownerUserId);
   if (!roles.includes("admin") && !roles.includes("user")) {
     throw new Error("A routine requires an authorized owner.");
@@ -3155,6 +3176,9 @@ const app = createApp(
     recordingTitles: recorderExtension.recordingTitles,
   },
   {
+    workspaceStore: config.auth?.casdoor
+      ? createWorkspaceStore(database)
+      : undefined,
     productTelemetry,
     approvals: approvalService,
     shared: { modes: accountModes, use: sharedUseStore },
@@ -3417,4 +3441,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-console.info(`OpenBot server listening on http://127.0.0.1:${port}`);
+console.info(
+  `OpenBot server listening on http://${config.listenHostname ?? "0.0.0.0"}:${port}`,
+);
