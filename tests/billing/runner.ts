@@ -568,6 +568,20 @@ async function lagoPhase(
       detail: m.out.slice(0, 120),
     });
 
+    const w = api("/api/v1/billable_metrics", {
+      billable_metric: {
+        name: "warmup metric",
+        code: "warmup_metric",
+        aggregation_type: "sum_agg",
+        field_name: "ping",
+      },
+    });
+    steps.push({
+      step: "create warmup billable metric (never charged)",
+      ok: w.code === 200,
+      detail: w.out.slice(0, 120),
+    });
+
     const planCode = `zero_${runId.slice(-6)}`;
     const p = api("/api/v1/plans", {
       plan: {
@@ -668,6 +682,7 @@ async function lagoPhase(
     // not aggregate a future-dated event, and the live window began when the
     // subscription started, so both land inside it.
     const nowSecInt = BigInt(Math.floor(Date.now() / 1000));
+    const nowWarm = `${nowSecInt - 2n}`;
     const events: [string, string, string][] = [
       [
         `evt_${runId}_a`,
@@ -679,6 +694,29 @@ async function lagoPhase(
     // Events name the SUBSCRIPTION explicitly: Lago routes metering to the
     // subscription's live window deterministically (a customer-only event is
     // not attached to the running aggregation).
+    // PIPELINE WARM-UP: one event on a SEPARATE, UNCHARGED billable metric,
+    // routed to the same subscription. Ingestion -> EventsProcessedJob ->
+    // charge lookup runs the whole async pipeline once, so the worker's cold
+    // first pass (minutes on an emulated host) happens on THIS event instead
+    // of delaying the two measured events below. It carries no `tokens`
+    // aggregation into model_input_tokens (different metric, no charge), so
+    // the zero-receivable assertion still answers REAL measured usage only.
+    const warmup = api("/api/v1/events", {
+      event: {
+        transaction_id: `evt_${runId}_warmup`,
+        external_customer_id: customer,
+        external_subscription_id: `sub_${runId.slice(-8)}`,
+        code: "warmup_metric",
+        timestamp: `${nowWarm}`,
+        properties: { ping: 1 },
+      },
+    });
+    steps.push({
+      step: "pipeline warm-up event (uncharged metric)",
+      ok: warmup.code === 200,
+      detail: warmup.out.slice(0, 120),
+    });
+
     for (const [id, ts, us] of events) {
       const e = api("/api/v1/events", {
         event: {
@@ -714,7 +752,9 @@ async function lagoPhase(
           properties?: Record<string, unknown>;
         }[];
       };
-      const got = parsed.events ?? [];
+      const got = (parsed.events ?? []).filter(
+        (e) => e.code === "model_input_tokens",
+      );
       const expected = new Map(events.map(([id, , us]) => [id, us]));
       const mine = got.filter((e) => expected.has(e.transaction_id ?? ""));
       eventSetOk =
@@ -727,7 +767,7 @@ async function lagoPhase(
             String(e.properties?.occurrence_us) ===
               expected.get(e.transaction_id ?? ""),
         );
-      eventSetDetail = `exact set of ${mine.length}/2 events, nonzero fields and integer microseconds verified`;
+      eventSetDetail = `exact set of ${mine.length}/2 model_input_tokens events, nonzero fields and integer microseconds verified`;
     } catch (err) {
       eventSetDetail = `unparseable event list: ${err instanceof Error ? err.message : String(err)}`;
     }
@@ -753,8 +793,13 @@ async function lagoPhase(
       typeof v === "number"
         ? Number.isInteger(v) && v === 0
         : typeof v === "string" && /^(0+)$/.test(v);
-    for (let attempt = 0; attempt < 20 && !zeroReceivable; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+    // A deadline of ~8 minutes, not 60 seconds: on a cold (emulated) host the
+    // Lago worker's first aggregation passes can lag the API's own readiness
+    // by minutes. The warm-up event above absorbs that cold pass; the loop
+    // still exits on the FIRST passing poll -- the deadline only bounds
+    // failure, it never delays success.
+    for (let attempt = 0; attempt < 100 && !zeroReceivable; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 5000));
       const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
       const usage = api(
         `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
