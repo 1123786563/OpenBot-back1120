@@ -533,24 +533,14 @@ async function runFull(): Promise<number> {
     console.log("  PASS guard accepts this run's isolated target");
 
     console.log("  phase: compose up --wait (PostgreSQL 17 + Lago CE v1.57.0 + ledger driver)");
-    const up = composeArgs(project, ["up", "-d", "--wait"], composeEnv);
+    // SHORT-LIVED compose invocations only: a single long-running
+    // `up -d --wait` over the whole service set re-reconciles continuously on
+    // compose v5.5.0 and recreates containers. Each phase below brings up
+    // exactly what it needs and exits.
+    const up = composeArgs(project, ["up", "-d", "--wait", "postgres", "ledger-app"], composeEnv);
     upOk = up.code === 0;
     if (!upOk) {
       console.error(`  FAIL compose up failed:\n${up.out.slice(-2000)}`);
-      return 2;
-    }
-
-    // Lago schema migration runs ONCE and synchronously (compose run): a
-    // service_completed_successfully dependency under `up --wait` makes the
-    // reconciler re-run the exited migrator and recreate its dependents in a
-    // loop — observed live on compose v5.5.0.
-    const lagoMigrate = sh(
-      `${COMPOSE} -f tests/billing/compose.yml --profile migrate -p ${project} run --rm lago-migrate`,
-      { env: { ...process.env, ...composeEnv } },
-    );
-    console.log(`    lago-migrate exit=${lagoMigrate.code}`);
-    if (lagoMigrate.code !== 0) {
-      console.error(`  FAIL lago-migrate failed:\n${lagoMigrate.out.slice(-1500)}`);
       return 2;
     }
 
@@ -566,6 +556,22 @@ async function runFull(): Promise<number> {
       return 2;
     }
     // the JS probe is passed single-quoted so the host shell never touches it
+    // Lago for AC7: dedicated short-lived bring-up, one-shot migration, then
+    // the health probe from the ledger driver network.
+    const lagoUp = composeArgs(project, ["up", "-d", "--wait", "lago-db", "lago-redis", "lago-api"], composeEnv);
+    if (lagoUp.code !== 0) {
+      console.error(`  FAIL Lago bring-up failed:\n${lagoUp.out.slice(-1500)}`);
+      return 2;
+    }
+    const lagoMigrate = sh(
+      `${COMPOSE} -f tests/billing/compose.yml --profile migrate -p ${project} run --rm lago-migrate`,
+      { env: { ...process.env, ...composeEnv } },
+    );
+    console.log(`    lago-migrate exit=${lagoMigrate.code}`);
+    if (lagoMigrate.code !== 0) {
+      console.error(`  FAIL lago-migrate failed:\n${lagoMigrate.out.slice(-1500)}`);
+      return 2;
+    }
     const lagoHealth = composeArgs(project, [
       "exec", "-T", appContainer,
       "bun", "-e",
