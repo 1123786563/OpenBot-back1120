@@ -66,3 +66,4 @@ extension/**/*.pem
 .copilotkit/
 .openbot/
 .scratch/
+.env.openbot-installation-id
