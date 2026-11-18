@@ -551,10 +551,11 @@ async function runFull(): Promise<number> {
       console.error("  FAIL the database is not the pinned PostgreSQL 17 (identity check)");
       return 2;
     }
+    // the JS probe is passed single-quoted so the host shell never touches it
     const lagoHealth = composeArgs(project, [
       "exec", "-T", appContainer,
       "bun", "-e",
-      `const r = await fetch("http://lago-api:3000/health", {signal: AbortSignal.timeout(120000)}); console.log("lago healthz", r.status, (await r.text()).slice(0,120));`,
+      `'const r = await fetch("http://lago-api:3000/health", {signal: AbortSignal.timeout(120000)}); console.log("lago health", r.status, (await r.text()).slice(0,120));'`,
     ]);
     if (lagoHealth.code !== 0 || !lagoHealth.out.includes("lago healthz 2")) {
       console.error(`  FAIL Lago health check did not pass: ${lagoHealth.out.slice(-500)}`);
