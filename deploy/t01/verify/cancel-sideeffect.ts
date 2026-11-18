@@ -142,18 +142,19 @@ let prev = growth.lines;
 for (let i = 0; i < 65; i++) {
   await Bun.sleep(1000);
   const [n, procs] = [await lines(), await loopProcs()];
-  samples.push({ t: Date.now() - cancelAt, lines: n, procs });
+  const elapsed = Date.now() - cancelAt;
+  samples.push({ t: elapsed, lines: n, procs });
   if (settledAt === null && i >= 3) {
     const recent = samples.slice(-4).map((s) => s.lines);
     if (recent.every((v) => v === recent[0])) settledAt = recent[0];
   }
   if (n !== prev) prev = n;
   if (i % 5 === 0)
-    console.log(`    t+${samples.at(-1)!.t / 1000}s lines=${n} procs=${procs}`);
+    console.log(`    t+${elapsed / 1000}s lines=${n} procs=${procs}`);
 }
 const finalLines = (await lines()) ?? 0;
 const finalProcs = await loopProcs();
-assert.ok(samples.at(-1)!.t >= 60000, "observe at least 60 seconds");
+assert.ok((samples.at(-1)?.t ?? 0) >= 60000, "observe at least 60 seconds");
 const stopMs =
   settledAt === null
     ? null

@@ -82,7 +82,6 @@ test("denied domains never reach initialization", async () => {
       events.push(event);
     },
   });
-  const ctx = await auth.$context;
   await expect(
     newUser(auth, `t01-${randomUUID()}@other.test`),
   ).rejects.toThrow();

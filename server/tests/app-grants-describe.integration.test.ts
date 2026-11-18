@@ -489,6 +489,7 @@ describe("describing a Bot's actions in one app", () => {
     );
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
+      code: "permission_denied",
       error: "Only an admin can choose which Bots use a tool.",
       problems: [
         {

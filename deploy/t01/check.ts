@@ -21,7 +21,9 @@ assert.equal(process.env.BETTER_AUTH_URL, "http://localhost:13001");
 assert.equal(process.env.OKTA_OAUTH_ISSUER, "http://localhost:18000");
 assert.equal(process.env.TRUSTED_ORIGINS, "http://localhost:13001");
 for (const key of ["DATABASE_URL", "TEST_DATABASE_URL"]) {
-  const u = new URL(process.env[key]!);
+  const value = process.env[key];
+  assert.ok(value, `${key} is required`);
+  const u = new URL(value);
   assert.equal(u.hostname, "127.0.0.1");
   assert.equal(u.port, "55432");
   assert.equal(

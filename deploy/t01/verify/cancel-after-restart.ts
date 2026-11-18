@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 const dir = "deploy/t01/.runtime/";
-const proof = await Bun.file(dir + "sideeffect-cancel-result.json").json();
+const proof = await Bun.file(`${dir}sideeffect-cancel-result.json`).json();
 assert.equal(proof.passed, true);
-const s = await Bun.file(dir + "browser-b.json").json();
+const s = await Bun.file(`${dir}browser-b.json`).json();
 const cookie = s.cookies
   .filter((c: { domain: string }) => c.domain === "localhost")
   .map((c: { name: string; value: string }) => `${c.name}=${c.value}`)
   .join("; ");
 async function api(path: string) {
-  const r = await fetch("http://localhost:13001" + path, {
+  const r = await fetch(`http://localhost:13001${path}`, {
     headers: { cookie },
   });
   assert.equal(r.status, 200);
@@ -54,7 +54,7 @@ for (let i = 0; i < 31; i++) {
 }
 assert.ok(Date.now() - started >= 60000);
 await Bun.write(
-  dir + "cancel-restart-result.json",
+  `${dir}cancel-restart-result.json`,
   JSON.stringify(
     { passed: true, routineId: proof.routineId, samples },
     null,

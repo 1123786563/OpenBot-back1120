@@ -19,7 +19,7 @@ async (page) => {
         await c.request.get("http://localhost:13001/api/me")
       ).status();
       if (r.status() !== 401 || me !== 401 || j.code !== "INVALID_TOKEN")
-        throw new Error(scenario + " unexpectedly accepted");
+        throw new Error(`${scenario} unexpectedly accepted`);
       results.push({ scenario, status: r.status(), error: j.code, me });
     } finally {
       await c.close();

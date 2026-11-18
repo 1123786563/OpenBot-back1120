@@ -3,9 +3,9 @@ import { chmodSync, rmSync } from "node:fs";
 import { resolveObserver } from "./control-target";
 const root = "deploy/t01/.runtime/";
 const base = "http://localhost:13001";
-rmSync(root + "control-replay-ready", { force: true });
-rmSync(root + "control-replay-restarted", { force: true });
-const state = await Bun.file(root + "browser-a-current.json").json();
+rmSync(`${root}control-replay-ready`, { force: true });
+rmSync(`${root}control-replay-restarted`, { force: true });
+const state = await Bun.file(`${root}browser-a-current.json`).json();
 const cookie = state.cookies
   .filter((c: { domain: string }) => c.domain === "localhost")
   .map((c: { name: string; value: string }) => `${c.name}=${c.value}`)
@@ -113,10 +113,10 @@ const revoked = await api(
 );
 assert.equal(revoked.status, 200);
 assert.ok(revoked.body.ended >= 1);
-await Bun.write(root + "control-replay-old-state.json", JSON.stringify(state));
-chmodSync(root + "control-replay-old-state.json", 0o600);
+await Bun.write(`${root}control-replay-old-state.json`, JSON.stringify(state));
+chmodSync(`${root}control-replay-old-state.json`, 0o600);
 async function handshake() {
-  const r = await fetch(base + "/api/computers/general-assistant/terminal", {
+  const r = await fetch(`${base}/api/computers/general-assistant/terminal`, {
     headers: {
       cookie,
       origin: base,
@@ -155,19 +155,19 @@ async function observe(seconds: number) {
   assert.ok(Date.now() - at >= seconds * 1000);
 }
 await observe(60);
-rmSync(root + "control-replay-restarted", { force: true });
-await Bun.write(root + "control-replay-ready", "ready");
+rmSync(`${root}control-replay-restarted`, { force: true });
+await Bun.write(`${root}control-replay-ready`, "ready");
 console.log(
   "Stopped socket closed; old send and revoked handshake refused; 60 seconds stable. Ready for dedicated stack restart.",
 );
 for (
   let n = 0;
-  n < 600 && !(await Bun.file(root + "control-replay-restarted").exists());
+  n < 600 && !(await Bun.file(`${root}control-replay-restarted`).exists());
   n++
 )
   await Bun.sleep(1000);
 assert.ok(
-  await Bun.file(root + "control-replay-restarted").exists(),
+  await Bun.file(`${root}control-replay-restarted`).exists(),
   "restart confirmation missing",
 );
 replay("after-restart");
@@ -186,7 +186,7 @@ const result = {
   passed: true,
   container,
   observer,
-  stopMs: closedAt! - stopAt,
+  stopMs: closedAt - stopAt,
   replays,
   rejectedBefore,
   rejectedAfter,
@@ -194,7 +194,7 @@ const result = {
   samples,
 };
 await Bun.write(
-  root + "control-replay-result.json",
+  `${root}control-replay-result.json`,
   JSON.stringify(result, null, 2),
 );
 console.log(

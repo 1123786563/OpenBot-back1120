@@ -35,11 +35,11 @@ const credentials = JSON.parse(
   ).trim(),
 );
 const headers = {
-  Authorization: `Basic ${Buffer.from(credentials.clientId + ":" + credentials.clientSecret).toString("base64")}`,
+  Authorization: `Basic ${Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`).toString("base64")}`,
   "Content-Type": "application/json",
 };
 async function api(path: string, body?: unknown) {
-  const r = await fetch("http://localhost:18000/api/" + path, {
+  const r = await fetch(`http://localhost:18000/api/${path}`, {
     headers,
     ...(body ? { method: "POST", body: JSON.stringify(body) } : {}),
   });
@@ -101,7 +101,7 @@ for (const [name, email] of [
     );
     continue;
   }
-  const password = "T01!" + randomBytes(24).toString("hex");
+  const password = `T01!${randomBytes(24).toString("hex")}`;
   await api("add-user", {
     owner: "openbot-t01",
     name,
