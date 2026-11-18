@@ -465,6 +465,13 @@ function holdsCurrentToken(
  * forwarding must not start recreating its computers over a driver it never set — the desktop and
  * the CLI pass no address, and their computers were never meant to ship logs anywhere.
  *
+ * Decommissioning is the one exception to that, and it is asked for explicitly
+ * (`COMPUTER_LOG_FORWARD_RETIRED`, only honoured when no address is set): a computer whose driver
+ * is still fluentd after the forwarding address is gone would go on pushing every line at a
+ * listener nobody reads, and accepting any old driver silently would leave the operator a config
+ * that says "off" while the containers say otherwise. Asked for, the fluentd computers are replaced
+ * with the default driver, volumes intact, like any other driver change.
+ *
  * Like the image and token checks, this is checked at ensure time rather than by a sweeper, so the
  * swap happens when the computer is next asked for, in a maintenance window that an operator picks
  * by when they restart the supervisor and touch each Bot.
@@ -472,10 +479,15 @@ function holdsCurrentToken(
 function logIsCurrent(
   existing: LogConfig | undefined,
   wanted: LogConfig | undefined,
+  retireDriver = false,
 ): boolean {
-  if (!wanted) return true;
+  if (!wanted) {
+    return !(retireDriver && existing?.Type === "fluentd");
+  }
   if (!existing) return false;
-  return existing.Type === wanted.Type && sameEntries(existing.Config, wanted.Config);
+  return (
+    existing.Type === wanted.Type && sameEntries(existing.Config, wanted.Config)
+  );
 }
 
 /**
@@ -589,6 +601,14 @@ export type EnsureOptions = {
    * do not pass an address) keep the behaviour they had.
    */
   logConfig?: LogConfig;
+  /**
+   * Decommission log forwarding: replace computers that still carry a fluentd driver with Docker's
+   * default one, volumes intact. Only meaningful with no `logConfig` — a deployment that asked for
+   * forwarding is not decommissioning it — and never set on its own initiative: it answers
+   * `COMPUTER_LOG_FORWARD_RETIRED`, a step an operator takes deliberately (see
+   * docs/observability-openobserve.md).
+   */
+  retireLogDriver?: boolean;
 };
 
 /**
@@ -718,7 +738,11 @@ export async function ensure(
       (!(await runsCurrentImage(existing.image, options.image)) ||
         !holdsCurrentToken(existing.token, options.environment) ||
         !existing.packageCapabilities ||
-        !logIsCurrent(existing.logConfig, options.logConfig) ||
+        !logIsCurrent(
+          existing.logConfig,
+          options.logConfig,
+          options.retireLogDriver,
+        ) ||
         (existing.status !== "running" &&
           !(await onLiveNetwork(existing.networks, options.network))))
     ) {

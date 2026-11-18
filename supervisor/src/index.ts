@@ -93,6 +93,18 @@ const computerLogConfig = logForwardAddress
 const carryOverLogConfig = logForwardAddress
   ? fluentdLogConfig(logForwardAddress, "openbot.carry-over")
   : undefined;
+/**
+ * Decommissioning log forwarding, asked for explicitly rather than implied.
+ *
+ * Removing the address alone leaves fluentd computers pushing at a listener nobody reads, and
+ * this process accepting any old driver would hide that. With `COMPUTER_LOG_FORWARD_RETIRED=1`
+ * and no address, ensure replaces fluentd computers with Docker's default driver — volumes
+ * intact — after which the flag can be cleared and the deployment looks like one that never
+ * forwarded. Ignored while an address is set: that is a cutover, not a decommission.
+ */
+const retireLogDriver =
+  !logForwardAddress &&
+  process.env.COMPUTER_LOG_FORWARD_RETIRED?.trim() === "1";
 
 const app = new Hono();
 
@@ -172,6 +184,7 @@ app.post("/computers/:kind/:id/ensure", async (context) => {
       ...(memoryBytes ? { memoryBytes } : {}),
       ...(spireSocketVolume ? { spireSocketVolume } : {}),
       ...(computerLogConfig ? { logConfig: computerLogConfig } : {}),
+      ...(retireLogDriver ? { retireLogDriver: true } : {}),
     });
     /*
      * After the computer is up, before the server is answered: the server sends the Bot nothing until

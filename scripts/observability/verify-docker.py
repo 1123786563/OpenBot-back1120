@@ -262,9 +262,15 @@ class ModelMock:
         self.marker_keys = marker_keys          # key -> value; recorded as keys only
         self.crash_trigger = crash_trigger
         self.tool_trigger = tool_trigger
+        self.fail_trigger = marker_keys.get("fail-trigger", "")
         self.tool_delay_seconds = tool_delay_seconds
         # {"path": ..., "marker_keys_seen": [...], "tool_callback": bool, "completed": bool}
         self.received = []
+        # The runner's Phoenix channel: topics joined ("ingestion:<runId>"), the AG-UI event
+        # types the runner pushed over each topic, and any frame the handler could not speak.
+        # A run whose topic joined and whose RUN_FINISHED arrived is a turn this stack really
+        # carried end to end — the correlation evidence, not a scripted claim.
+        self.ws = {"joined": [], "events": [], "frames": 0, "unhandled": 0}
         self.lock = threading.Lock()
         mock = self
 
@@ -303,6 +309,56 @@ class ModelMock:
                 self.wfile.write(b"data: [DONE]\n\n")
                 self.wfile.flush()
 
+            def _responses_sse(self, model):
+                """One streamed Responses API turn: a completed assistant message.
+
+                The event shapes follow what the platform streams (the same events
+                @copilotkit/aimock emits for a plain message): created, in-progress, one message
+                item added with its text delta, then the item and the response completed.
+                """
+                content = mock.marker_keys["model-output"]
+                resp_id = f"resp_verify_{uuid4().hex[:24]}"
+                msg_id = f"msg_verify_{uuid4().hex[:24]}"
+                created = int(time.time())
+                in_progress = {"id": resp_id, "object": "response", "created_at": created,
+                               "model": model, "status": "in_progress", "output": []}
+                message_item = {"type": "message", "id": msg_id, "status": "completed",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": content,
+                                             "annotations": []}]}
+                events = [
+                    {"type": "response.created", "response": dict(in_progress)},
+                    {"type": "response.in_progress", "response": dict(in_progress)},
+                    {"type": "response.output_item.added", "output_index": 0,
+                     "item": {"type": "message", "id": msg_id, "status": "in_progress",
+                              "role": "assistant", "content": []}},
+                    {"type": "response.content_part.added", "item_id": msg_id,
+                     "output_index": 0, "content_index": 0,
+                     "part": {"type": "output_text", "text": "", "annotations": []}},
+                    {"type": "response.output_text.delta", "item_id": msg_id,
+                     "output_index": 0, "content_index": 0, "delta": content},
+                    {"type": "response.output_text.done", "item_id": msg_id,
+                     "output_index": 0, "content_index": 0, "text": content},
+                    {"type": "response.content_part.done", "item_id": msg_id,
+                     "output_index": 0, "content_index": 0,
+                     "part": {"type": "output_text", "text": content, "annotations": []}},
+                    {"type": "response.output_item.done", "output_index": 0,
+                     "item": message_item},
+                    {"type": "response.completed", "response": {
+                        "id": resp_id, "object": "response", "created_at": created,
+                        "model": model, "status": "completed", "output": [message_item],
+                        "usage": {"input_tokens": 1, "input_tokens_details": {"cached_tokens": 0},
+                                  "output_tokens": 1,
+                                  "output_tokens_details": {"reasoning_tokens": 0},
+                                  "total_tokens": 2}}},
+                ]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for event in events:
+                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                self.wfile.flush()
+
             def do_POST(self):
                 body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
                 try:
@@ -311,6 +367,19 @@ class ModelMock:
                     text, payload = body.decode("utf-8", "ignore"), {}
                 if self.path.endswith("/chat/completions"):
                     self._note(text, callback=False)
+                    if mock.fail_trigger and mock.fail_trigger in text:
+                        # The real model failure: the provider answers 500 and the Bot's own
+                        # error path runs — the diagnostic line this stack then checks for in the
+                        # collector's sent payloads and in OpenObserve is that Bot's, not a
+                        # fixture's.
+                        data = json.dumps({"error": {"message": "upstream unavailable",
+                                                     "type": "server_error"}}).encode()
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
                     messages = payload.get("messages") or []
                     saw_tool_result = any(m.get("role") == "tool" for m in messages)
                     if saw_tool_result:
@@ -332,6 +401,28 @@ class ModelMock:
                             time.sleep(mock.tool_delay_seconds)
                         self._sse([({"role": "assistant",
                                      "content": mock.marker_keys["model-output"]}, "stop")])
+                    with mock.lock:
+                        mock.received[-1]["completed"] = True
+                elif self.path.endswith("/responses"):
+                    # The Responses API, which the built-in Bots' model is called on whenever the
+                    # model takes tools only there (gpt-5.6-* does). A completed assistant message
+                    # is streamed back the way the platform streams one; the same failure and
+                    # hold rules as /chat/completions apply.
+                    self._note(text, callback=False)
+                    if mock.fail_trigger and mock.fail_trigger in text:
+                        data = json.dumps({"error": {"message": "upstream unavailable",
+                                                     "type": "server_error"}}).encode()
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
+                    if mock.crash_trigger in text:
+                        # Hold the turn open so the run is provably in flight when the database
+                        # is stopped underneath it.
+                        time.sleep(mock.tool_delay_seconds)
+                    self._responses_sse(payload.get("model") or "gpt-5.6-verify")
                     with mock.lock:
                         mock.received[-1]["completed"] = True
                 elif "agent-tools/call" in self.path:
@@ -358,22 +449,27 @@ class ModelMock:
 
             # ---- A minimal Phoenix channel over WebSocket. ----
             #
-            # The turn runner drives every run over the gateway socket: it connects, joins the
-            # thread's channel and waits for the join reply before the run starts, then expects an
-            # ack (phx_reply ok) per pushed event. The gateway here accepts and acks everything,
-            # which is all the client needs to run the turn against the Bot.
+            # The turn runner drives every run over the gateway socket, and Phoenix speaks
+            # five-element array frames on the wire: [joinRef, ref, topic, event, payload]. The
+            # runner joins `ingestion:<runId>` per run, waits for the join reply (phx_reply ok)
+            # before the run starts, pushes its AG-UI events as `event`/`events` frames, and keeps
+            # the connection alive with heartbeats. This gateway accepts and acks every frame —
+            # what OpenBot's own Intelligence test fakes answer, and all a local runner needs to
+            # carry a turn end to end. Frames the handler cannot speak are counted and surfaced
+            # as a fixture failure, never swallowed: a protocol this mock quietly failed to
+            # speak once turned into 4,678 handler exceptions under a passing exit code.
 
-            def _ws_send(self, message):
-                frame = json.dumps(message).encode()
+            def _ws_send(self, frame):
+                message = json.dumps(frame).encode()
                 header = bytearray([0x81])
-                length = len(frame)
+                length = len(message)
                 if length < 126:
                     header.append(length)
                 elif length < 65536:
                     header += bytes([126, length >> 8, length & 0xFF])
                 else:
                     header += bytes([127]) + length.to_bytes(8, "big")
-                self.wfile.write(bytes(header) + frame)
+                self.wfile.write(bytes(header) + message)
                 self.wfile.flush()
 
             def _websocket(self):
@@ -392,13 +488,9 @@ class ModelMock:
                 self.send_header("Sec-WebSocket-Accept", accept)
                 requested_protocol = self.headers.get("Sec-WebSocket-Protocol")
                 if requested_protocol:
-                    # The client offers "phoenix" and "base64url.bearer.phx.<token>": the bearer
-                    # protocol is how the runner authenticates this socket, and selecting it is
-                    # what tells the client the connection may carry its channel.
-                    bearer = next((candidate.strip() for candidate in requested_protocol.split(",")
-                                   if candidate.strip().startswith("base64url.bearer.")), None)
-                    self.send_header("Sec-WebSocket-Protocol",
-                                     bearer or requested_protocol.split(",")[0].strip())
+                    # The client offers "phoenix" and "base64url.bearer.phx.<token>"; the answer
+                    # names the channel protocol, the way OpenBot's own test fakes do.
+                    self.send_header("Sec-WebSocket-Protocol", "phoenix")
                 self.end_headers()
                 try:
                     while True:
@@ -420,14 +512,34 @@ class ModelMock:
                             message = json.loads(payload.decode("utf-8", "ignore"))
                         except ValueError:
                             continue
-                        ref = message.get("ref")
-                        topic = message.get("topic", "")
-                        if ref is not None:
-                            self._ws_send({"topic": topic, "event": "phx_reply",
-                                           "payload": {"status": "ok", "response": {}},
-                                           "ref": ref})
+                        try:
+                            self._ws_frame(message)
+                        except Exception:     # noqa: BLE001 - counted, surfaced, never silent
+                            with mock.lock:
+                                mock.ws["unhandled"] += 1
                 except (OSError, ValueError):
                     return
+
+            def _ws_frame(self, message):
+                # Phoenix JSON frames are five-element arrays; anything else is a fixture bug
+                # this stack must report, not absorb.
+                if not isinstance(message, list) or len(message) != 5:
+                    raise ValueError(f"not a Phoenix frame: {type(message).__name__}")
+                join_ref, ref, topic, event, frame_payload = message
+                with mock.lock:
+                    mock.ws["frames"] += 1
+                    if event == "phx_join":
+                        mock.ws["joined"].append(topic)
+                    elif event in ("event", "events"):
+                        events = frame_payload.get("events", []) if event == "events" \
+                            else [frame_payload]
+                        for pushed in events:
+                            if isinstance(pushed, dict) and pushed.get("type"):
+                                mock.ws["events"].append({"topic": topic,
+                                                          "type": pushed["type"]})
+                if ref is not None:
+                    self._ws_send([join_ref, ref, topic, "phx_reply",
+                                   {"status": "ok", "response": {}}])
 
             def _ws_read(self):
                 header = self._ws_read_exact(2)
@@ -513,6 +625,11 @@ class ModelMock:
     def state(self):
         with self.lock:
             return [dict(entry) for entry in self.received]
+
+    def ws_state(self):
+        with self.lock:
+            return {key: (list(value) if isinstance(value, list) else value)
+                    for key, value in self.ws.items()}
 
 
 def verify(work, build, keep):
@@ -622,11 +739,14 @@ services:
     old_id, edge_id = (str(uuid4()) for _ in range(2))
     markers = {key: f"private-{key}-{uuid4()}" for key in
                ("conversation", "prompt", "tool-input", "tool-params", "tool-result",
-                "model-output", "nested", "encoded", "exception", "plain", "outage")}
-    # Correlation triggers, not secrets: they mark which real turn is the crash window and which
-    # direct Bot run must reach for a deployment tool. They ride inside real model input, so the
-    # scan treats them like the markers — absent from every outbound payload and stored record.
+                "model-output", "nested", "encoded", "exception", "plain", "outage",
+                "fail-trigger")}
+    # Correlation triggers, not secrets: they mark which real turn is the crash window, which
+    # direct Bot run must reach for a deployment tool, and which two runs the model refuses for
+    # real. They ride inside real model input, so the scan treats them like the markers — absent
+    # from every outbound payload and stored record.
     crash_trigger, tool_trigger = f"crash-window-{uuid4()}", f"tool-loop-{uuid4()}"
+    fail_trigger = markers["fail-trigger"]
     credentials = {"computer_token": computer_token, "worker_shared_secret": worker_secret,
                    "managed_agent_token": managed_token, "key_encryption_key": key_encryption_key}
     evidence_sources = {}
@@ -799,6 +919,14 @@ services:
         require(all(v in pre_volumes for v in (f"{namespace}-profile-bot-{cutover_bot}",
                                                f"{namespace}-workspace-bot-{cutover_bot}")),
                 "phase one computer kept its profile and workspace volumes")
+        # The pre-cutover run's own probe, written into the live container before the cutover.
+        # Whatever this container ever emitted must stay out of OpenObserve; the probe line is a
+        # registered event carrying a unique run id, so the later checks are about this exact run
+        # rather than about the absence of any computer record.
+        pre_probe_id = str(uuid4())
+        pre_marker = f'{{"type":"routine-sweep","runId":"{pre_probe_id}"}}'
+        docker("exec", cutover_container, "sh", "-c",
+               f"printf '{pre_marker}\\n' > /proc/1/fd/1")
         time.sleep(3)
         require(not hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'computer\''),
                 "no computer logs reached OpenObserve before the cutover")
@@ -823,6 +951,18 @@ services:
                 "cutover replaced the computer with the fluentd driver and the fixed tag")
         require(post_id != pre_id, "cutover created a new container run")
         require(post_volumes == pre_volumes, "cutover preserved the profile and workspace volumes")
+        # The replacement run's own probe: the same logical computer, a different container, a
+        # different run id. The pre-cutover probe must stay absent from OpenObserve across the
+        # rest of this verification — including after the restarts below — while this probe
+        # arrives from the forwarding run.
+        post_probe_id = str(uuid4())
+        docker("exec", cutover_container, "sh", "-c",
+               f"printf '{{\"type\":\"routine-sweep\",\"runId\":\"{post_probe_id}\"}}\\n' > /proc/1/fd/1")
+        retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'computer\' '
+                           f"AND run_id = '{post_probe_id}'") or None,
+              "the forwarding run's own probe reached OpenObserve after the cutover")
+        require(not hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{pre_probe_id}\''),
+                "the pre-cutover run's probe never reached OpenObserve")
         def legacy_retired():
             return docker("inspect", "--format", "{{.State.Status}}",
                           legacy_container).stdout.strip() == "exited" or None
@@ -847,11 +987,23 @@ services:
                    check=False)), "the carried files are in the owner's profile volume", timeout=60)
         require(carry_bot in (marker_listing.stdout or ""),
                 "the carried marker and profile folder exist in the owner's profile volume")
+        # The second computer forwarding was born with, checked by its own probe: a computer
+        # created after the cutover must arrive already forwarding, per its own container.
+        person_probe_id = str(uuid4())
+        docker("exec", person_container, "sh", "-c",
+               f"printf '{{\"type\":\"routine-sweep\",\"runId\":\"{person_probe_id}\"}}\\n' > /proc/1/fd/1")
+        retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'computer\' '
+                           f"AND run_id = '{person_probe_id}'") or None,
+              "the post-cutover person computer forwards from its own container")
         record("dynamic-computer.json", {
             "cutover": {"bot": cutover_bot, "driver_before": pre_log_config,
                         "driver_after": post_log_config, "container_before": pre_id,
                         "container_after": post_id, "volumes": post_volumes,
-                        "pre_cutover_local_log_lines": len((pre_logs.stdout + pre_logs.stderr).splitlines())},
+                        "pre_cutover_local_log_lines": len((pre_logs.stdout + pre_logs.stderr).splitlines()),
+                        "probe_run_ids": {"before_cutover": pre_probe_id, "after_cutover": post_probe_id,
+                                          "person_computer": person_probe_id,
+                                          "checked_by": "run_id queries on the computer service; "
+                                                        "the before-cutover id must never appear"}},
             "carry_over": {"bot": carry_bot, "person": person_id, "outcome": "copied",
                            "legacy_container_state": legacy_state,
                            "legacy_volumes": [legacy_profile_volume, legacy_workspace_volume]},
@@ -904,6 +1056,59 @@ services:
         require(len(run_rows.splitlines()) >= 2,
                 "both the scheduled firing and the manual run opened real run rows")
 
+        # Success, not just dispatch: the gateway here speaks the runner's own protocol, so both
+        # real runs carry their turns end to end and the authoritative rows finish `succeeded`.
+        # This is the successful business dispatch the runtime stream's Info events are checked
+        # against — a scheduled firing and a run-now, both real, both finished.
+        def runs_succeeded():
+            rows = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
+                          "-tAc", f"SELECT id, status FROM routine_runs WHERE routine_id = '{routine_id}'",
+                          check=False).stdout.strip()
+            statuses = dict(row.split("|", 1) for row in rows.splitlines() if "|" in row)
+            (work / "routine-schedule-diagnostic.txt").write_text(
+                (work / "routine-schedule-diagnostic.txt").read_text() + f"\nstatuses: {statuses}\n")
+            return statuses if statuses.get(manual_run_id) == "succeeded" and \
+                "succeeded" in [s for k, s in statuses.items() if k != manual_run_id] else None
+        run_statuses = retry(runs_succeeded, "both real routine runs finished succeeded", timeout=300)
+        require(run_statuses[manual_run_id] == "succeeded",
+                "the run-now routine's real turn finished and its row reads succeeded")
+        scheduled_run_ids = [rid for rid in run_statuses if rid != manual_run_id]
+        require(all(run_statuses[rid] == "succeeded" for rid in scheduled_run_ids),
+                "the worker-scheduled firing finished succeeded too")
+
+        # The server really drove the runs over its runner socket. The gateway's channel topics
+        # carry the turn's own run id — a plain UUID on the server's `run-model` log line, a
+        # different identifier from the routine-run row the API returned — so the correlation is
+        # taken from that source log: each real turn id the server printed must be a channel the
+        # gateway saw join and saw finish.
+        def server_turn_run_ids():
+            log = docker(*app, "logs", "--since", "30m", "server", check=False)
+            ids = []
+            for line in (log.stdout + log.stderr).splitlines():
+                stripped = line.split("server-1  | ", 1)[-1].strip()
+                if not stripped.startswith("{"):
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except ValueError:
+                    continue
+                if record.get("type") == "run-model" and record.get("runId"):
+                    ids.append(record["runId"])
+            return ids or None
+        turn_run_ids = retry(server_turn_run_ids, "the server logged its real turn run ids")
+        def runner_saw_run():
+            state = mock.ws_state()
+            joined = [topic for topic in state["joined"]
+                      if any(topic.endswith(tid) for tid in turn_run_ids)]
+            finished = [event for event in state["events"]
+                        if event["type"] == "RUN_FINISHED" and any(
+                            event["topic"].endswith(tid) for tid in turn_run_ids)]
+            return {"joined": joined, "finished": finished} if joined and finished else None
+        runner_saw = retry(runner_saw_run, "the runner channel joined and finished the real turns",
+                           timeout=180)
+        require(not mock.ws_state()["unhandled"],
+                "the gateway fixture handled every runner frame it received (none dropped silently)")
+
         # Real operations on the two fixed Bots, over their real AG-UI boundary with the isolated
         # model endpoint. These are the model and tool paths exercised as the platform runs them:
         # the Bots dial the model themselves, and the framework Bot runs a deployment tool by
@@ -917,7 +1122,7 @@ services:
                                       "required": ["query"]}}],
             "state": {}, "forwardedProps": {},
         }
-        bot_run = dict(agui_input, runId=f"botprobe-{uuid4()}",
+        bot_run = dict(agui_input, runId=str(uuid4()),
                        messages=[{"id": f"m-{uuid4()}", "role": "user",
                                   "content": f"Report the time. {markers['conversation']} {tool_trigger}"}])
         with urlopen(Request(f"http://127.0.0.1:{bot_port}/ag-ui", json.dumps(bot_run).encode(),
@@ -927,11 +1132,11 @@ services:
             bot_stream = response.read().decode("utf-8", "ignore")
         require("RUN_FINISHED" in bot_stream and "TOOL_CALL_START" in bot_stream,
                 "agent-bot ran a real turn through the model boundary (tool call streamed, run finished)")
-        langgraph_run = dict(agui_input, runId=f"lgprobe-{uuid4()}",
+        langgraph_run = dict(agui_input, runId=str(uuid4()),
                              messages=[{"id": f"m-{uuid4()}", "role": "user",
                                         "content": f"Report the time. {tool_trigger}"}],
                              forwardedProps={"openbotDeploymentTools": ["get_current_time"],
-                                             "openbotRun": f"lgassert-{uuid4()}"})
+                                             "openbotRun": str(uuid4())})
         with urlopen(Request(f"http://127.0.0.1:{langgraph_port}/ag-ui",
                              json.dumps(langgraph_run).encode(),
                              {"Content-Type": "application/json",
@@ -951,6 +1156,41 @@ services:
         require(bool(bot_model_calls),
                 "agent-bot's real model request carried the conversation body across the model boundary")
 
+        # Real failing turns against the real provider failure: the model endpoint answers 500 and
+        # each Bot's own error path writes its one diagnostic line on stderr. Those lines — fixed
+        # event name, the run id of the very run that failed, an enum code — are the positive
+        # controls checked against the collector's actual sent payloads and OpenObserve below; a
+        # failing model is the path that proves the model boundary is filtered, not just the
+        # happy path. Probe run ids are plain UUIDs, the shape the collector's guard accepts,
+        # so the stored record and the payload must both carry the exact run that failed.
+        bot_fail_run = dict(agui_input, runId=str(uuid4()),
+                            messages=[{"id": f"m-{uuid4()}", "role": "user",
+                                       "content": f"Report the time. {fail_trigger}"}])
+        bot_fail_window = int(time.time() * 1_000_000)
+        with urlopen(Request(f"http://127.0.0.1:{bot_port}/ag-ui", json.dumps(bot_fail_run).encode(),
+                             {"Content-Type": "application/json",
+                              "x-openbot-agent-token": managed_token}, method="POST"),
+                     timeout=120) as response:
+            bot_fail_stream = response.read().decode("utf-8", "ignore")
+        require("RUN_ERROR" in bot_fail_stream and "RUN_FINISHED" not in bot_fail_stream,
+                "agent-bot's real model failure ended the run as RUN_ERROR, not a fake finish")
+        langgraph_fail_run = dict(agui_input, runId=str(uuid4()),
+                                  messages=[{"id": f"m-{uuid4()}", "role": "user",
+                                             "content": f"Report the time. {fail_trigger}"}])
+        with urlopen(Request(f"http://127.0.0.1:{langgraph_port}/ag-ui",
+                             json.dumps(langgraph_fail_run).encode(),
+                             {"Content-Type": "application/json",
+                              "x-openbot-agent-token": managed_token}, method="POST"),
+                     timeout=120) as response:
+            langgraph_fail_stream = response.read().decode("utf-8", "ignore")
+        require("RUN_ERROR" in langgraph_fail_stream and "RUN_FINISHED" not in langgraph_fail_stream,
+                "agent-langgraph's real model failure ended the run as RUN_ERROR, not a fake finish")
+        fail_model_calls = [r for r in mock.state() if not r["tool_callback"]
+                            and r.get("path", "").endswith("/chat/completions")
+                            and r["marker_keys_seen"] == ["fail-trigger"]]
+        require(len(fail_model_calls) >= 2,
+                "the isolated model answered both real failing turns with a provider failure")
+
         # A real operation on the computer gateway: the pre-seat profile of a private Bot handed to
         # its owner's seat, asked the way the server asks, with the profile planted in the gateway's
         # own volume first and its arrival checked there afterwards.
@@ -960,6 +1200,7 @@ services:
                f"mkdir -p /profiles/{legacy_profile_dir}/Default && "
                f"printf carried > /profiles/{legacy_profile_dir}/Default/marker")
         carry_code, carry_body = 0, {}
+        carry_window = int((time.time() - 5) * 1_000_000)
         try:
             with urlopen(Request(f"http://127.0.0.1:{computer_port}/computers/carry-over",
                                  json.dumps({}).encode(),
@@ -978,38 +1219,49 @@ services:
                               f"test -d /profiles/{legacy_profile_dir} && echo still-there || echo gone")
         require("carried" in seat_listing.stdout and "gone" in seat_listing.stdout,
                 "the moved profile is on the owner's seat and the old one is gone")
-        # The Bots log no per-turn lines by design (their operations live in the server's run rows
-        # and the audit stream), so the per-agent queryable record is their real startup event plus
-        # this captured boundary traffic. Recorded, not claimed.
+        # The Bots' queryable record: their real startup events, the successful turns' operations
+        # (the turns themselves log nothing on success, by design), and — from this run on — the
+        # real failing turns' own diagnostic events, checked below by source, window and the
+        # exact run id of the run that failed. Recorded, not claimed.
         (work / "bot-operations.json").write_text(json.dumps({
             "agent-bot": {"operation": "real AG-UI run through the model endpoint",
                           "run_finished": "RUN_FINISHED" in bot_stream,
                           "model_boundary_captured": bool(bot_model_calls),
-                          "per_turn_stdout_logs": "none by design; queryable record is the "
-                                                 "agent-listening startup event"},
+                          "failed_turn": {"operation": "real model failure (provider 500)",
+                                          "run_error": "RUN_ERROR" in bot_fail_stream,
+                                          "run_id_shape": "uuid; asserted in openbot_runtime "
+                                                          "as agent-turn-failed"},
+                          "success_turn_stdout_logs": "none by design; the queryable record of a "
+                                                      "successful turn is the agent-listening "
+                                                      "startup event"},
             "agent-langgraph": {"operation": "real AG-UI run with a deployment tool callback",
                                 "run_finished": "RUN_FINISHED" in langgraph_stream,
                                 "tool_result_returned_by_model":
                                     markers["tool-result"] in langgraph_stream,
-                                "tool_callback_captured": bool(langgraph_calls)},
+                                "tool_callback_captured": bool(langgraph_calls),
+                                "failed_turn": {"operation": "real model failure (provider 500)",
+                                                "run_error": "RUN_ERROR" in langgraph_fail_stream}},
             "agent-computer": {"operation": "real pre-seat profile carry-over on the gateway",
                                "outcome": carry_body.get("outcome"),
                                "seat": seat_dir,
                                "profile_on_seat": "carried" in seat_listing.stdout,
-                               "old_profile_removed": "gone" in seat_listing.stdout},
+                               "old_profile_removed": "gone" in seat_listing.stdout,
+                               "own_business_event": "computer-profile-carried-over, asserted "
+                                                     "from the agent-computer service"},
             "marker_values_note": "only marker keys are recorded here, never their values",
         }, indent=2) + "\n")
 
         # The crash window: a real routine run is triggered and the database is stopped while the
-        # run is provably in flight. When the headless turn's deadline arrives, the runner's
-        # finishRun hits the database that is genuinely down, and the runner logs the real run id
-        # on its own stderr — the source record the runtime stream is checked against, value by
-        # value. (This stack's Intelligence gateway is a REST-level mock; the runner protocol over
-        # its WebSocket is not emulated, so a server-driven turn reliably ends at its deadline —
-        # which is what puts a real run, mid-flight, inside a real database outage.)
+        # run is provably in flight — the isolated model holds this turn's answer open for the
+        # delay window, which is what puts a real run, mid-flight, inside a real database outage.
+        # When the answer arrives, the runner's finishRun hits the database that is genuinely
+        # down, and the runner logs the real run id on its own stderr — the source record the
+        # runtime stream is checked against, value by value. (The gateway here speaks the runner's
+        # Phoenix protocol, so the turn itself runs for real; only its finish is made to fail, by
+        # the stopped database.)
         # Its own channel: a headless turn runs one at a time per thread, and the first routine's
-        # turn is still inside its deadline when this run starts — sharing the thread would end
-        # this run with "thread busy" instead of the crash the window exists to produce.
+        # turn may still be in flight when this run starts — sharing the thread would end this run
+        # with "thread busy" instead of the crash the window exists to produce.
         code, crash_channel = http(app_url, "/api/channels", {"agentIds": [agent_id]})
         require(code == 201 and crash_channel.get("channel", {}).get("id"),
                 "created the crash-window conversation")
@@ -1047,11 +1299,30 @@ services:
         (work / "crash-window-source-log.txt").write_text(server_log.stdout + server_log.stderr)
         require(bool(crashed_lines) and crash_run_id in crashed_lines[0],
                 "the server's own stderr carries the real run id as a crashed run")
-        retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
-                                       f"AND run_id = '{crash_run_id}' "
-                                       "AND openbot_log_type = 'routine-run-crashed' "
-                                       "AND severity = 'Error'")] or None,
-              "the runtime stream stores the real run id from the source record")
+        def crash_record_stored():
+            return [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
+                                    f"AND run_id = '{crash_run_id}' "
+                                    "AND openbot_log_type = 'routine-run-crashed' "
+                                    "AND severity = 'Error'")] or None
+        try:
+            retry(crash_record_stored,
+                  "the runtime stream stores the real run id from the source record", timeout=300)
+        except RuntimeError:
+            # Diagnose what the stream actually holds for this run and event before failing: the
+            # record may have arrived under different filters or not at all, and the difference
+            # says whether the collector dropped it or the query was too narrow.
+            by_id = all_hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{crash_run_id}\'')
+            by_event = all_hits("SELECT * FROM \"openbot_runtime\" WHERE "
+                                "openbot_log_type = 'routine-run-crashed'")
+            (work / "crash-record-diagnostic.json").write_text(json.dumps({
+                "expected_run_id": crash_run_id,
+                "records_by_run_id": [{"severity": h.get("severity"),
+                                       "log_type": h.get("openbot_log_type"),
+                                       "service": h.get("service_name")} for h in by_id],
+                "records_by_event": len(by_event),
+                "note": "empty by run id and by event means the collector never stored the record",
+            }, indent=2) + "\n")
+            raise
         retry(lambda: hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
                            "AND openbot_log_type = 'responsibility-dispatch-error' "
                            "AND severity = 'Error'", start_time=error_window_start),
@@ -1091,6 +1362,13 @@ services:
             raise
         correlation = {"event_type": event_type, "api_run_id": manual_run_id,
                        "audit_db_run_id": db_run_id, "match": True,
+                       "bot_failed_turns": {
+                           "agent-bot_run_id": bot_fail_run["runId"],
+                           "agent-langgraph_run_id": langgraph_fail_run["runId"],
+                           "chain": "AG-UI run id -> the Bot's own stderr diagnostic line "
+                                    "(agent-turn-failed / langgraph-turn-failed) -> openbot_runtime "
+                                    "record by source, window and run id -> the actual OTLP payload",
+                           "asserted": True},
                        "runtime_stream": {
                            "api_run_id": crash_run_id,
                            "source_record": "server stderr line routine-run-crashed, read from the "
@@ -1099,8 +1377,10 @@ services:
                            "stored_under": ["routine-run-crashed"],
                            "match": True,
                            "note": "run id compared value-by-value: run-now API response -> server "
-                                   "stderr source record -> openbot_runtime record; the turn ends at "
-                                   "its deadline, so the crash event is the runtime record"},
+                                   "stderr source record -> openbot_runtime record; the turn itself "
+                                   "ran over the gateway protocol and its finish failed against "
+                                   "the genuinely stopped database, which is what the crash event "
+                                   "records"},
                        "request_id_inventory": {
                            "emitting_sources": [],
                            "basis": "no first-phase service writes a requestId field to stdout or "
@@ -1163,16 +1443,34 @@ services:
         require(code == 200 and delivered.get("accepted") is True,
                 "delivered a real authenticated trigger event")
         trigger_time = int((time.time() - 5) * 1_000_000)
-        # The dispatch attempt itself, bounded to this delivery: the server's responsibility sweep
-        # picks the goal up within seconds and records the attempt on its real path. In this stack
-        # the turn cannot be carried to completion (the Intelligence gateway mock does not speak
-        # the runner protocol), so the attempt surfaces as the server's Error event — recorded as
-        # that boundary rather than claimed as a completed dispatch.
+        # The successful dispatch, bounded to this delivery on both ends of the evidence: the
+        # server's responsibility sweep picks the goal up within seconds, carries the goal's turn
+        # end to end, and records the dispatch on its real Info path. The authoritative result is
+        # the responsibility run row finishing `succeeded`; the runtime stream must show the
+        # matching Info event in the same window, and no dispatch error after the delivery.
+        def goal_dispatch_succeeded():
+            rows = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
+                          "-tAc", f"SELECT id, status FROM responsibility_runs "
+                          f"WHERE responsibility_id = '{goal_id}' ORDER BY created_at DESC LIMIT 1",
+                          check=False).stdout.strip()
+            return rows if rows.endswith("|succeeded") else None
+        goal_row = retry(goal_dispatch_succeeded, "the goal's real dispatch run row exists")
+        goal_run_id, goal_status = goal_row.split("|", 1)
+        require(goal_status == "succeeded",
+                "the goal's dispatch run finished succeeded in the authoritative row")
         retry(lambda: [h for h in hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
-                                       "AND (openbot_log_type = 'responsibility-dispatch' "
-                                       "OR openbot_log_type = 'responsibility-dispatch-error')",
-                                       start_time=trigger_time)] or None,
-              "the server recorded the goal's dispatch attempt after the authenticated delivery")
+                                       "AND openbot_log_type = 'responsibility-dispatch' "
+                                       "AND severity = 'Info'", start_time=trigger_time)] or None,
+              "the runtime stream stores the goal's real dispatch as the server's Info event")
+        require(not hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
+                         "AND openbot_log_type = 'responsibility-dispatch-error' "
+                         "AND severity = 'Error'", start_time=trigger_time),
+                "no dispatch error after the delivery: the goal's dispatch did not fail")
+        goal_dispatch = {"responsibility_id": goal_id, "responsibility_run_id": goal_run_id,
+                         "status": goal_status, "delivered_trigger": trigger["trigger"]["id"],
+                         "runtime_event": "responsibility-dispatch (Info, windowed)",
+                         "window_start_us": trigger_time}
+        record("goal-dispatch.json", goal_dispatch)
 
         # Every required source must show queryable evidence from the real services.
         missing = lambda records: set(SOURCES) - {hit.get("service_name") for hit in records}
@@ -1188,14 +1486,26 @@ services:
                                  "events": sorted({r.get("openbot_log_type") or "runtime-unclassified"
                                                    for r in rows}),
                                  "severities": sorted({r.get("severity") for r in rows})}
-        # The Bots log nothing per turn, so their real operations are matched to their real
-        # startup events by name, and to the captured model/tool boundary in bot-operations.json.
+        # The Bots log no per-turn lines on success, so their successful operations are matched to
+        # their real startup events by name, and to the captured model/tool boundary in
+        # bot-operations.json. Their real failing turns left diagnostic events of their own:
+        # asserted below by source, window and the exact run id of the run that failed.
         for source, operation in (("agent-bot", "real AG-UI model turn"),
                                   ("agent-langgraph", "real AG-UI model turn with a tool callback"),
                                   ("agent-computer", "real profile carry-over on the gateway")):
             require(any(r.get("openbot_log_type") == "agent-listening"
                         for r in runtime if r.get("service_name") == source),
                     f"{source}'s real startup event is stored under its own name")
+        retry(lambda: [h for h in hits(f"SELECT * FROM \"openbot_runtime\" WHERE service_name = 'agent-bot' "
+                                       f"AND openbot_log_type = 'agent-turn-failed' "
+                                       f"AND run_id = '{bot_fail_run['runId']}' "
+                                       "AND severity = 'Error'", start_time=bot_fail_window)] or None,
+              "agent-bot's real failed turn stored under its own name, with that run's id")
+        retry(lambda: [h for h in hits(f"SELECT * FROM \"openbot_runtime\" WHERE service_name = 'agent-langgraph' "
+                                       f"AND openbot_log_type = 'langgraph-turn-failed' "
+                                       f"AND run_id = '{langgraph_fail_run['runId']}' "
+                                       "AND severity = 'Error'", start_time=bot_fail_window)] or None,
+              "agent-langgraph's real failed turn stored under its own name, with that run's id")
         worker_business = [r for r in runtime if r.get("service_name") == "worker" and
                            r.get("openbot_log_type") in ("routine-sweep", "routine-sweep-purge")]
         require(worker_business, "real worker business events are stored as named events, not only summaries")
@@ -1207,8 +1517,21 @@ services:
         require(any(r.get("openbot_log_type") == "computer-profile-carried-over" and
                     r.get("service_name") == "supervisor" for r in runtime),
                 "real carry-over outcome kept its own event name")
+        # The fixed computer's own business event for the same real carry-over, by its own
+        # service name and window — not just its startup line.
+        retry(lambda: [h for h in hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'agent-computer' "
+                                       "AND openbot_log_type = 'computer-profile-carried-over'",
+                                       start_time=carry_window)] or None,
+              "agent-computer's own carry-over business event stored from the real operation")
         require(any(r.get("openbot_log_type") == "postgres-ready" for r in runtime),
                 "PostgreSQL readiness on the real Docker log stream")
+        # The real Warn the collector once misfiled as an Error: the server's handoff sweep fails
+        # while the database is down (it sweeps every two seconds), console.warn's its fixed
+        # prefix on stderr, and the stream must carry that Warn — not an Error.
+        retry(lambda: [h for h in hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
+                                       "AND openbot_log_type = 'bot-handoff-sweep-failed' "
+                                       "AND severity = 'Warn'", start_time=error_window_start)] or None,
+              "the real handoff sweep failure stored as Warn, not Error")
         require({r.get("severity") for r in runtime} >= {"Info", "Warn", "Error"},
                 "Info, Warn and Error severities all queryable from real events")
         operations = {"agent-bot": "real AG-UI model turn (see bot-operations.json)",
@@ -1271,12 +1594,25 @@ services:
             return bodies_now if (bodies_now.get("openbot_runtime") and
                                   bodies_now.get("openbot_audit")) else None
         bodies = retry(seen_streams, "the capture forwarder saw both streams", timeout=120)
+        require(not mock.ws_state()["unhandled"],
+                "the gateway fixture handled every frame of the whole run (none dropped silently)")
         all_sent = "\n".join("\n".join(chunks) for chunks in bodies.values())
-        positives = ["routine-sweep", "routine-sweep-purge", "responsibility-dispatch",
-                     "computer-profile-carried-over", "configuration.changed", manual_run_id,
-                     crash_run_id]
-        require(all(p in all_sent for p in positives),
-                "captured OTLP bodies contain the registered events and the real run ids of both streams")
+        runtime_sent = "\n".join(bodies.get("openbot_runtime", []))
+        # Positive controls, scoped to the source that really produced them: each named event with
+        # the run id of the very operation that emitted it, on the runtime stream it belongs to.
+        positives = {
+            "server business dispatch (Info)": ["responsibility-dispatch", goal_run_id],
+            "server crash window (Error)": ["routine-run-crashed", crash_run_id],
+            "agent-bot failed turn": ["agent-turn-failed", bot_fail_run["runId"]],
+            "agent-langgraph failed turn": ["langgraph-turn-failed", langgraph_fail_run["runId"]],
+            "agent-computer carry-over": ["computer-profile-carried-over", post_probe_id],
+            "worker business events": ["routine-sweep", "routine-sweep-purge"],
+        }
+        for what, needles in positives.items():
+            require(all(needle in runtime_sent for needle in needles),
+                    f"captured runtime payloads contain {what}")
+        require(any("configuration.changed" in chunk for chunk in bodies.get("openbot_audit", [])),
+                "captured audit payloads contain the real settings event")
         leaked = [name for name in list(markers.values()) + list(credentials.values()) +
                   [crash_trigger, tool_trigger]
                   if name in all_sent]
@@ -1296,7 +1632,7 @@ services:
             "authorization_values_recorded": False,
             "content_types": sorted({r["content_type"] or "" for r in forwarder_summary}),
             "decoded_field_count": sum(len(v) for v in bodies.values()),
-            "positive_controls_found": positives,
+            "positive_controls_found": {what: needles for what, needles in positives.items()},
             "negative_hits": leaked,
         })
         require(all(r["authorized"] for r in forwarder_summary),
@@ -1311,6 +1647,21 @@ services:
                          if name in stored_blob]
         require(not leaked_stored, "sensitive markers and credentials absent from all stored records")
         require(str(manual_run_id) in stored_blob, "the real run id is present in stored records")
+        ws_state = mock.ws_state()
+        record("runner-gateway.json", {
+            "phoenix_frames_handled": ws_state["frames"],
+            "fixture_unhandled_frames": ws_state["unhandled"],
+            "channels_joined": len(ws_state["joined"]),
+            "turn_run_ids_from_server_log": sorted(set(turn_run_ids)),
+            "ingestion_channels_for_real_turns": sorted(
+                topic for topic in ws_state["joined"]
+                if any(topic.endswith(tid) for tid in turn_run_ids)),
+            "terminal_events_seen": sorted({event["type"] for event in ws_state["events"]}),
+            "note": "the server really drove its turns over the runner's Phoenix protocol; the "
+                    "channel topics carry each turn's own run id (the server's run-model log "
+                    "line), which differs from the routine-run row id the API returned; this "
+                    "stack's gateway is the isolated fixture, not a model of the cloud gateway",
+        })
         record("result.json", {
             "runtime_services": sorted({r["service_name"] for r in stored_runtime}),
             "runtime_records": len(stored_runtime), "audit_records": len(stored_audit),
@@ -1497,6 +1848,13 @@ services:
                                         if h.get("_timestamp", 0) > restart_started] or None,
                                "new real record written after the restart", timeout=180)
         require(bool(restart_marker), "new real record after restart")
+        # The cutover discrimination holds after the restart too: the forwarding run's probe is
+        # still there, and the pre-cutover run's probe still never arrived.
+        require(hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'computer\' '
+                     f"AND run_id = '{post_probe_id}'"),
+                "the forwarding run's probe survives the restart")
+        require(not hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{pre_probe_id}\''),
+                "the pre-cutover run's probe is still absent after the restart")
         record("restart.json", {
             "restart_started_us": restart_started,
             "retained_before_restart": {"runtime": len(retained_runtime or []),

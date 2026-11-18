@@ -908,8 +908,13 @@ describe("a computer's log driver", () => {
 
   test("is added by replacing the computer once, and every later ensure keeps it", async () => {
     // Born on the default driver, the way computers existed before a deployment turned forwarding on.
-    await withDocker().supervisor.ensure(names, { image: IMAGE, environment: [] });
-    const before = await withDocker().docker.getContainer(names.container).inspect();
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+    });
+    const before = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
     expect(before.HostConfig?.LogConfig?.Type).not.toBe("fluentd");
 
     // Turning forwarding on replaces the computer, keeping its volumes.
@@ -921,9 +926,14 @@ describe("a computer's log driver", () => {
     await withDocker().supervisor.ensure(names, {
       image: IMAGE,
       environment: [],
-      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer"),
+      logConfig: supervisor.fluentdLogConfig(
+        "127.0.0.1:24001",
+        "openbot.computer",
+      ),
     });
-    const after = await withDocker().docker.getContainer(names.container).inspect();
+    const after = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
     expect(after.Id).not.toBe(before.Id);
     expect(after.HostConfig?.LogConfig?.Type).toBe("fluentd");
 
@@ -933,7 +943,10 @@ describe("a computer's log driver", () => {
       supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer").Config,
     );
     expect(Object.keys(echoed?.Config ?? {})).not.toEqual(
-      Object.keys(supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer").Config),
+      Object.keys(
+        supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer")
+          .Config,
+      ),
     );
 
     // The next ensure, and the one after that: the same computer, never rebuilt.
@@ -944,7 +957,9 @@ describe("a computer's log driver", () => {
         // Scrambled order, deliberately: the map comparison must not care.
         logConfig: scrambled("127.0.0.1:24001"),
       });
-      const kept = await withDocker().docker.getContainer(names.container).inspect();
+      const kept = await withDocker()
+        .docker.getContainer(names.container)
+        .inspect();
       expect(kept.Id).toBe(after.Id);
       expect(kept.State.Running).toBe(true);
     }
@@ -960,20 +975,34 @@ describe("a computer's log driver", () => {
     await withDocker().supervisor.ensure(names, {
       image: IMAGE,
       environment: [],
-      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer"),
+      logConfig: supervisor.fluentdLogConfig(
+        "127.0.0.1:24001",
+        "openbot.computer",
+      ),
     });
-    const first = await withDocker().docker.getContainer(names.container).inspect();
+    const first = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
 
     const moved = await withDocker().supervisor.ensure(names, {
       image: IMAGE,
       environment: [],
-      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24002", "openbot.computer"),
+      logConfig: supervisor.fluentdLogConfig(
+        "127.0.0.1:24002",
+        "openbot.computer",
+      ),
     });
-    const second = await withDocker().docker.getContainer(names.container).inspect();
+    const second = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
     expect(second.Id).not.toBe(first.Id);
-    expect(second.HostConfig?.LogConfig?.Config?.["fluentd-address"]).toBe("127.0.0.1:24002");
+    expect(second.HostConfig?.LogConfig?.Config?.["fluentd-address"]).toBe(
+      "127.0.0.1:24002",
+    );
     // `ComputerState.container` is the name; the run it names is the new one.
-    expect((await withDocker().docker.getContainer(moved.container).inspect()).Id).toBe(second.Id);
+    expect(
+      (await withDocker().docker.getContainer(moved.container).inspect()).Id,
+    ).toBe(second.Id);
 
     // Settled: the moved address is not another cutover waiting to happen.
     await withDocker().supervisor.ensure(names, {
@@ -981,7 +1010,69 @@ describe("a computer's log driver", () => {
       environment: [],
       logConfig: scrambled("127.0.0.1:24002"),
     });
-    const settled = await withDocker().docker.getContainer(names.container).inspect();
+    const settled = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
     expect(settled.Id).toBe(second.Id);
+  }, 180_000);
+
+  test("is decommissioned only when the deployment asks, and the volumes survive it", async () => {
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      logConfig: supervisor.fluentdLogConfig(
+        "127.0.0.1:24001",
+        "openbot.computer",
+      ),
+    });
+    const forwarding = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
+    const volumes = await Promise.all(
+      [names.profileVolume, names.workspaceVolume].map((volume) =>
+        withDocker().docker.getVolume(volume).inspect(),
+      ),
+    );
+
+    // Without the retire flag, dropping the address keeps the fluentd computer exactly as it is:
+    // the deployments that never forwarded must not start rebuilding theirs, and one that did
+    // must not have its computers rebuilt silently either.
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+    });
+    const kept = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
+    expect(kept.Id).toBe(forwarding.Id);
+    expect(kept.HostConfig?.LogConfig?.Type).toBe("fluentd");
+
+    // Asked for, the fluentd computer is replaced with the default driver, volumes intact.
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      retireLogDriver: true,
+    });
+    const retired = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
+    expect(retired.Id).not.toBe(kept.Id);
+    expect(retired.HostConfig?.LogConfig?.Type).not.toBe("fluentd");
+    const keptVolumes = await Promise.all(
+      [names.profileVolume, names.workspaceVolume].map((volume) =>
+        withDocker().docker.getVolume(volume).inspect(),
+      ),
+    );
+    expect(keptVolumes.map(createdAt)).toEqual(volumes.map(createdAt));
+
+    // Settled: with the flag cleared, the retired computer stays — no rebuild loop.
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+    });
+    const settled = await withDocker()
+      .docker.getContainer(names.container)
+      .inspect();
+    expect(settled.Id).toBe(retired.Id);
   }, 180_000);
 });
