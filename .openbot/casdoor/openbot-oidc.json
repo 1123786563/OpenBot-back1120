@@ -1,0 +1,14 @@
+{
+  "issuer": "http://localhost:8000",
+  "discoveryUrl": "http://localhost:8000/.well-known/openid-configuration",
+  "clientId": "openbot-local-73fe83f6bfde7907",
+  "clientSecret": "5PdJFVRlA3MgpxlcKXXkElncml01f2pGbdeqDSqMTgM",
+  "providerId": "casdoor",
+  "redirectUri": "http://localhost:3001/api/auth/sso/callback/casdoor",
+  "scopes": [
+    "openid",
+    "profile",
+    "email"
+  ],
+  "status": "Casdoor ready; OpenBot provider registration and callback verification pending"
+}

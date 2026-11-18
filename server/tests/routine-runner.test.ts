@@ -86,6 +86,7 @@ function harness(options: {
     linkGoal: () => unreachable("linkGoal"),
     startManualRun: () => unreachable("startManualRun"),
     listRuns: () => unreachable("listRuns"),
+    findRun: () => unreachable("findRun"),
     routineForFiring: () => unreachable("routineForFiring"),
     reapAbandonedRuns: () => unreachable("reapAbandonedRuns"),
     recordSweep: () => unreachable("recordSweep"),
@@ -187,6 +188,8 @@ describe("createRoutineRunner", () => {
         agentId: CONTEXT.agentId,
         threadId: CHANNEL.threadId,
         instruction: CONTEXT.instruction,
+        // The cancel path's handle on this turn (T01): present, and live until the run ends.
+        signal: expect.any(AbortSignal),
       },
     ]);
     // The count, not merely that one happened: a second record would ring a second unread dot.
@@ -418,4 +421,84 @@ describe("createRoutineRunner", () => {
 
     expect(recorded.busy).toEqual([]);
   });
+
+  /*
+   * T01 (issue #2): the cancel path. A turn that never finishes on its own is the shape a person
+   * stops, so the runTurn below parks until its signal aborts and then throws, the way an aborted
+   * model call does (checked before the listener too, because a cancel can land first). What is
+   * asserted is the whole contract of a stop: the abort reaches the turn, the run row closes as
+   * `cancelled` rather than `failed`, nothing is said in the channel (the person who stopped it
+   * knows), and the fatigue rule is never consulted.
+   */
+  test("cancels an in-flight turn as cancelled, quietly", async () => {
+    const { runner, recorded } = harness({
+      runTurn: (input) =>
+        new Promise((_, reject) => {
+          const die = () =>
+            reject(new Error("The headless turn was cancelled."));
+          if (input.signal?.aborted) die();
+          else input.signal?.addEventListener("abort", die, { once: true });
+        }),
+    });
+
+    const running = runner.run(RUN_ID);
+    // Wait until the turn holds the signal before cancelling, so this tests aborting a live turn
+    // rather than winning a race with it.
+    while (recorded.turns.length === 0) await Bun.sleep(1);
+    const aborted = runner.cancel(RUN_ID);
+    await running;
+
+    expect(aborted).toBe(true);
+    expect(recorded.finished).toEqual([
+      {
+        runId: RUN_ID,
+        status: "cancelled",
+        error: "cancelled by an authorized request",
+      },
+    ]);
+    expect(recorded.activity).toEqual([]);
+    expect(recorded.enabled).toEqual([]);
+  });
+
+  test("cancel answers false when nothing is in flight", async () => {
+    const { runner } = harness({});
+    expect(runner.cancel("routine_run_never_started")).toBe(false);
+  });
+});
+
+test("duplicate dispatch does not replace a live run's cancellation handle", async () => {
+  const { runner, recorded } = harness({
+    runTurn: ({ signal }) =>
+      new Promise((_, reject) => {
+        const abort = () => reject(new Error("aborted"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort, { once: true });
+      }),
+  });
+  const first = runner.run(RUN_ID);
+  while (!recorded.turns.length) await Bun.sleep(1);
+  const duplicate = runner.run(RUN_ID);
+  await Bun.sleep(5);
+  runner.cancel(RUN_ID);
+  await Promise.race([Promise.all([first, duplicate]), Bun.sleep(1000).then(() => {throw new Error("Both dispatches must settle");})]);
+  expect(runner.cancel(RUN_ID)).toBe(false);
+  expect(recorded.turns).toHaveLength(1);
+  expect(recorded.finished.map((x) => x.status)).toEqual(["cancelled"]);
+});
+
+test("a turn that resolves after abort cannot publish a success", async () => {
+  let release!: () => void;
+  const { runner, recorded } = harness({
+    runTurn: () =>
+      new Promise((resolve) => {
+        release = () => resolve({ replyText: "should not be published" });
+      }),
+  });
+  const running = runner.run(RUN_ID);
+  while (!release) await Bun.sleep(1);
+  runner.cancel(RUN_ID);
+  release();
+  await running;
+  expect(recorded.activity).toEqual([]);
+  expect(recorded.finished[0]?.status).toBe("cancelled");
 });

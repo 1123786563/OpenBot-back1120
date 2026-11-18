@@ -103,7 +103,16 @@ const TOO_MANY_ENABLED = `You already have ${MAX_ENABLED_ROUTINES} routines swit
 /** How many conversations a refusal reads out before it gives up and says "and others". */
 const MAX_NAMED_CHANNELS = 5;
 
-export type RoutineRunOutcome = "succeeded" | "failed" | "skipped" | "waiting";
+/**
+ * `cancelled` is a stop somebody with the right asked for (T01): the turn was aborted mid-flight,
+ * so it is neither a failure (nothing broke) nor a skip (a turn had started).
+ */
+export type RoutineRunOutcome =
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "waiting"
+  | "cancelled";
 
 export type Routine = {
   id: string;
@@ -270,6 +279,15 @@ export type RoutineStore = {
     id: string,
     limit?: number,
   ): Promise<RoutineRunSummary[]>;
+  /**
+   * One run of one of the owner's routines (T01): the cancel route's read, so it is owner-scoped
+   * the way `listRuns` is and a run that is not there is indistinguishable from somebody else's.
+   */
+  findRun(
+    ownerUserId: string,
+    routineId: string,
+    runId: string,
+  ): Promise<{ id: string; status: RoutineRunOutcome | null } | null>;
 
   /* The sweep's half. Deliberately not owner-scoped — see the boundary comment below. */
 
@@ -1048,6 +1066,18 @@ export function createRoutineStore(database: Database): RoutineStore {
         .limit(Math.min(Math.max(limit, 1), 100));
     },
 
+    async findRun(ownerUserId, routineId, runId) {
+      await loadOwned(ownerUserId, routineId);
+      const [row] = await database
+        .select({ id: routineRuns.id, status: routineRuns.status })
+        .from(routineRuns)
+        .where(
+          and(eq(routineRuns.id, runId), eq(routineRuns.routineId, routineId)),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+
     async setEnabled(ownerUserId, id, enabled) {
       // One field through the same path, so enabling re-checks the cap and recomputes the next run
       // rather than having a second, quieter version of those rules.
@@ -1301,9 +1331,12 @@ export function createRoutineStore(database: Database): RoutineStore {
              * Excluding it here, rather than reading it and skipping over it below, keeps it from
              * consuming a slot in the bounded window: a routine that skips twice for every
              * failure must still be able to count past ten failures, not top out around six or
-             * seven because skips ate two-thirds of the rows the window could hold.
+             * seven because skips ate two-thirds of the rows the window could hold. A CANCELLED
+             * run (T01) gets the same treatment, for the same reason: a stop somebody asked for
+             * says nothing about whether the routine works.
              */
             ne(routineRuns.status, "skipped"),
+            ne(routineRuns.status, "cancelled"),
             /*
              * ONLY SINCE IT WAS LAST SWITCHED ON. The rule switches a routine off after ten failures
              * and says a person must switch it back on; counting across that would leave the eleventh

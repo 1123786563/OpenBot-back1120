@@ -39,7 +39,7 @@ export type RoutineRecord = {
    * dispatch failures. Neither is a failure; only `status: "failed"` is.
    */
   lastRun: {
-    status: "succeeded" | "failed" | "skipped" | null;
+    status: "succeeded" | "failed" | "skipped" | "waiting" | "cancelled" | null;
     at: string | null;
   } | null;
 };
@@ -70,7 +70,13 @@ export const routineKeys = {
 /** One firing of a routine, scheduled or Run now. */
 export type RoutineRunRecord = {
   id: string;
-  status: "running" | "succeeded" | "failed" | "skipped" | "waiting";
+  status:
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "skipped"
+    | "waiting"
+    | "cancelled";
   startedAt: string;
   finishedAt: string | null;
   error: string | null;
