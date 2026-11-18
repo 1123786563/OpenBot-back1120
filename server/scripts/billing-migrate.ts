@@ -100,6 +100,8 @@ $$ LANGUAGE plpgsql`,
     ["idempotency", "billing_idempotency_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
     ["outbox_event", "billing_outbox_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
     ["recovery_allocation", "billing_recovery_allocation_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["recovery_block", "billing_recovery_block_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["recovery_backfill_audit", "billing_recovery_backfill_audit_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
   ].map(([table, name, fn, ops]) => ensureTrigger(table, name, fn, ops)),
   // credit_lot: components/status/revision updatable, source identity not; no delete
   ensureTrigger(
@@ -114,8 +116,37 @@ $$ LANGUAGE plpgsql`,
   // across ALL entries (grants, adjustments), concurrent or replayed. The
   // service enforces the same rule inside the account lock; this trigger is
   // what the DATABASE promises even if future code forgets it.
+  //
+  // SERIALIZATION (concurrency backstop): the cumulative check is a
+  // read-modify-check across rows, so two independent connections inserting
+  // DIFFERENT restoration events against the SAME original deduction line
+  // could both read the same old cumulative total and both pass. The
+  // transaction-scoped advisory lock below serializes the whole
+  // check-and-insert for one line: the second transaction's trigger only
+  // runs after the first has committed (READ COMMITTED takes a fresh
+  // snapshot per statement), and then sees the committed row in the SUM.
+  // Hash collisions on the lock key only add serialization, never leniency.
+  // The service path additionally holds the account row lock, so this lock
+  // costs nothing there; it is what makes the DATABASE-side promise hold for
+  // arbitrary writers.
+  //
+  // UPGRADE CLOSURE: a deduction the v1->v2 backfill could not attribute
+  // (billing.recovery_block) is closed for recovery entirely — the guard
+  // refuses every insert, whatever the cumulative sum still shows.
   `CREATE OR REPLACE FUNCTION billing.refuse_over_recovery() RETURNS trigger AS $$
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    NEW.original_event_id::text || ':' || NEW.original_lot_id::text, 0));
+  IF EXISTS (
+    SELECT 1 FROM billing.recovery_block
+    WHERE organization_id = NEW.organization_id
+      AND account_id = NEW.account_id
+      AND original_event_id = NEW.original_event_id
+  ) THEN
+    RAISE EXCEPTION 'recovery is closed for deduction % (unattributable or over-refunded history)',
+      NEW.original_event_id
+      USING ERRCODE = 'check_violation';
+  END IF;
   IF (SELECT delta_consumed_microcredits FROM billing.ledger_line
       WHERE event_id = NEW.original_event_id AND lot_id = NEW.original_lot_id)
      IS NULL THEN

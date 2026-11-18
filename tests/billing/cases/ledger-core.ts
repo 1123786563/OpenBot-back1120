@@ -5,10 +5,16 @@
  * independent owner PostgreSQL connection for constraint/fault evidence.
  *
  * Usage (from the ledger-app container, repo mounted at /work):
+ *   bun tests/billing/cases/ledger-core.ts --phase upgrade
  *   bun tests/billing/cases/ledger-core.ts --phase main
  *   bun tests/billing/cases/ledger-core.ts --phase lago-outage
  *
- * Phases:
+ * Phases (the runner executes them in this order on ONE fresh database):
+ *   upgrade     the v1 -> v2 migration path: commit refund history through the
+ *               REAL v1 entrypoint (snapshot extracted by the runner), stop
+ *               writes, upgrade, verify the quota backfill, the closed
+ *               over-refunded deduction, the serialized database guard, and
+ *               replay/remaining-quota behavior under the v2 entrypoint
  *   main        AC1 migrations/constraints, AC2 sources/auth, AC3 idempotency
  *               + atomic outbox, AC4 isolation/conservation, AC5 16-way
  *               adjustments, AC6a/AC6b crash windows (grant + adjustment)
@@ -96,8 +102,13 @@ async function stopAllServices(): Promise<void> {
   }
 }
 
-async function startService(barrierDir?: string): Promise<ServiceProcess> {
-  const proc = spawn("bun", [new URL("../../../server/src/billing-ledger/isolated-main.ts", import.meta.url).pathname], {
+async function startService(
+  barrierDir?: string,
+  // The upgrade phase runs the PRE-upgrade (v1) ledger entrypoint against the
+  // same database: `mainPath` points at the v1 snapshot extracted by the runner.
+  mainPath?: string,
+): Promise<ServiceProcess> {
+  const proc = spawn("bun", [mainPath ?? new URL("../../../server/src/billing-ledger/isolated-main.ts", import.meta.url).pathname], {
     env: {
       ...process.env,
       BILLING_LEDGER_DATABASE_URL: APP_URL,
@@ -284,7 +295,7 @@ async function main(): Promise<number> {
     `SELECT table_name AS tablename FROM information_schema.tables WHERE table_schema='billing' ORDER BY 1`,
   );
   const names = tables.map((t) => t.tablename).sort();
-  for (const expect of ["account", "adjustment", "business_event", "credit_lot", "idempotency", "ledger_event", "ledger_line", "outbox_delivery", "outbox_event", "recovery_allocation"]) {
+  for (const expect of ["account", "adjustment", "business_event", "credit_lot", "idempotency", "ledger_event", "ledger_line", "outbox_delivery", "outbox_event", "recovery_allocation", "recovery_block", "recovery_backfill_audit"]) {
     ok(names.includes(expect), `billing.${expect} exists after migration`);
   }
   const journal = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`);
@@ -1333,6 +1344,339 @@ async function main(): Promise<number> {
   }
 }
 
+/**
+ * The v1 -> v2 upgrade phase (review blocker: the v1 code committed
+ * restorations WITHOUT the recovery_allocation quota ledger, so a naive
+ * migration re-opens fully refunded deductions to a fresh grant under a new
+ * business key).
+ *
+ * This phase runs FIRST, against the FRESH database, with the REAL v1
+ * ledger snapshot (extracted by the runner from the pre-recovery commit):
+ *   1. apply the v1 migration set only (journal = 1, no quota ledger);
+ *   2. serve with the v1 entrypoint and commit, through the v1 trusted HTTP
+ *      entry: partial and full refunds of ACTIVE sources, an EXPIRED-source
+ *      refund, a MIXED-source partial refund, a direct compensation grant,
+ *      and the v1 expired-lot double refund that OVER-restores a deduction;
+ *   3. stop writes, upgrade to v2, repeat the migrator;
+ *   4. verify the backfill: every historical refund now occupies per-line
+ *      quota, original business/outbox/idempotency/history untouched,
+ *      over-refunded history closed and audited;
+ *   5. verify the DATABASE quota guard serializes two independent
+ *      connections inserting different restoration events on ONE line;
+ *   6. serve with the v2 entrypoint: original requests still replay their
+ *      stored first results, new keys may only use the remaining quota,
+ *      over-quota and closed deductions are refused with ZERO writes.
+ */
+async function upgradePhase(): Promise<number> {
+  console.log("\n== AC-upgrade: the v1 -> v2 migration preserves historical refund quota");
+  const owner = createLedgerSql(OWNER_URL, { max: 4 });
+  const { runBillingMigrations } = await import("../../../server/scripts/billing-migrate.ts");
+  const v1Dir = process.env.BILLING62_V1_DIR ?? `/work/.billing62-v1-${RUN_ID}`;
+  const v1Main = join(v1Dir, "server/src/billing-ledger/isolated-main.ts");
+  const v1Migrate = join(v1Dir, "server/scripts/billing-migrate.ts");
+  const nowUs = () => BigInt(Date.now()) * 1000n;
+  const DAY_US = 24n * 3600n * 1_000_000n;
+  /** Run an executable migration entrypoint (v1 snapshot) as a child process. */
+  const runScript = async (script: string): Promise<void> => {
+    const proc = spawn("bun", [script], { env: process.env, stdout: "ignore", stderr: "pipe" });
+    let err = "";
+    proc.stderr?.on("data", (d: Buffer) => (err += String(d)));
+    const code = await new Promise<number>((resolve) => proc.once("exit", (c) => resolve(c ?? 1)));
+    if (code !== 0) throw new Error(`${script} exited ${code}: ${err.slice(-600)}`);
+  };
+  /** SQL deduction fixture exactly like the trusted-entry-shaped history the suite already uses. */
+  const makeDeduction = async (
+    accountId: string,
+    eventId: string,
+    lines: { lotId: string; amount: string }[],
+  ): Promise<void> => {
+    await owner.unsafe(`
+      INSERT INTO billing.ledger_event (id, organization_id, account_id, event_type, account_seq, occurred_at_us, committed_at_us)
+      VALUES ($1, $2, $3, 'credit.adjusted', (SELECT COALESCE(MAX(account_seq),0)+1 FROM billing.ledger_event WHERE account_id = $3), 1000, 1000)`,
+      [eventId, ORG_A, accountId]);
+    for (const l of lines) {
+      await owner.unsafe(`
+        INSERT INTO billing.ledger_line (organization_id, account_id, event_id, lot_id, delta_consumed_microcredits, delta_available_microcredits, balances_after, created_at_us)
+        SELECT $2::uuid, $3::uuid, $1::uuid, id, ${l.amount}, (-${l.amount})::bigint,
+          jsonb_build_object('granted_microcredits', granted_microcredits::text, 'available_microcredits', (available_microcredits-${l.amount})::text, 'reserved_microcredits', reserved_microcredits::text, 'refund_frozen_microcredits', refund_frozen_microcredits::text, 'consumed_microcredits', (consumed_microcredits+${l.amount})::text, 'expired_microcredits', expired_microcredits::text, 'revoked_microcredits', revoked_microcredits::text), 1000
+        FROM billing.credit_lot WHERE id = $4`, [eventId, ORG_A, accountId, l.lotId]);
+      await owner.unsafe(
+        `UPDATE billing.credit_lot SET available_microcredits = available_microcredits - ${l.amount}, consumed_microcredits = consumed_microcredits + ${l.amount}, revision = revision + 1 WHERE id = $1`,
+        [l.lotId],
+      );
+    }
+  };
+  const recoverySum = async (eventId: string): Promise<string> =>
+    ((await owner.unsafe<{ s: string }[]>(
+      `SELECT COALESCE(SUM(restored_microcredits),0)::text AS s FROM billing.recovery_allocation WHERE original_event_id = $1`,
+      [eventId],
+    ))[0]!).s;
+
+  try {
+    // ---- 0. a TRUE v1 baseline -------------------------------------------------
+    const preJournal = await owner.unsafe<{ t: string | null }[]>(
+      `SELECT to_regclass('billing.__drizzle_migrations')::text AS t`,
+    );
+    eq(preJournal[0]!.t, null, "the database starts without any billing migration journal (a true v1 baseline)");
+
+    // ---- 1. apply the v1 migration set only ------------------------------------
+    await runScript(v1Migrate);
+    const v1Journal = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`);
+    eq(v1Journal[0]!.n, "1", "the v1 migrator applied exactly ONE migration (base schema, no quota ledger)");
+    const v1QuotaTable = await owner.unsafe<{ t: string | null }[]>(
+      `SELECT to_regclass('billing.recovery_allocation')::text AS t`,
+    );
+    eq(v1QuotaTable[0]!.t, null, "the v1 schema has NO recovery quota ledger (the upgrade must create it)");
+
+    // ---- 2. commit refund history through the REAL v1 entrypoint ----------------
+    const v1svc = await startService(undefined, v1Main);
+    const reg = await postConverge("/internal/v1/billing/accounts", { organization_id: ORG_A, owner_subject_id: "subj_upgrade", personal_workspace_id: "ws_upgrade" }, REGISTER_TOKEN, `up-reg-${RUN_ID}`);
+    eq(reg.status, 201, "the v1 entry registers the upgrade account");
+    const acctU = (reg.body.billing_account as { id: string }).id;
+
+    const subGrant = await postConverge("/internal/v1/billing/credit-grants", makeBody({
+      billing_account_id: acctU, source_event_id: `up_sub_${RUN_ID}`, source_type: "subscription",
+      source_period_id: "period_up_long", granted_microcredits: "600", valid_from_us: String(nowUs()),
+      expires_at_us: "2000000000000000",
+    }), ENT_A_TOKEN, `up-sub-${RUN_ID}`);
+    eq(subGrant.status, 201, "v1 entry grants the ACTIVE subscription lot (600)");
+    const subLot = (subGrant.body.credit_lot as { id: string }).id;
+    // A second subscription whose validity genuinely lapses mid-phase (packs
+    // are lifetime by schema; the EXPIRING source must be a subscription).
+    const shortExpires = nowUs() + 3_000_000n; // expires 3s from now
+    const shortGrant = await postConverge("/internal/v1/billing/credit-grants", makeBody({
+      billing_account_id: acctU, source_event_id: `up_short_${RUN_ID}`, source_type: "subscription",
+      source_period_id: "period_up_short", granted_microcredits: "500", valid_from_us: String(nowUs()),
+      expires_at_us: String(shortExpires),
+    }), ENT_A_TOKEN, `up-short-${RUN_ID}`);
+    eq(shortGrant.status, 201, "v1 entry grants the SHORT-LIVED subscription lot (500)");
+    const shortLot = (shortGrant.body.credit_lot as { id: string }).id;
+
+    // deductions: partial (D1), expired-source (D2), granted-full (D3),
+    // mixed-source (D4), expired-source to be OVER-refunded (D5)
+    const D1 = crypto.randomUUID();
+    const D2 = crypto.randomUUID();
+    const D3 = crypto.randomUUID();
+    const D4 = crypto.randomUUID();
+    const D5 = crypto.randomUUID();
+    await makeDeduction(acctU, D1, [{ lotId: subLot, amount: "100" }]);
+    await makeDeduction(acctU, D2, [{ lotId: shortLot, amount: "150" }]);
+    await makeDeduction(acctU, D3, [{ lotId: subLot, amount: "50" }]);
+    await makeDeduction(acctU, D4, [{ lotId: subLot, amount: "60" }, { lotId: shortLot, amount: "40" }]);
+    await makeDeduction(acctU, D5, [{ lotId: shortLot, amount: "100" }]);
+
+    await new Promise((r) => setTimeout(r, 3600)); // the pack lot genuinely expires
+
+    // Request bodies are frozen ONCE and reused verbatim for the post-upgrade
+    // replays: the same HTTP key with a different normalized request would be
+    // an idempotency_conflict by design.
+    const a1Body = adjBodyOf(acctU, D1, `up_a1_${RUN_ID}`, "charge_correction", "40");
+    // partial refund of an ACTIVE source
+    const a1 = await postConverge("/internal/v1/billing/adjustments", a1Body, ENT_A_TOKEN, `up-a1-${RUN_ID}`);
+    eq(a1.status, 201, "v1 entry refunds PART of an active-source deduction (+40)");
+    // full refund of the EXPIRED source (v1 issues a 30d compensation lot)
+    const a2 = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D2, `up_a2_${RUN_ID}`, "compensation", "150"), ENT_A_TOKEN, `up-a2-${RUN_ID}`);
+    eq(a2.status, 201, "v1 entry refunds the EXPIRED-source deduction (+150)");
+    eq((a2.body.compensation_lot as { source_type: string } | null)?.source_type, "compensation", "v1 answers the expired share with a fresh 30d compensation lot");
+    // FULL refund through the direct GRANT entry (v1 issues a fresh lot)
+    const g1Body = makeBody({
+      billing_account_id: acctU, source_event_id: `up_g1_${RUN_ID}`, source_type: "compensation",
+      granted_microcredits: "50", valid_from_us: String(nowUs()),
+      expires_at_us: String(nowUs() + 30n * DAY_US), original_event_id: D3,
+    });
+    const g1 = await postConverge("/internal/v1/billing/credit-grants", g1Body, ENT_A_TOKEN, `up-g1-${RUN_ID}`);
+    eq(g1.status, 201, "v1 entry refunds the deduction FULLY through the direct grant entry");
+    // mixed-source partial refund
+    const a3 = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D4, `up_a3_${RUN_ID}`, "charge_correction", "60"), ENT_A_TOKEN, `up-a3-${RUN_ID}`);
+    eq(a3.status, 201, "v1 entry refunds PART of the mixed-source deduction (+60)");
+    const subFirst = subLot < shortLot; // v1 fills lines in lot_id order
+    const a3RestoredInPlace = subFirst;
+    // the v1 expired-lot double refund: two +100 adjustments on a 100 deduction
+    const a4 = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D5, `up_a4_${RUN_ID}`, "charge_correction", "100"), ENT_A_TOKEN, `up-a4-${RUN_ID}`);
+    eq(a4.status, 201, "v1 entry commits the first expired-lot refund (+100)");
+    const a5 = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D5, `up_a5_${RUN_ID}`, "expiry_correction", "100"), ENT_A_TOKEN, `up-a5-${RUN_ID}`);
+    eq(a5.status, 201, "v1 entry commits the SECOND expired-lot refund (+100) — v1 over-restores this deduction");
+
+    await v1svc.stop();
+    ok(!(await fetch(`${BASE}/healthz`, { signal: AbortSignal.timeout(400) }).then((r) => r.ok).catch(() => false)), "writes stopped: the v1 service is down before the upgrade");
+
+    // ---- 3. upgrade to v2, then repeat the migrator -----------------------------
+    const hist = {} as Record<string, string>;
+    for (const t of ["ledger_event", "ledger_line", "credit_lot", "adjustment", "business_event", "idempotency", "outbox_event"]) {
+      hist[t] = (await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.${t}`))[0]!.n;
+    }
+    const pendingBefore = (await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.outbox_delivery WHERE status = 'pending'`))[0]!.n;
+
+    await runBillingMigrations(OWNER_URL, { appPassword: APP_PASSWORD });
+    const journal2 = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`);
+    eq(journal2[0]!.n, "2", "the upgrade applied exactly the recovery-quota migration (journal v1 -> v2)");
+
+    // ---- 4. the backfill: historical refunds now occupy quota -------------------
+    eq(await recoverySum(D1), "40", "backfill: the partial ACTIVE refund occupies exactly its 40");
+    eq(await recoverySum(D2), "150", "backfill: the EXPIRED-source refund occupies the full 150");
+    eq(await recoverySum(D3), "50", "backfill: the grant-entry refund occupies the full 50");
+    eq(await recoverySum(D4), "60", "backfill: the mixed-source refund occupies exactly its 60");
+    eq(await recoverySum(D5), "100", "backfill: the over-restored deduction records only what the first refund could absorb (100)");
+    const d1Rows = await owner.unsafe<{ lot: string; amt: string; via: string }[]>(
+      `SELECT original_lot_id::text AS lot, restored_microcredits::text AS amt, restored_via AS via FROM billing.recovery_allocation WHERE original_event_id = $1 ORDER BY original_lot_id`, [D1]);
+    eq(`${d1Rows.length}:${d1Rows[0]?.lot}:${d1Rows[0]?.via}`, `1:${subLot}:adjustment`, "backfill: the adjustment refund is attributed to the deduction's own line under its own entry");
+    const d3Via = await owner.unsafe<{ via: string }[]>(`SELECT restored_via AS via FROM billing.recovery_allocation WHERE original_event_id = $1`, [D3]);
+    eq(d3Via[0]?.via, "credit_grant", "backfill: the direct-grant refund carries the grant entry");
+    const d4Rows = await owner.unsafe<{ lot: string; amt: string }[]>(
+      `SELECT original_lot_id::text AS lot, restored_microcredits::text AS amt FROM billing.recovery_allocation WHERE original_event_id = $1 ORDER BY original_lot_id`, [D4]);
+    const expD4 = a3RestoredInPlace
+      ? [[subLot, "60"]]
+      : [[shortLot, "40"], [subLot, "20"]];
+    eq(JSON.stringify(d4Rows.map((r) => [r.lot, r.amt])), JSON.stringify(expD4), `backfill: the mixed refund lands on the lines v1 actually drew from (${subFirst ? "long-lived line first" : "short-lived line first"})`);
+    const restEvents = await owner.unsafe<{ n: string }[]>(
+      `SELECT COUNT(DISTINCT restoration_event_id)::text AS n FROM billing.recovery_allocation WHERE original_event_id IN ($1,$2,$3,$4,$5)`,
+      [D1, D2, D3, D4, D5]);
+    eq(restEvents[0]!.n, "5", "backfill: every recovery row points at the ORIGINAL v1 restoration event (no synthetic ids)");
+
+    const audit = await owner.unsafe<{ mode: string; ev: string; rt: string; dt: string }[]>(
+      `SELECT a.mode, a.original_event_id::text AS ev, a.restored_total::text AS rt, a.deduction_total::text AS dt
+       FROM billing.recovery_backfill_audit a ORDER BY a.original_event_id`);
+    eq(audit.length, 5, "backfill audit: exactly one decision per deduction that carried history");
+    eq(audit.filter((r) => r.mode === "attributed").length, 4, "backfill audit: four deductions attributed cleanly");
+    const blocked = audit.filter((r) => r.mode === "blocked");
+    eq(blocked.length, 1, "backfill audit: exactly one deduction blocked");
+    eq(blocked[0]?.ev, D5, "backfill audit: the OVER-refunded deduction is the blocked one");
+    const blockRow = await owner.unsafe<{ reason: string; dt: string; dm: string }[]>(
+      `SELECT reason, deduction_total::text AS dt, demanded_total::text AS dm FROM billing.recovery_block`);
+    eq(blockRow.length, 1, "closure: exactly one recovery_block row exists");
+    eq(`${blockRow[0]?.reason}:${blockRow[0]?.dt}:${blockRow[0]?.dm}`, "over_refunded_history:100:200", "closure: the block records the deduction total (100) and what history demanded (200)");
+
+    let histPreserved = true;
+    for (const t of Object.keys(hist)) {
+      const n = (await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.${t}`))[0]!.n;
+      if (n !== hist[t]) { histPreserved = false; console.error(`  DEBUG ${t}: ${hist[t]} -> ${n}`); }
+    }
+    ok(histPreserved, "the upgrade rewrote NOTHING in history: business, idempotency, outbox, lots, events, lines, adjustments all preserved");
+    const pendingAfterUp = (await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.outbox_delivery WHERE status = 'pending'`))[0]!.n;
+    eq(pendingAfterUp, pendingBefore, "the upgrade preserved every pending outbox delivery");
+
+    await runBillingMigrations(OWNER_URL, { appPassword: APP_PASSWORD });
+    eq((await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`))[0]!.n, "2", "REPEATED migration after the upgrade adds no journal row");
+    eq(await recoverySum(D5), "100", "REPEATED migration does not re-run the backfill");
+
+    // ---- 5. the database guard SERIALIZES concurrent writers on one line --------
+    const DQ = crypto.randomUUID();
+    await makeDeduction(acctU, DQ, [{ lotId: subLot, amount: "100" }]);
+    const R1 = crypto.randomUUID();
+    const R2 = crypto.randomUUID();
+    const R3 = crypto.randomUUID(); // the exact-fit insert must not reuse either racer's event
+    for (const r of [R1, R2, R3]) {
+      await owner.unsafe(`
+        INSERT INTO billing.ledger_event (id, organization_id, account_id, event_type, account_seq, occurred_at_us, committed_at_us)
+        VALUES ($1, $2, $3, 'credit.adjusted', (SELECT COALESCE(MAX(account_seq),0)+1 FROM billing.ledger_event WHERE account_id = $3), 1000, 1000)`,
+        [r, ORG_A, acctU]);
+    }
+    const c1 = createLedgerSql(OWNER_URL, { max: 1 });
+    const c2 = createLedgerSql(OWNER_URL, { max: 1 });
+    const tryAllocate = (conn: ReturnType<typeof createLedgerSql>, restEvent: string) =>
+      conn.begin(async (tx) => {
+        await tx`INSERT INTO billing.recovery_allocation
+          (organization_id, account_id, original_event_id, original_lot_id, restored_microcredits, restored_via, restoration_event_id, created_at_us)
+          VALUES (${ORG_A}, ${acctU}, ${DQ}, ${subLot}, 80, 'adjustment', ${restEvent}, 1000)`;
+      });
+    const race = await Promise.allSettled([tryAllocate(c1, R1), tryAllocate(c2, R2)]);
+    eq(race.filter((r) => r.status === "fulfilled").length, 1, "guard race: two independent connections on ONE line — exactly ONE concurrent +80 passes");
+    const loser = race.find((r) => r.status === "rejected") as PromiseRejectedResult<unknown>;
+    ok(String((loser.reason as { code?: string }).code ?? "") === "23514", `guard race: the concurrent over-quota writer is refused by the database (23514, got ${(loser.reason as { code?: string }).code})`);
+    eq(await recoverySum(DQ), "80", "guard race: the committed total equals exactly ONE writer's amount");
+    const over30 = await owner.unsafe(`INSERT INTO billing.recovery_allocation
+      (organization_id, account_id, original_event_id, original_lot_id, restored_microcredits, restored_via, restoration_event_id, created_at_us)
+      VALUES ('${ORG_A}', '${acctU}', '${DQ}', '${subLot}', 30, 'adjustment', '${R1}', 1000)`
+    ).catch((e: { code?: string }) => e);
+    ok((over30 as { code?: string }).code === "23514", "guard race: +30 over the remaining 20 is refused (80 + 30 > 100)");
+    await owner.unsafe(`INSERT INTO billing.recovery_allocation
+      (organization_id, account_id, original_event_id, original_lot_id, restored_microcredits, restored_via, restoration_event_id, created_at_us)
+      VALUES ('${ORG_A}', '${acctU}', '${DQ}', '${subLot}', 20, 'adjustment', '${R3}', 1000)`);
+    eq(await recoverySum(DQ), "100", "guard race: the remaining exact 20 fits — the committed total never exceeds the line (100)");
+    const closedTry = await owner.unsafe(`INSERT INTO billing.recovery_allocation
+      (organization_id, account_id, original_event_id, original_lot_id, restored_microcredits, restored_via, restoration_event_id, created_at_us)
+      VALUES ('${ORG_A}', '${acctU}', '${D5}', '${shortLot}', 1, 'adjustment', '${R1}', 1000)`).catch((e: { code?: string }) => e);
+    ok((closedTry as { code?: string }).code === "23514", "guard: the CLOSED deduction refuses even a 1-microcredit database-level allocation");
+    await c1.end({ timeout: 2 }).catch(() => {});
+    await c2.end({ timeout: 2 }).catch(() => {});
+
+    // ---- 6. the v2 entrypoint: replay, remaining quota, refusals -----------------
+    const svc = await startService();
+    const a1Replay = await postConverge("/internal/v1/billing/adjustments", a1Body, ENT_A_TOKEN, `up-a1-${RUN_ID}`);
+    eq(a1Replay.status, 200, "the ORIGINAL v1 refund request still replays after the upgrade (stored first result)");
+    eq((a1Replay.body.adjustment as { id: string }).id, (a1.body.adjustment as { id: string }).id, "the replay answers the SAME stored first result (same adjustment id)");
+    eq(await recoverySum(D1), "40", "the replay added no second quota occupation");
+    const g1Replay = await postConverge("/internal/v1/billing/credit-grants", g1Body, ENT_A_TOKEN, `up-g1-${RUN_ID}`);
+    eq(g1Replay.status, 200, "the original grant replays after the upgrade");
+    eq((g1Replay.body.credit_lot as { id: string }).id, (g1.body.credit_lot as { id: string }).id, "the grant replay answers the SAME lot the v1 entry issued");
+
+    // partial refund: only the REMAINING quota is usable, under a NEW key
+    const subConsumedBefore = (await owner.unsafe<{ c: string }[]>(`SELECT consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [subLot]))[0]!.c;
+    const d1Rest = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D1, `up_d1rest_${RUN_ID}`, "compensation", "60"), ENT_A_TOKEN, `up-d1rest-${RUN_ID}`);
+    eq(d1Rest.status, 201, "a NEW key may use exactly the REMAINING quota (60 of 100)");
+    eq((d1Rest.body.compensation_lot as { id: string } | null), null, "the remaining ACTIVE share restores IN PLACE (no compensation lot in the answer)");
+    eq(await recoverySum(D1), "100", "the shared quota ledger now shows the deduction fully restored (40 + 60)");
+    const subConsumedAfter = (await owner.unsafe<{ c: string }[]>(`SELECT consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [subLot]))[0]!.c;
+    eq((BigInt(subConsumedBefore) - BigInt(subConsumedAfter)).toString(), "60", "the original lot's consumed share dropped by exactly the restored 60");
+    eq((await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.credit_lot WHERE compensation_for_event_id = $1`, [D1]))[0]!.n, "0", "NO compensation lot was invented for the active-source deduction");
+
+    const refuseWith = async (eventId: string, sourceKey: string, unusedType: string, what: string) => {
+      const r = await post("/internal/v1/billing/adjustments", adjBodyOf(acctU, eventId, sourceKey, unusedType, "1"), ENT_A_TOKEN, `${sourceKey}-1`);
+      eq(r.status, 409, `${what} refused (409)`);
+      eq((r.body as { title?: string }).title, "state_conflict", `${what} refusal is state_conflict`);
+      eq(await countOf(owner, "adjustment", `source_event_id = '${sourceKey}'`), 0n, `${what} stored no adjustment row`);
+      eq(await countOf(owner, "business_event", `source_event_id = '${sourceKey}'`), 0n, `${what} stored no business identity`);
+    };
+    await refuseWith(D1, `up_d1over_${RUN_ID}`, "expiry_correction", "a new-key +1 over the fully restored deduction");
+    eq(await recoverySum(D1), "100", "the refused over-restoration changed no quota");
+    await refuseWith(D2, `up_d2over_${RUN_ID}`, "charge_correction", "a new-key +1 over the fully refunded expired deduction");
+    eq(await recoverySum(D2), "150", "the expired-source deduction stays fully occupied");
+    eq((await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.credit_lot WHERE compensation_for_event_id = $1`, [D2]))[0]!.n, "1", "the refused attempt invented no second compensation lot");
+    await refuseWith(D3, `up_d3over_${RUN_ID}`, "charge_correction", "a new-key +1 over the grant-refunded deduction");
+    eq(await recoverySum(D3), "50", "the grant-refunded deduction stays fully occupied");
+
+    // mixed-source remainder: exactly the leftover share, wherever v1 left it
+    const d4Rest = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctU, D4, `up_d4rest_${RUN_ID}`, "compensation", "40"), ENT_A_TOKEN, `up-d4rest-${RUN_ID}`);
+    eq(d4Rest.status, 201, "the mixed-source remainder (40) is still recoverable under a new key");
+    if (a3RestoredInPlace) {
+      eq((d4Rest.body.compensation_lot as { source_type: string } | null)?.source_type, "compensation", "the EXPIRED remainder answers with a fresh 30d compensation lot");
+      eq((await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.credit_lot WHERE compensation_for_event_id = $1`, [D4]))[0]!.n, "1", "the expired remainder is the only compensation lot for the mixed deduction");
+    } else {
+      eq(d4Rest.body.compensation_lot ?? null, null, "the ACTIVE remainder restores IN PLACE (no compensation lot)");
+      const subAfterD4 = (await owner.unsafe<{ c: string }[]>(`SELECT consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [subLot]))[0]!.c;
+      eq((BigInt(subConsumedAfter) - BigInt(subAfterD4)).toString(), "40", "the active remainder moved exactly 40 back to available in place");
+    }
+    eq(await recoverySum(D4), "100", "the mixed deduction is now fully occupied (60 + 40)");
+    await refuseWith(D4, `up_d4over_${RUN_ID}`, "expiry_correction", "a new-key +1 over the fully restored mixed deduction");
+
+    // the CLOSED deduction: refused by the SERVICE too, zero writes anywhere
+    const closedOutboxBefore = await countOf(owner, "outbox_event", "1=1");
+    const closedAdj = await post("/internal/v1/billing/adjustments", adjBodyOf(acctU, D5, `up_d5over_${RUN_ID}`, "compensation", "1"), ENT_A_TOKEN, `up-d5over-1`);
+    eq(closedAdj.status, 409, "the OVER-refunded deduction is refused by the service (closure)");
+    eq((closedAdj.body as { title?: string }).title, "state_conflict", "the closure refusal is state_conflict");
+    eq(await countOf(owner, "adjustment", `original_event_id = '${D5}'`), 2n, "the closed deduction still carries exactly its two historical adjustments");
+    eq(await countOf(owner, "business_event", `source_event_id = 'up_d5over_${RUN_ID}'`), 0n, "the closed attempt stored no business identity");
+    eq(await countOf(owner, "credit_lot", `compensation_for_event_id = '${D5}'`), 2n, "no third compensation lot for the over-refunded deduction");
+    eq(await recoverySum(D5), "100", "the closed deduction's quota did not move");
+    eq(await countOf(owner, "outbox_event", "1=1"), closedOutboxBefore, "the closed attempt wrote no outbox record");
+    eq((await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.recovery_block`))[0]!.n, "1", "the closure row survives every refused attempt");
+
+    // conservation across the whole upgraded account
+    const cons = await owner.unsafe<{ ok: string }[]>(
+      `SELECT bool_and(granted_microcredits = available_microcredits + reserved_microcredits + refund_frozen_microcredits + consumed_microcredits + expired_microcredits + revoked_microcredits)::text AS ok
+       FROM billing.credit_lot WHERE account_id = $1`, [acctU]);
+    eq(cons[0]!.ok, "true", "every lot of the upgraded account still conserves exactly");
+
+    await svc.stop();
+
+    console.log(`\nupgrade phase complete: ${checks} checks, ${failures} failures`);
+    return failures === 0 ? 0 : 1;
+  } finally {
+    await stopAllServices();
+    await owner.end({ timeout: 2 }).catch(() => {});
+  }
+}
+
 async function lagoOutagePhase(): Promise<number> {
   console.log("\n== AC7 Lago down: local ledger commits, pending preserved, replay adds nothing");
   const owner = createLedgerSql(OWNER_URL, { max: 1 });
@@ -1386,5 +1730,10 @@ async function waitFor(cond: () => boolean, timeoutMs: number): Promise<void> {
 const phase = process.argv.includes("--phase")
   ? process.argv[process.argv.indexOf("--phase") + 1]
   : "main";
-const code = phase === "lago-outage" ? await lagoOutagePhase() : await main();
+const code =
+  phase === "upgrade"
+    ? await upgradePhase()
+    : phase === "lago-outage"
+      ? await lagoOutagePhase()
+      : await main();
 process.exit(code);

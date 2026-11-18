@@ -1620,6 +1620,20 @@ export class BillingLedger {
         "state_conflict",
         "the referenced original event is not a deduction; recovery must link an original deduction",
       );
+    // The v1 -> v2 upgrade closed deductions whose PRE-upgrade restorations
+    // could not be attributed to lines (or already over-restored them). No
+    // entry, key or adjustment type may reopen them — the residual quota the
+    // arithmetic below would compute from the partial backfill is NOT
+    // trustworthy for these, so the closure is checked FIRST.
+    const closedRows = await tx<{ n: string }[]>`
+      SELECT COUNT(*)::text AS n FROM billing.recovery_block
+      WHERE organization_id = ${organizationId} AND account_id = ${accountId}
+        AND original_event_id = ${originalEventId}`;
+    if (closedRows[0]!.n !== "0")
+      throw new LedgerError(
+        "state_conflict",
+        "recovery is closed for this deduction: its historical restorations could not be fully attributed",
+      );
     const plan: RecoveryPlan = {
       restorations: [],
       expiredShare: 0n,

@@ -513,6 +513,40 @@ async function runFull(): Promise<number> {
       { env: composeEnv },
     );
 
+  // The v1 ledger snapshot: the PRE-recovery-quota commit's server tree,
+  // extracted so the upgrade phase can (1) apply the v1 migration set, (2)
+  // commit refund history through the REAL v1 HTTP entrypoint, and only then
+  // (3) upgrade to the current migration set and prove the backfill. The
+  // snapshot lives INSIDE the repo root so the container's /work bind mount
+  // exposes it AND `bun` resolves the repo's node_modules walking up from it.
+  const v1Ref = process.env.BILLING62_V1_REF ?? "3bcbb143";
+  const v1DirName = `.billing62-v1-${runId}`;
+  const v1HostDir = join(import.meta.dir, "..", "..", v1DirName); // repo root
+  const refCheck = sh(`git cat-file -e ${v1Ref}^{commit}`);
+  if (refCheck.code !== 0) {
+    console.error(
+      `  FAIL the v1 ledger snapshot ref ${v1Ref} is not available in this checkout; ` +
+        "the v1 -> v2 upgrade evidence requires the real pre-recovery ledger. " +
+        "Override with BILLING62_V1_REF=<pre-recovery commit>.",
+    );
+    return 2;
+  }
+  rmSync(v1HostDir, { recursive: true, force: true });
+  sh(`mkdir -p ${JSON.stringify(v1HostDir)}`);
+  const v1Extract = sh(`git archive ${v1Ref} server | tar -x -C ${JSON.stringify(v1HostDir)}`);
+  // The snapshot carries no node_modules; the workspace's `postgres` package
+  // lives in `server/node_modules`, which bun only finds by walking UP from
+  // the importing file. Link the workspace's own dependency directory into
+  // the snapshot's root so the v1 entrypoints resolve exactly like the
+  // current ones (relative link: valid on the host and inside the container).
+  sh(`ln -s ../server/node_modules ${JSON.stringify(join(v1HostDir, "node_modules"))}`);
+  if (v1Extract.code !== 0 || !existsSync(join(v1HostDir, "server", "billing-drizzle"))) {
+    console.error(`  FAIL extracting the v1 ledger snapshot failed: ${v1Extract.out.slice(-500)}`);
+    rmSync(v1HostDir, { recursive: true, force: true });
+    return 2;
+  }
+  composeEnv.BILLING62_V1_DIR = `/work/${v1DirName}`;
+
   let upOk = false;
   let failuresFromDriver = 0;
   try {
@@ -564,6 +598,12 @@ async function runFull(): Promise<number> {
       return 2;
     }
     // the JS probe is passed single-quoted so the host shell never touches it
+
+    console.log("  phase: driver --phase upgrade (v1 -> v2 upgrade path with real v1 history)");
+    const upgrade = execDriver("upgrade");
+    console.log(indent(upgrade.out));
+    if (upgrade.code !== 0) failuresFromDriver++;
+
     // Lago for AC7: dedicated short-lived bring-up, one-shot migration, then
     // the health probe from the ledger driver network.
     const lagoUp = composeArgs(project, ["up", "-d", "--wait", "lago-db", "lago-redis", "lago-api"], composeEnv);
@@ -614,6 +654,7 @@ async function runFull(): Promise<number> {
     );
     return ok_ ? 0 : 1;
   } finally {
+    rmSync(v1HostDir, { recursive: true, force: true }); // the snapshot is per-run scaffolding, never left behind
     if (upOk) {
       // Cleanup touches ONLY the guard-verified project; volumes are removed
       // only AFTER every assertion (including recovery) has been captured.
