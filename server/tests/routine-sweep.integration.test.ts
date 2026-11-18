@@ -1165,7 +1165,7 @@ describe("consuming a claimed firing", () => {
     });
     const heard: ChannelActivityEvent[] = [];
     const hub = createChannelEventHub();
-    const detach = hub.register(owner.id, (payload) => {
+    const detach = hub.register(owner.id, undefined, (payload) => {
       heard.push(JSON.parse(payload) as ChannelActivityEvent);
     });
     const listener = await startChannelActivityListener(databaseUrl, hub);

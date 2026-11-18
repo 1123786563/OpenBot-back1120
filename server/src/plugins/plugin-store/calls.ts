@@ -61,6 +61,12 @@ export function callMethods(context: StoreContext) {
   } = context;
   const accounts = accountBook(context);
   return {
+    /** See {@link connectionTokenFor}: whose identity and credential one call reaches. */
+    connectionTokenFor,
+    /** See {@link accountRefFor}: whose account one call runs in, decided in one place. */
+    accountRefFor: context.accountRefFor,
+    /** See {@link accountRow}: the WHERE clause that scopes one account's row to its holder. */
+    accountRow: context.accountRow,
     /**
      * May this Bot use this plugin?
      *

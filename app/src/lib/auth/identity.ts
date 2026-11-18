@@ -1,4 +1,4 @@
-import type { QueryClient, QueryKey } from "@tanstack/react-query";
+import { MutationObserver, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { queryClient } from "@/query-client";
 import { clearSkin } from "@/skins/store";
 
@@ -25,6 +25,15 @@ import { clearSkin } from "@/skins/store";
  * frozen cache is only ever correct while nobody is signed in: it must never hold a signed-in
  * user's screen hostage.
  *
+ * THE FREEZE ALONE IS NOT ENOUGH, and the gap is exactly the ordering above: a mutation whose
+ * `onSuccess` was already running when the switch began finishes after it. By the time its
+ * `setQueryData` runs, the new identity has loaded, the freeze has lifted — and a check of
+ * "is the cache frozen" alone would wave the OLD identity's write straight into the NEW one's
+ * cache. So every mutation is bound to the generation it started under: the cache write door
+ * compares the running callback's generation against the page's and drops the write when they
+ * differ, no matter how long the response took or how many identities came and went in between.
+ * See `installIdentityGuards` for where that binding is attached.
+ *
  * The switch is broadcast on a `BroadcastChannel`, so tabs sharing the cookie clear themselves
  * instead of going on receiving the old identity's events from a socket that the server — which
  * now revokes on sign-out — is about to close under them.
@@ -45,7 +54,35 @@ const SWITCH_MESSAGE = "identity-switched";
 
 let generation = 0;
 let frozen = false;
+/**
+ * The generation the identity-scoped callback currently running was started under, or `null`
+ * outside any such callback. Set only while a guarded callback runs (see
+ * `runForGeneration`), so it never leaks into unrelated code between awaits.
+ */
+let executing: number | null = null;
 let channel: BroadcastChannel | undefined;
+
+/** Run `fn` as a callback of the identity generation `startedAt`, nesting-safe. */
+function runForGeneration<T>(startedAt: number, fn: () => T): T {
+  const outer = executing;
+  executing = startedAt;
+  try {
+    return fn();
+  } finally {
+    executing = outer;
+  }
+}
+
+/**
+ * Whether a cache write must be dropped.
+ *
+ * Frozen — nobody holds the page — is the obvious case. The other is the stale one: a callback
+ * bound to an earlier generation is running NOW, while a later identity owns the page. Both are
+ * answered by one predicate so a caller cannot pass one and forget the other.
+ */
+function writeIsStale(): boolean {
+  return frozen || (executing !== null && executing !== generation);
+}
 
 function clearAccountScopedStorage(): void {
   try {
@@ -93,6 +130,11 @@ export function freezeIdentity(): void {
  * person is still themselves, and the screen they were on may write again. After a real switch
  * this runs only once the new identity's user object has been loaded, which can only be the new
  * person, since the cache and storage the old one could come back from are gone.
+ *
+ * The generation moves again here on purpose. A callback that started under the old identity
+ * must stay stale across the resume — its generation no longer matches, whichever identity now
+ * holds the page — so the resume may never restore the number the old callback is still bound
+ * to.
  */
 export function resumeIdentity(): void {
   if (!frozen) return;
@@ -112,6 +154,13 @@ export function beginIdentitySwitch(): void {
   queryClient.clear();
   clearSkin();
   clearAccountScopedStorage();
+  /*
+   * The broadcast targets OTHER TABS of a real browser document — that is who hears it and
+   * reloads. Where there is no document (a test process, a worker), posting would only hand a
+   * stray message to whatever listener happens to share the channel name later in the same
+   * process, and this tab has no other tabs to tell anyway.
+   */
+  if (typeof document === "undefined") return;
   try {
     channel ??= new BroadcastChannel(BROADCAST_CHANNEL);
     channel.postMessage(SWITCH_MESSAGE);
@@ -127,13 +176,73 @@ export function identityFrozen(): boolean {
 }
 
 /**
- * Drop business cache writes while frozen, and let guarded callers compare generations.
+ * Wrap one mutation callback so it runs bound to the generation the mutation started under.
+ *
+ * The binding is what `writeIsStale` reads: a success callback of a mutation started under the
+ * old identity writes nothing after a switch, even though the freeze it used to be stopped by
+ * has since lifted for the new identity. `startedAt` is read at execute time by the caller —
+ * per execution, not per mutation, so a mutation object that runs twice binds each run to the
+ * generation it itself started under.
+ */
+function bindCallback<A extends unknown[]>(
+  callback: ((...args: A) => unknown) | undefined,
+  startedAt: () => number,
+): ((...args: A) => unknown) | undefined {
+  if (!callback) return undefined;
+  return (...args: A) =>
+    runForGeneration(startedAt(), () => callback(...args));
+}
+
+/**
+ * Copy mutation options with each lifecycle callback bound. The original object belongs to the
+ * hook that declared it and is reused across mutations; wrapping in place would stack a wrapper
+ * on a wrapper on every rebuild.
+ */
+function bindMutationOptions<
+  TData,
+  TError,
+  TVariables,
+  TContext,
+>(options: {
+  onSuccess?: (data: TData, variables: TVariables, context: TContext) => unknown;
+  onError?: (error: TError, variables: TVariables, context: TContext) => unknown;
+  onSettled?: (
+    data: TData | undefined,
+    error: TError | null,
+    variables: TVariables,
+    context: TContext,
+  ) => unknown;
+  [key: string]: unknown;
+}, startedAt: () => number): typeof options {
+  return {
+    ...options,
+    onSuccess: bindCallback(options.onSuccess, startedAt),
+    onError: bindCallback(options.onError, startedAt),
+    onSettled: bindCallback(options.onSettled, startedAt),
+  };
+}
+
+/**
+ * Drop business cache writes while frozen or stale, and bind mutations to their generation.
  *
  * Patched onto the one `QueryClient` instance rather than wrapped in every caller, because a
  * wrapper is a discipline that one new call site can forget; an instance patch is a property of
- * the cache itself. Cancelled queries are already dropped by React Query; this catches the other
- * door into the cache — a mutation's `onSuccess` that was already past cancellation when the
- * switch began.
+ * the cache itself.
+ *
+ * Three doors lead into the cache, and each is closed here:
+ *
+ * - `setQueryData`, guarded by `writeIsStale` — catches the success callback of a mutation that
+ *   was already past cancellation when the switch began, and any direct write from code that a
+ *   stale response woke up.
+ * - every mutation the cache builds, whose lifecycle callbacks are wrapped to run bound to the
+ *   generation the mutation was executed under — that binding is what makes the door above able
+ *   to tell an old callback from a new one.
+ * - the per-call callbacks of `mutate(variables, { onSuccess })`, which bypass the mutation's own
+ *   options entirely (the observer runs them after `execute` answers) and are bound the same
+ *   way at the call.
+ *
+ * Query fetches need no door: `freezeIdentity` cancels them, and React Query drops the results
+ * of cancelled fetches by itself.
  */
 let installed = false;
 export function installIdentityGuards(): void {
@@ -145,7 +254,7 @@ export function installIdentityGuards(): void {
     updater: Parameters<QueryClient["setQueryData"]>[1],
     options?: Parameters<QueryClient["setQueryData"]>[2],
   ): TQueryFnData | undefined => {
-    if (frozen) return undefined;
+    if (writeIsStale()) return undefined;
     // Bound above, so the generic dispatch still resolves the updater against the cached type.
     return (
       original as unknown as (
@@ -155,6 +264,85 @@ export function installIdentityGuards(): void {
       ) => TQueryFnData | undefined
     )(queryKey, updater, options);
   };
+
+  /*
+   * Every mutation the cache builds gets an `execute` that stamps the generation it started
+   * under, and lifecycle callbacks that read that stamp while they run. `bindMutationOptions`
+   * copies rather than mutates, and the WeakSet keeps a rebuilt mutation from being wrapped
+   * twice.
+   */
+  const cache = queryClient.getMutationCache();
+  const wrapped = new WeakSet<object>();
+  const originalBuild = cache.build.bind(cache);
+  cache.build = ((
+    client: Parameters<typeof cache.build>[0],
+    options: Parameters<typeof cache.build>[1],
+    state: Parameters<typeof cache.build>[2],
+  ) => {
+    const startedAt = { value: -1 };
+    const mutation = originalBuild(
+      client,
+      options
+        ? (bindMutationOptions(
+            options as unknown as Parameters<typeof bindMutationOptions>[0],
+            () => startedAt.value,
+          ) as typeof options)
+        : options,
+      state,
+    );
+    if (wrapped.has(mutation)) return mutation;
+    wrapped.add(mutation);
+    const originalExecute = mutation.execute.bind(mutation);
+    type Execute = typeof mutation.execute;
+    (mutation as { execute: Execute }).execute = (
+      variables: Parameters<Execute>[0],
+    ) => {
+      startedAt.value = identityGeneration();
+      return originalExecute(variables);
+    };
+    return mutation;
+  }) as typeof cache.build;
+
+  /*
+   * The per-call callbacks of `mutate()` never reach the mutation's options — the observer holds
+   * them beside it and runs them from its own notification after `execute` settles. The same
+   * binding attaches here, at the call, where the generation is the caller's.
+   */
+  const observerPrototype = MutationObserver.prototype as unknown as {
+    mutate: (
+      this: { /* shape irrelevant to the wrapper */ },
+      variables: unknown,
+      options?:
+        | {
+            onSuccess?: (...args: unknown[]) => unknown;
+            onError?: (...args: unknown[]) => unknown;
+            onSettled?: (...args: unknown[]) => unknown;
+          }
+        | undefined,
+      ...rest: unknown[]
+    ) => unknown;
+  };
+  const originalMutate = observerPrototype.mutate;
+  observerPrototype.mutate = function (variables, options, ...rest) {
+    if (!options) return originalMutate.call(this, variables, options, ...rest);
+    const startedAt = identityGeneration();
+    return originalMutate.call(
+      this,
+      variables,
+      {
+        ...options,
+        onSuccess: bindCallback(options.onSuccess, () => startedAt),
+        onError: bindCallback(options.onError, () => startedAt),
+        onSettled: bindCallback(options.onSettled, () => startedAt),
+      },
+      ...rest,
+    );
+  };
+
+  // The listener belongs to a real browser document, like the broadcast it answers (see
+  // `beginIdentitySwitch`): without a document there is no tab set to keep clean, and a listener
+  // registered anyway would fire into whatever this process is doing when a message lands.
+  if (typeof document === "undefined") return;
   try {
     channel ??= new BroadcastChannel(BROADCAST_CHANNEL);
     channel.onmessage = (message) => {
@@ -165,6 +353,22 @@ export function installIdentityGuards(): void {
       queryClient.clear();
       clearSkin();
       clearAccountScopedStorage();
+      /*
+       * THEN LEAVE THE DOCUMENT, because the cache was never the whole of what this tab holds.
+       * Component state is not: a dialog A had open — a draft A was halfway through typing, an
+       * unchanged form holding A's data — lives in this React tree, survives every cache clear,
+       * and would sit on screen for whoever the cookie names next. Reloading remounts the whole
+       * application from nothing under the cookie as it is NOW, which is the only state that is
+       * certainly clean. The requests in flight at this moment are over: nothing that answered
+       * for the old identity may land in the new one's document, and the generation guards
+       * already drop anything that lands in this one before the reload finishes.
+       */
+      try {
+        window.location.reload();
+      } catch {
+        // A reload that cannot run (tests, exotic embeds) still leaves the cleanup above: the
+        // cache and storage are clear, and the guards hold the write door.
+      }
     };
   } catch {
     // As above: this tab cleans itself up regardless.

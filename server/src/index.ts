@@ -126,6 +126,7 @@ import {
 } from "./channels/summary";
 import { createThreadIdentity } from "./channels/thread-identity";
 import { createChannelTitler } from "./channels/titler";
+import { createSessionGate } from "./auth/session-gate";
 import { headlessComponentCatalog } from "./components/headless";
 import { createSandboxedStore } from "./components/sandboxed";
 import { createComponentStore } from "./components/store";
@@ -513,7 +514,16 @@ const channelStore: ChannelStore = {
     if (activity.agentId === null) personSpoke?.(actor.id, channelId);
   },
 };
-const channelEvents = createChannelEventHub();
+/**
+ * Whether a session may still be sent anything, asked before every stream write and every
+ * socket frame.
+ *
+ * Built before the hub that uses it, and after the database, because its shared answer is the
+ * sessions table itself: sign-out deletes the row, and every replica that asks before sending
+ * reads the same truth, whichever replica handled the POST.
+ */
+const sessionGate = createSessionGate(database);
+const channelEvents = createChannelEventHub(sessionGate);
 /**
  * Which components each Bot may answer with.
  *
@@ -3394,13 +3404,18 @@ const app = createApp(
   identityStore,
   identityGithubCallback,
   profileStore,
-  // Sign-out ends the identity's live subscriptions, not only the session row: this instance's
-  // sockets close at once, and the same fact rides the activity topic to every other replica.
-  // Last, matching `createApp`'s own last positional parameter.
-  async (userId) => {
-    channelEvents.revokeUser(userId);
-    await announceSessionRevoked(database, [userId]);
+  // Sign-out ends the SESSION's live subscriptions, not only the session row: this instance's
+  // socket for that session closes at once, and the same fact rides the activity topic to every
+  // other replica. The person's other sessions — their other devices — are untouched, because
+  // the sign-out ended one session, not the person. The gate records the end locally before the
+  // announcement can matter, so not even this replica's own next stream chunk re-reads a session
+  // that is gone. Last and second-to-last, matching `createApp`'s tail parameters.
+  async (userId, sessionId) => {
+    if (sessionId) sessionGate.revoke(sessionId);
+    channelEvents.revokeSession(userId, sessionId);
+    await announceSessionRevoked(database, [{ userId, sessionId }]);
   },
+  sessionGate,
 );
 
 startHttpServer({

@@ -13,6 +13,16 @@ export type AuthenticatedActor = {
   role: OpenBotRole;
   workspaceId?: string;
   workspace?: { id: string; name: string; ownerUserId: string; role: "owner" };
+  /**
+   * The server session this actor was resolved from, when one exists.
+   *
+   * Revocation is PER SESSION, not per person: the person who signs out ends the session they
+   * signed out of, and their other devices keep working. Everything that outlives a single
+   * request on this actor's authority — a WebSocket subscription, a streaming response — carries
+   * this id, so the session that ended can be refused without touching the sessions that did
+   * not. Absent where no session exists at all (single-user mode, which has no sign-out).
+   */
+  sessionId?: string;
 };
 
 export type AuthService = {
@@ -100,6 +110,7 @@ export function createRequireUser(
       name: session.user.name,
       image: session.user.image,
       role,
+      sessionId: session.session?.id,
     });
     await next();
   };

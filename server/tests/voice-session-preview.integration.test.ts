@@ -39,7 +39,7 @@ const hub = createChannelEventHub();
 const delivered: ChannelActivityEvent[] = [];
 const barriers = new Map<string, () => void>();
 let listener: Awaited<ReturnType<typeof startChannelActivityListener>>;
-hub.register(owner.id, (payload) => {
+hub.register(owner.id, undefined, (payload) => {
   const event: ChannelActivityEvent = JSON.parse(payload);
   const resolve = barriers.get(event.channelId);
   if (resolve) resolve();

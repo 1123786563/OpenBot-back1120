@@ -624,7 +624,19 @@ export function connectionMethods(context: StoreContext) {
      * the account — the one thing that tells an administrator WHICH team account is behind the app
      * — and a vendor that will not say is a page missing a label, not a page that cannot load.
      */
-    async deploymentConnectionFor(serverId: string): Promise<{
+    async deploymentConnectionFor(
+      serverId: string,
+      /**
+       * The workspace whose Shared account to read, when the caller speaks for one.
+       *
+       * An app holds one deployment row per workspace now, and an app can be connected from two
+       * spaces — so an unscoped read could return whichever row sorted first, showing one space's
+       * administrator, timestamps and state to another. With a workspace the read returns that
+       * workspace's row or none; without one (single-user, legacy) it reads the unbound row as
+       * it always did.
+       */
+      workspaceId?: string,
+    ): Promise<{
       connectedAt: string;
       connectedBy: string | null;
       verified: boolean;
@@ -657,6 +669,9 @@ export function connectionMethods(context: StoreContext) {
             eq(brokeredConnections.provider, brokerProvider),
             eq(brokeredConnections.app, toolkit),
             eq(brokeredConnections.holder, "deployment"),
+            ...(workspaceId
+              ? [eq(brokeredConnections.organizationId, workspaceId)]
+              : [isNull(brokeredConnections.organizationId)]),
           ),
         )
         .limit(1);
@@ -734,47 +749,31 @@ export function connectionMethods(context: StoreContext) {
         shared.map(async (server) => {
           const toolkit = toolkitOfFor(brokerProvider, server.url);
           const [connection, kind] = await Promise.all([
-            this.deploymentConnectionFor(server.id),
+            // THE VIEWER'S WORKSPACE PICKS THE ROW, in the read itself: an app can hold one
+            // Shared account per space, so "the deployment row" is whichever belongs to the
+            // viewer, and any other space's row — its administrator, its timestamps, its state —
+            // is not this viewer's fact at all. Hidden rather than refused, so the card keeps its
+            // ordinary Request-access sentence; refused would leak only that another space's
+            // account exists. A viewer with no workspace (single-user, legacy) reads the unbound
+            // row, the one shape that was theirs before binding existed.
+            this.deploymentConnectionFor(server.id, viewer?.workspaceId),
             toolkit ? brokeredAppKind(toolkit) : null,
           ]);
-          /*
-           * ANOTHER WORKSPACE'S SHARED ACCOUNT IS NOT THIS VIEWER'S FACT.
-           *
-           * A deployment account belongs to the space of the administrator who connected it. A
-           * viewer from another space reads the app here too — the catalogue is deployment-wide —
-           * but what they read is "not connected": no state, no timestamps, and above all no
-           * `connectedBy` naming somebody else's administrator. Hidden rather than refused, so the
-           * card keeps its ordinary Request-access sentence; refused would leak only that the
-           * account exists, which is already more than another space's viewer is owed. A viewer
-           * with no workspace (single-user, legacy) sees what it always saw.
-           */
-          const visible =
-            connection && viewer?.workspaceId
-              ? toolkit &&
-                (await sharedAccountInScope(
-                  database,
-                  brokerProvider,
-                  toolkit,
-                  viewer.workspaceId,
-                ))
-                ? connection
-                : null
-              : connection;
           return {
             serverId: server.id,
             scope: "" as const,
             holder: "deployment" as const,
-            connected: visible !== null,
-            connectedAt: visible?.connectedAt ?? null,
-            connectedBy: visible?.connectedBy ?? null,
-            verified: visible?.verified ?? false,
-            verifiedAt: visible?.verifiedAt ?? null,
-            probe: visible?.probe ?? null,
+            connected: connection !== null,
+            connectedAt: connection?.connectedAt ?? null,
+            connectedBy: connection?.connectedBy ?? null,
+            verified: connection?.verified ?? false,
+            verifiedAt: connection?.verifiedAt ?? null,
+            probe: connection?.probe ?? null,
             checkable:
-              visible !== null &&
+              connection !== null &&
               kind === "key" &&
               (await this.probeActionFor(server.id)) !== null,
-            displayName: visible?.displayName ?? null,
+            displayName: connection?.displayName ?? null,
           };
         }),
       );
@@ -1123,30 +1122,46 @@ export function connectionMethods(context: StoreContext) {
                 targetWhere: sql`${brokeredConnections.holder} = 'person'`,
                 set: { ...set, vendorUserId: connectedAs },
               }
-            : {
-                target: [brokeredConnections.provider, brokeredConnections.app],
-                targetWhere: sql`${brokeredConnections.holder} = 'deployment'`,
-                // WHO CONNECTED IT MEANS THE LATEST CONNECTION. A deployment account is
-                // shared, so a second administrator reconnecting it supersedes the first —
-                // which `set` otherwise never said, leaving the row crediting whoever
-                // connected it the first time. Added only when this call names a
-                // `connectedBy` at all, so a re-check or a confirm that passes none does not
-                // blank out the administrator an earlier connect already recorded. That
-                // condition is the point: do NOT make this unconditional.
-                //
-                // THE WORKSPACE FOLLOWS THE SAME RULE, for the same reason: the account now
-                // belongs to the space of the administrator who most recently consented to
-                // it, so a re-consent from another space's administrator rebinds the row —
-                // and a check that names nobody rebinds nothing.
-                set: input.connectedBy
-                  ? {
-                      ...set,
-                      vendorUserId: connectedAs,
-                      connectedBy: input.connectedBy,
-                      ...(boundOrg ? { organizationId: boundOrg } : {}),
-                    }
-                  : { ...set, vendorUserId: connectedAs },
-              },
+            : /*
+               * THE CONFLICT KEY IS THE WORKSPACE THE ROW IS BOUND TO, PER BRANCH, BECAUSE THE TWO
+               * INDEXES DEMAND IT. An app holds one Shared account per workspace, so an
+               * administrator of a space that holds none INSERTS that space's row rather than
+               * overwriting another's — the old (provider, app) key let the second space's consent
+               * steal the first's row out from under its users. An unbound row (no workspace —
+               * single-user, legacy) keeps its own key, which holds it to one exactly as before.
+               * A NULL never matches in a conflict target, which is why the two branches cannot
+               * share one.
+               */
+              boundOrg
+              ? {
+                  target: [
+                    brokeredConnections.provider,
+                    brokeredConnections.app,
+                    brokeredConnections.organizationId,
+                  ],
+                  targetWhere: sql`${brokeredConnections.holder} = 'deployment' AND ${brokeredConnections.organizationId} IS NOT NULL`,
+                  // WHO CONNECTED IT MEANS THE LATEST CONNECTION OF THIS WORKSPACE. A
+                  // deployment account is shared within its space, so a second administrator
+                  // of the SAME space reconnecting it supersedes the first — which `set`
+                  // otherwise never said. Added only when this call names a `connectedBy` at
+                  // all, so a re-check or a confirm that passes none does not blank out the
+                  // administrator an earlier connect already recorded. That condition is the
+                  // point: do NOT make this unconditional.
+                  set: input.connectedBy
+                    ? {
+                        ...set,
+                        vendorUserId: connectedAs,
+                        connectedBy: input.connectedBy,
+                      }
+                    : { ...set, vendorUserId: connectedAs },
+                }
+              : {
+                  target: [brokeredConnections.provider, brokeredConnections.app],
+                  targetWhere: sql`${brokeredConnections.holder} = 'deployment' AND ${brokeredConnections.organizationId} IS NULL`,
+                  set: input.connectedBy
+                    ? { ...set, vendorUserId: connectedAs, connectedBy: input.connectedBy }
+                    : { ...set, vendorUserId: connectedAs },
+                },
         );
       return { verifiedAt, wrote: true };
     },
@@ -1555,22 +1570,37 @@ export function connectionMethods(context: StoreContext) {
                         connectedAt: verifiedAt,
                       },
                 }
-              : {
-                  target: [
-                    brokeredConnections.provider,
-                    brokeredConnections.app,
-                  ],
-                  targetWhere: sql`${brokeredConnections.holder} = 'deployment'`,
-                  set: {
-                    ...set,
-                    vendorUserId: input.account.vendorUserId,
-                    connectedBy,
-                    // The latest consent rebinds the account to its completer's space, exactly
-                    // as it rebases `connectedBy` — a consent is a reconnection here too.
-                    ...(boundOrg ? { organizationId: boundOrg } : {}),
-                    connectedAt: verifiedAt,
+                // The conflict key is the workspace the consent binds, per branch, for the reason
+                // `recordBrokeredConnection` spells out: an administrator of a space that holds no
+                // row inserts their own, and never overwrites another space's.
+              : boundOrg
+                ? {
+                    target: [
+                      brokeredConnections.provider,
+                      brokeredConnections.app,
+                      brokeredConnections.organizationId,
+                    ],
+                    targetWhere: sql`${brokeredConnections.holder} = 'deployment' AND ${brokeredConnections.organizationId} IS NOT NULL`,
+                    set: {
+                      ...set,
+                      vendorUserId: input.account.vendorUserId,
+                      connectedBy,
+                      connectedAt: verifiedAt,
+                    },
+                  }
+                : {
+                    target: [
+                      brokeredConnections.provider,
+                      brokeredConnections.app,
+                    ],
+                    targetWhere: sql`${brokeredConnections.holder} = 'deployment' AND ${brokeredConnections.organizationId} IS NULL`,
+                    set: {
+                      ...set,
+                      vendorUserId: input.account.vendorUserId,
+                      connectedBy,
+                      connectedAt: verifiedAt,
+                    },
                   },
-                },
           );
 
         if (further) {

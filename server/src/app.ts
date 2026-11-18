@@ -58,6 +58,7 @@ import {
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import { desktopAuthPage } from "./auth/native-browser";
+import { gateStreamingResponse, type SessionGate } from "./auth/session-gate";
 import {
   type BotBrowserRouteDeps,
   createBotBrowser,
@@ -575,9 +576,11 @@ export function createApp(
   identityGithubCallback?: Hono<{ Variables: AppVariables }>,
   profileStore?: ProfileStore,
   /**
-   * Run when a person's sign-out succeeds, before the response is written: end the identity's
-   * live subscriptions here, both this instance's sockets and — through the activity topic — the
-   * other replicas'. Absent leaves a signed-out socket living until its own close, which is a
+   * Run when a person's sign-out succeeds, before the response is written: end the SESSION's
+   * live subscriptions here, both this instance's sockets and — through the activity topic —
+   * the other replicas'. The session id comes with the person, because that is what the sign-out
+   * ended: one sign-out must close its own session's sockets and leave the same person's other
+   * devices alone. Absent leaves a signed-out socket living until its own close, which is a
    * receiving qualification no valid session backs.
    *
    * LAST IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
@@ -585,7 +588,23 @@ export function createApp(
    * deployment starts revoking sessions — which is exactly what inserting this earlier did to
    * every caller and test in the tree.
    */
-  onSessionEnded?: (userId: string) => Promise<void> | void,
+  onSessionEnded?: (
+    userId: string,
+    sessionId: string | undefined,
+  ) => Promise<void> | void,
+  /**
+   * Whether a still-open stream may still be written to, asked BEFORE EVERY CHUNK.
+   *
+   * A streaming response — a CopilotKit turn above all — is authorized once, at its beginning,
+   * and then trickles for as long as the model keeps talking. The route guards check the session
+   * at the request; they cannot check it at the twentieth chunk, which may be minutes after the
+   * session signed out. The gate reads the same `sessions` table the sign-out deletes from, so
+   * every replica asks the same shared state and no announcement delay can leave a window.
+   * Absent — single-user mode has no sign-out to revoke against — streams run ungated.
+   *
+   * AFTER `onSessionEnded`, for the same positional reason.
+   */
+  sessionGate?: SessionGate,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -775,22 +794,28 @@ export function createApp(
     const signingOut =
       context.req.method === "POST" &&
       new URL(context.req.url).pathname === signOutPath;
-    const endingUserId = signingOut
-      ? (
-          await auth.api
-            .getSession({
-              headers: context.req.raw.headers,
-              query: { disableCookieCache: true },
-            })
-            .catch(() => null)
-        )?.user.id
-      : undefined;
+    const endingSession = signingOut
+      ? await auth.api
+          .getSession({
+            headers: context.req.raw.headers,
+            query: { disableCookieCache: true },
+          })
+          .then((session) =>
+            session
+              ? {
+                  userId: session.user.id,
+                  sessionId: session.session?.id,
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null;
 
     const answer = await auth.handler(context.req.raw);
 
-    if (signingOut && answer.ok && endingUserId) {
+    if (signingOut && answer.ok && endingSession) {
       try {
-        await onSessionEnded?.(endingUserId);
+        await onSessionEnded?.(endingSession.userId, endingSession.sessionId);
       } catch (error) {
         // A failed revocation must not fail the sign-out the person asked for, and must not name
         // internals to them. The session is already gone; the socket's own close still detaches.
@@ -1696,7 +1721,22 @@ export function createApp(
             isTrajectoryConnectPath(path))
         )
           return next();
-        return requireUser(context, next);
+        const answer = await requireUser(context, next);
+        /*
+         * A STREAM ANSWERS TO ITS SESSION FOR AS LONG AS IT TRICKLES. The guard above proved the
+         * session once, at the request; the gate proves it again before every chunk, so a turn
+         * still streaming when its session signs out stops mid-stream — on this replica or any
+         * other, because the gate reads the sessions table they all share. A finite answer needs
+         * no wrapper, and one is not given one. The guard's own refusals (401/403) are already
+         * complete responses and pass through untouched.
+         */
+        return sessionGate && answer instanceof Response
+          ? gateStreamingResponse(
+              answer,
+              sessionGate,
+              context.var.actor?.sessionId,
+            )
+          : answer;
       });
     app.use("/api/copilotkit/*", createCapturePassOrigin(config));
     // Mounted at the ROOT with the handler carrying its own basePath. Mounting it at

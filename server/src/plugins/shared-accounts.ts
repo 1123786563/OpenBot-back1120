@@ -20,7 +20,22 @@ export type Holder = (typeof HOLDERS)[number];
 /** Who a broker is asked to act for. The broker sends `vendorUserId` and never chooses the holder. */
 export type AccountRef =
   | { holder: "person"; userId: string; vendorUserId: string }
-  | { holder: "deployment"; vendorUserId: string };
+  | {
+      holder: "deployment";
+      vendorUserId: string;
+      /**
+       * The workspace this ref is scoped to act within, when its actor has one.
+       *
+       * A deployment-held account is one row PER WORKSPACE now, and the workspace is what picks
+       * the row: every read and write that resolves a row from a ref must filter on it, or two
+       * rows naming the same vendor identity — one per space — become interchangeable, and one
+       * space's call could resolve another's row. Present and non-null for a workspace actor
+       * (Casdoor mode); null or absent for a single-user or legacy identity, the one shape the
+       * workspace dimension does not apply to, which keeps the unscoped lookup those
+       * deployments already ran.
+       */
+      organizationId?: string | null;
+    };
 
 /**
  * A PERSON'S ACCOUNT, AND WHY ITS TWO IDS ARE ALMOST ALWAYS ONE VALUE.
@@ -94,6 +109,8 @@ export function asAccountRef(stored: {
   holder: string;
   userId: string | null;
   vendorUserId: string;
+  /** The row's own workspace binding, when the reader selected it. Absent is the unscoped read. */
+  organizationId?: string | null;
 }): AccountRef | null {
   if (stored.holder === "person") {
     return stored.userId
@@ -105,8 +122,17 @@ export function asAccountRef(stored: {
       : null;
   }
   if (stored.holder === "deployment") {
-    return stored.userId
-      ? null
+    if (stored.userId) return null;
+    // The workspace rides only when there is one. A row (and an actor) without a workspace is
+    // the legacy shape, and the ref must stay byte-identical to it: strict comparisons in the
+    // trail and the tests treat an extra `organizationId: null` as a different account, and
+    // "absent" is what every unscoped reader has always meant by legacy.
+    return stored.organizationId
+      ? {
+          holder: "deployment",
+          vendorUserId: stored.vendorUserId,
+          organizationId: stored.organizationId,
+        }
       : { holder: "deployment", vendorUserId: stored.vendorUserId };
   }
   return null;

@@ -1,0 +1,3 @@
+DROP INDEX "brokered_connections_deployment_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "brokered_connections_deployment_org_idx" ON "brokered_connections" USING btree ("provider","app","organization_id") WHERE "brokered_connections"."holder" = 'deployment' AND "brokered_connections"."organization_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "brokered_connections_deployment_unbound_idx" ON "brokered_connections" USING btree ("provider","app") WHERE "brokered_connections"."holder" = 'deployment' AND "brokered_connections"."organization_id" IS NULL;

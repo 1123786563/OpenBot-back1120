@@ -64,6 +64,7 @@ export function createBusinessAccess(
         name: session.user.name,
         image: session.user.image,
         role: "user",
+        sessionId: storedSession.id,
         workspaceId: workspace.id,
         workspace: {
           id: workspace.id,

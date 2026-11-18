@@ -40,14 +40,14 @@ function event(overrides: Partial<ChannelActivityEvent> = {}) {
 }
 
 describe("channel event hub", () => {
-  test("delivers only to the members of the channel", () => {
+  test("delivers only to the members of the channel", async () => {
     const hub = createChannelEventHub();
     const member: string[] = [];
     const stranger: string[] = [];
-    hub.register("user-1", (payload) => member.push(payload));
-    hub.register("user-2", (payload) => stranger.push(payload));
+    hub.register("user-1", undefined, (payload) => member.push(payload));
+    hub.register("user-2", undefined, (payload) => stranger.push(payload));
 
-    hub.deliver(event({ memberIds: ["user-1"] }));
+    await hub.deliver(event({ memberIds: ["user-1"] }));
 
     expect(member).toHaveLength(1);
     expect(JSON.parse(member[0] as string).lastMessage).toBe("Said something.");
@@ -55,27 +55,27 @@ describe("channel event hub", () => {
     expect(stranger).toEqual([]);
   });
 
-  test("reaches every connection a person has open", () => {
+  test("reaches every connection a person has open", async () => {
     const hub = createChannelEventHub();
     const received: string[] = [];
-    hub.register("user-1", (payload) => received.push(`tab-a:${payload}`));
-    hub.register("user-1", (payload) => received.push(`tab-b:${payload}`));
+    hub.register("user-1", undefined, (payload) => received.push(`tab-a:${payload}`));
+    hub.register("user-1", undefined, (payload) => received.push(`tab-b:${payload}`));
 
-    hub.deliver(event());
+    await hub.deliver(event());
 
     expect(received).toHaveLength(2);
     expect(hub.connectionCount("user-1")).toBe(2);
   });
 
-  test("a resync reaches every connection, whoever it belongs to", () => {
+  test("a resync reaches every connection, whoever it belongs to", async () => {
     // Everybody, not a member list: the events that were lost named their own members.
     const hub = createChannelEventHub();
     const first: string[] = [];
     const second: string[] = [];
     const other: string[] = [];
-    hub.register("user-1", (payload) => first.push(payload));
-    hub.register("user-1", (payload) => second.push(payload));
-    hub.register("user-2", (payload) => other.push(payload));
+    hub.register("user-1", undefined, (payload) => first.push(payload));
+    hub.register("user-1", undefined, (payload) => second.push(payload));
+    hub.register("user-2", undefined, (payload) => other.push(payload));
 
     hub.resyncAll();
 
@@ -84,10 +84,10 @@ describe("channel event hub", () => {
     expect(other).toEqual(['{"resync":true}']);
   });
 
-  test("a detached connection receives no resync", () => {
+  test("a detached connection receives no resync", async () => {
     const hub = createChannelEventHub();
     const received: string[] = [];
-    const detach = hub.register("user-1", (payload) => received.push(payload));
+    const detach = hub.register("user-1", undefined, (payload) => received.push(payload));
     detach();
 
     hub.resyncAll();
@@ -98,22 +98,22 @@ describe("channel event hub", () => {
   test("one failing connection does not deny the resync to the rest", () => {
     const hub = createChannelEventHub();
     const received: string[] = [];
-    hub.register("user-1", () => {
+    hub.register("user-1", undefined, () => {
       throw new Error("this connection is closing");
     });
-    hub.register("user-1", (payload) => received.push(payload));
+    hub.register("user-1", undefined, (payload) => received.push(payload));
 
     expect(() => hub.resyncAll()).not.toThrow();
     expect(received).toEqual(['{"resync":true}']);
   });
 
-  test("stops delivering once a connection detaches, and forgets the person", () => {
+  test("stops delivering once a connection detaches, and forgets the person", async () => {
     const hub = createChannelEventHub();
     const received: string[] = [];
-    const detach = hub.register("user-1", (payload) => received.push(payload));
+    const detach = hub.register("user-1", undefined, (payload) => received.push(payload));
 
     detach();
-    hub.deliver(event());
+    await hub.deliver(event());
 
     expect(received).toEqual([]);
     // Dropped rather than left as an empty set, so a long-lived process does not grow one per
@@ -121,15 +121,15 @@ describe("channel event hub", () => {
     expect(hub.connectionCount("user-1")).toBe(0);
   });
 
-  test("one failing connection does not deny the event to the rest", () => {
+  test("one failing connection does not deny the event to the rest", async () => {
     const hub = createChannelEventHub();
     const healthy: string[] = [];
-    hub.register("user-1", () => {
+    hub.register("user-1", undefined, () => {
       throw new Error("this socket is closing");
     });
-    hub.register("user-1", (payload) => healthy.push(payload));
+    hub.register("user-1", undefined, (payload) => healthy.push(payload));
 
-    expect(() => hub.deliver(event())).not.toThrow();
+    await expect(hub.deliver(event())).resolves.toBeUndefined();
     expect(healthy).toHaveLength(1);
   });
 });
@@ -207,7 +207,7 @@ describe("channel activity delivery", () => {
     const hub = createChannelEventHub();
     const delivered: ChannelActivityEvent[] = [];
     const arrived = new Promise<void>((resolve) => {
-      hub.register(owner.id, (payload) => {
+      hub.register(owner.id, undefined, (payload) => {
         delivered.push(JSON.parse(payload));
         resolve();
       });
@@ -262,7 +262,7 @@ describe("channel activity delivery", () => {
     const replied = new Promise<void>((resolve) => {
       heardReply = resolve;
     });
-    hub.register(owner.id, (payload) => {
+    hub.register(owner.id, undefined, (payload) => {
       const event: ChannelActivityEvent = JSON.parse(payload);
       if (event.lastMessage === null) return;
       replies.push(event);
@@ -345,7 +345,7 @@ function watch(hub: ChannelEventHub, userIds: string[]) {
   });
   for (const userId of userIds) {
     heard.set(userId, []);
-    hub.register(userId, (payload) => {
+    hub.register(userId, undefined, (payload) => {
       heard.get(userId)?.push(JSON.parse(payload));
       announce();
     });
@@ -595,7 +595,7 @@ describe("a server whose subscription dropped", () => {
     const hub = createChannelEventHub();
     // The browser's end, registered once and never touched again: its socket does not drop.
     const received: string[] = [];
-    hub.register("user-1", (payload) => received.push(payload));
+    hub.register("user-1", undefined, (payload) => received.push(payload));
 
     const before = new Set(await listenBackendPids());
     const listener = await startChannelActivityListener(databaseUrl, hub);
