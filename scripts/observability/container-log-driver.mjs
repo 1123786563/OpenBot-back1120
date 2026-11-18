@@ -23,7 +23,9 @@ import { dirname } from "node:path";
 
 const [, , logFile, command, ...args] = process.argv;
 if (!logFile || !command) {
-  console.error("usage: container-log-driver.mjs <log-file> <command> [args...]");
+  console.error(
+    "usage: container-log-driver.mjs <log-file> <command> [args...]",
+  );
   process.exit(2);
 }
 
