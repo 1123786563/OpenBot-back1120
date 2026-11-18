@@ -598,7 +598,11 @@ async function runFull(): Promise<number> {
           : `  WARN volumes still present after down -v:\n${remains.out}`,
       );
     } else {
-      console.error("  cleanup skipped: compose never came up (nothing of this run exists)");
+      // Nothing was asserted on a failed boot, so the failed attempt's state
+      // is torn down as well — a stale volume would poison the next attempt's
+      // one-time credentials at the database init step.
+      composeArgs(project, ["down", "-v", "--remove-orphans"], composeEnv);
+      console.error("  failed boot torn down (nothing had been asserted)");
     }
   }
 }
