@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -22,7 +23,10 @@ ARM_IMAGES = {
     "OO_IMAGE": "openobserve/openobserve:v1.1.2-arm64@sha256:e4cb7e211399183357dbd831cb92311181a3d24255aff711c1027e129652c209",
     "OO_COLLECTOR_IMAGE": "otel/opentelemetry-collector-contrib:0.165.0-arm64@sha256:19b524dc61144cb50e9dccc9469605706db48e3302ddccda404a0aaf0a99a73f",
 }
-SOURCES = ("postgres", "migrate", "server", "worker", "agent-bot", "agent-langgraph", "agent-computer")
+SOURCES = ("postgres", "migrate", "server", "worker", "agent-bot", "agent-langgraph", "agent-computer",
+           "spire-server", "spire-agent", "computer")
+# The compose default: the token the supervisor's caller must present.
+SUPERVISOR_TOKEN = "openbot-dev-supervisor-token"
 
 
 def require(condition, message):
@@ -59,7 +63,22 @@ def basic(name, secret):
     return "Basic " + base64.b64encode(f"{name}:{secret}".encode()).decode()
 
 
-def http(url, path, data=None, auth=None, method=None, send=urlopen):
+def compose_command():
+    """`docker compose` where it is a plugin, else the standalone `docker-compose` binary.
+
+    Docker installs either way depending on the host; the flags mean the same to both.
+    """
+    plugin = subprocess.run(["docker", "compose", "version"], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    if plugin.returncode == 0:
+        return ["docker", "compose"]
+    standalone = shutil.which("docker-compose")
+    if standalone:
+        return [standalone]
+    raise RuntimeError("neither `docker compose` nor `docker-compose` is available")
+
+
+def http(url, path, data=None, auth=None, method=None, send=urlopen, timeout=8):
     headers = {}
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -68,7 +87,7 @@ def http(url, path, data=None, auth=None, method=None, send=urlopen):
     req = Request(url + path, None if data is None else json.dumps(data).encode(),
                   headers, method=method)
     try:
-        response = send(req, timeout=8)
+        response = send(req, timeout=timeout)
     except HTTPError as error:
         response = error
     with response:
@@ -81,7 +100,7 @@ def http(url, path, data=None, auth=None, method=None, send=urlopen):
 
 def verify(work, build, keep):
     stack = f"oo-verify-{secrets.token_hex(4)}"
-    query_port, forward_port, app_port, server_port, postgres_port, bot_port, langgraph_port, computer_port = ports(8)
+    query_port, forward_port, app_port, server_port, postgres_port, bot_port, langgraph_port, computer_port, supervisor_port = ports(9)
     app_url, query_url = f"http://127.0.0.1:{server_port}", f"http://127.0.0.1:{query_port}"
     email, password = "operator@example.invalid", "Az1!" + secrets.token_urlsafe(28)
     operator = basic(email, password)
@@ -93,6 +112,10 @@ def verify(work, build, keep):
         OO_ENVIRONMENT_LABEL=stack, ZO_ROOT_USER_EMAIL=email, ZO_ROOT_USER_PASSWORD=password,
         APP_PORT=str(app_port), SERVER_PORT=str(server_port), POSTGRES_PORT=str(postgres_port),
         BOT_PORT=str(bot_port), LANGGRAPH_PORT=str(langgraph_port), COMPUTER_PORT=str(computer_port),
+        SUPERVISOR_PORT=str(supervisor_port),
+        # Built fresh for this run: the dynamic-computer log forwarding only exists in this
+        # checkout, so a stale host image would silently verify the wrong code.
+        SUPERVISOR_IMAGE=f"{stack}-supervisor",
         OPENAI_API_KEY="verification-only", INTELLIGENCE_API_KEY="verification-only",
         MANAGED_AGENT_TOKEN=secrets.token_hex(24), AGENT_TOOL_TOKEN=secrets.token_hex(24),
         COMPUTER_TOKEN=secrets.token_hex(24), WORKER_SHARED_SECRET=secrets.token_hex(24),
@@ -104,7 +127,10 @@ def verify(work, build, keep):
     )
 
     def docker(*args, text=None, check=True):
-        return subprocess.run(["docker", *args], cwd=ROOT, env=env, input=text,
+        # A "compose" head means this is the resolved Compose command, not plain Docker; feeding
+        # either form to a bare `docker` is what once printed "unknown flag: --env-file".
+        argv = (*compose, *args[1:]) if args[0] == "compose" else ("docker", *args)
+        return subprocess.run(argv, cwd=ROOT, env=env, input=text,
                               text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               check=check)
 
@@ -114,7 +140,7 @@ def verify(work, build, keep):
     override = work / "verify.compose.yml"
     # Use the real app images, with disposable credentials and network addresses.
     # The server never joins an existing OpenBot deployment or its host storage.
-    override.write_text("""
+    override.write_text(f"""
 services:
   server:
     environment:
@@ -125,15 +151,22 @@ services:
   worker:
     environment:
       COPILOTKIT_TELEMETRY_DISABLED: "true"
+  supervisor:
+    environment:
+      # This host may run a real deployment beside this test; a namespace of its own keeps the
+      # computer created here out of that deployment's ownership checks and cleanup.
+      COMPUTER_NAMESPACE: {stack}
 """)
     empty_env = work / "empty.env"
     empty_env.touch()
+    compose = compose_command()
     app = ("compose", "--env-file", str(empty_env), "-p", stack, "--profile", "openbot", "-f", str(ROOT / "docker-compose.yml"),
            "-f", str(OBS / "openbot-logging.compose.yml"), "-f", str(override))
     obs = ("compose", "--env-file", str(empty_env), "-p", f"{stack}-obs", "-f", str(OBS / "compose.yml"))
     # Compose needs the app network while the collector comes up, before any application starts logging.
     unrelated = f"{stack}-unrelated"
     failing_worker = f"{stack}-worker-database-fault"
+    computer_container = None
     old_id, runtime_id, second_id = (str(uuid4()) for _ in range(3))
     (work / "test-run.json").write_text(json.dumps({"project": stack, "query_port": query_port, "source": SOURCES}))
 
@@ -182,6 +215,9 @@ services:
             env.update(SERVER_IMAGE=f"{stack}-server", BOT_IMAGE=f"{stack}-bot",
                        LANGGRAPH_IMAGE=f"{stack}-langgraph", COMPUTER_IMAGE=f"{stack}-computer")
             docker(*app, "build", "server", "agent-bot", "agent-langgraph", "agent-computer")
+        # The supervisor image is small, and the dynamic-computer log driver only exists in this
+        # checkout: build it on every run so the verification cannot praise a stale host image.
+        docker(*app, "build", "supervisor")
         docker(*app, "up", "-d", "--no-deps", "postgres")
         retry(lambda: docker(*app, "exec", "-T", "postgres", "pg_isready", "-h", "127.0.0.1",
                              "-U", "openbot", "-d", "openbot", check=False).returncode == 0,
@@ -191,8 +227,13 @@ services:
         retry(lambda: http(app_url, "/health")[0] == 200, "OpenBot server health")
         docker(*app, "run", "-d", "--no-deps", "--name", failing_worker,
                "-e", "DATABASE_URL=postgres://openbot:openbot@127.0.0.1:1/openbot", "worker")
-        for service, port in zip(SOURCES[-3:], (bot_port, langgraph_port, computer_port)):
+        for service, port in zip(SOURCES[-5:-2], (bot_port, langgraph_port, computer_port)):
             retry(lambda: http(f"http://127.0.0.1:{port}", "/health")[0] == 200, f"{service} health")
+        # With its dependencies: spire-init must fix the fresh volumes' ownership before the
+        # server starts, or the server fails on its datastore rather than logging a real run.
+        docker(*app, "up", "-d", "spire-server", "spire-agent")
+        docker(*app, "up", "-d", "--no-deps", "supervisor")
+        retry(lambda: http(f"http://127.0.0.1:{supervisor_port}", "/health")[0] == 200, "supervisor health")
 
         key_parts = ("conversation", "prompt", "completion", "tool-input", "tool-output", "nested",
                      "encoded", "exception", "plain", "audit", "credential")
@@ -224,8 +265,25 @@ services:
                '{method:"POST",headers:{"Content-Type":"application/json"},body:await Bun.stdin.text()}); '
                'if (!response.ok) process.exit(1);', text=json.dumps(audit))
 
+        # A real computer, created by the real supervisor through its published API. Its logs reach
+        # the collector through the LogConfig the supervisor set at create time, so this exercises
+        # the dynamic path a per-Bot computer takes in a live deployment.
+        computer_bot = "logcheck1"
+        computer_container = f"{stack}-computer-bot-{computer_bot}"
+        ensure_code, _ = http(f"http://127.0.0.1:{supervisor_port}",
+                              f"/computers/bot/{computer_bot}/ensure", {},
+                              auth=f"Bearer {SUPERVISOR_TOKEN}", method="POST", timeout=240)
+        require(ensure_code == 200, "the real supervisor ensured a dynamic computer over its API")
+        log_config = json.loads(docker("inspect", "--format", "{{json .HostConfig.LogConfig}}",
+                                       computer_container).stdout)
+        require(log_config.get("Type") == "fluentd" and
+                log_config.get("Config", {}).get("tag") == "openbot.computer",
+                "the dynamic computer was created with the fluentd driver and a fixed tag")
+        record("dynamic-computer.json",
+               {"container": computer_container, "log_config": log_config})
+
         missing = lambda records: set(SOURCES) - {hit.get("service_name") for hit in records}
-        runtime_sql = 'SELECT * FROM "default" WHERE log_class = \'runtime\''
+        runtime_sql = 'SELECT * FROM "openbot_runtime" WHERE log_class = \'runtime\''
         def runtime_ready():
             rows = hits(runtime_sql)
             return rows if not missing(rows) else None
@@ -236,20 +294,35 @@ services:
                     for r in runtime), "ordinary worker sweep is queryable")
         require(any(r.get("openbot_log_type") == "postgres-ready" for r in runtime),
                 "PostgreSQL readiness on the real Docker log stream")
-        audited = retry(lambda: hits('SELECT * FROM "default" WHERE log_class = \'audit\''),
+        audited = retry(lambda: hits('SELECT * FROM "openbot_audit" WHERE log_class = \'audit\''),
                         "server audit OTLP ingested")
         require(any(r.get("openbot_event_type") == "configuration.changed" and
                     r.get("openbot_target_id") != runtime_id for r in audited),
                 "real settings audit record reached OpenObserve")
-        matching = retry(lambda: hits(f'SELECT * FROM "default" WHERE run_id = \'{runtime_id}\''),
+        require(not hits('SELECT * FROM "openbot_runtime" WHERE log_class = \'audit\''),
+                "audit records do not appear in the runtime stream")
+        require(not hits('SELECT * FROM "openbot_audit" WHERE log_class = \'runtime\''),
+                "runtime records do not appear in the audit stream")
+        for stream, days in (("openbot_runtime", 30), ("openbot_audit", 90)):
+            code, _ = http(query_url, f"/api/default/streams/{stream}/settings",
+                           {"data_retention": days}, operator, method="PUT")
+            if code != 200:
+                raise RuntimeError(f"per-stream retention PUT for {stream} returned HTTP {code}")
+        code, streams = http(query_url, "/api/default/streams", None, operator)
+        readback = {s["name"]: (s.get("settings") or {}).get("data_retention")
+                    for s in streams.get("list", [])}
+        require(readback.get("openbot_runtime") == 30 and readback.get("openbot_audit") == 90,
+                "per-stream retention read back as 30 and 90 days")
+        record("retention.json", readback)
+        matching = retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{runtime_id}\''),
                          "positive runtime marker")
         require(matching[0].get("body") == "routine-sweep", "sanitized runtime record kept its correlation ID")
-        retry(lambda: hits(f'SELECT * FROM "default" WHERE openbot_target_id = \'{runtime_id}\' AND severity = \'Warn\''),
+        retry(lambda: hits(f'SELECT * FROM "openbot_audit" WHERE openbot_target_id = \'{runtime_id}\' AND severity = \'Warn\''),
               "sanitized audit fixture was ingested as Warn")
-        old_status, old_result = search(f"""SELECT * FROM "default" WHERE run_id = '{old_id}'""")
+        old_status, old_result = search(f"""SELECT * FROM "openbot_runtime" WHERE run_id = '{old_id}'""")
         require(old_status == 200 and not old_result.get("hits"),
                 "unconfigured and pre-collector container logs are absent")
-        retry(lambda: hits("""SELECT * FROM "default" WHERE service_name = 'worker'
+        retry(lambda: hits("""SELECT * FROM "openbot_runtime" WHERE service_name = 'worker'
                    AND openbot_log_type = 'routine-sweep-tick-failed' AND severity = 'Warn'"""),
               "real worker database failure appears as Warn")
         require(True, "real worker database failure appears as Warn")
@@ -260,7 +333,7 @@ services:
         require(runtime_id in sent and "configuration.changed" in sent, "exporter snapshot contains the positive controls")
         require(all(marker not in sent for marker in markers.values()) and ingest_token not in sent,
                 "sensitive fixtures and ingestion credentials absent from the exporter snapshot")
-        code, query = search('SELECT * FROM "default"')
+        code, query = search('SELECT * FROM "openbot_runtime"')
         require(code == 200 and query.get("hits") and all(marker not in json.dumps(query)
                 for marker in markers.values()), "sensitive fixtures absent from full stored OpenObserve records")
 
@@ -274,7 +347,7 @@ services:
         admin_status, admin_login = login(email, password, admin_browser)
         require(admin_status == 200 and admin_login.get("status") is True,
                 "administrator can sign in through the UI endpoint")
-        plan = 'SELECT * FROM "default"'
+        plan = 'SELECT * FROM "openbot_audit"'
         ui_status, ui_result = search(plan, None, send=admin_browser)
         require(ui_status == 200 and ui_result.get("hits"), "administrator's UI session can query stored logs")
         statuses = {
@@ -309,10 +382,10 @@ services:
 
         docker(*obs, "restart", "openobserve", "otel-collector")
         retry(lambda: http(query_url, "/healthz")[0] == 200, "OpenObserve after restart")
-        retry(lambda: hits(f'SELECT * FROM "default" WHERE run_id = \'{runtime_id}\''), "retained record after restart")
+        retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{runtime_id}\''), "retained record after restart")
         docker(*app, "exec", "-T", "server", "sh", "-c", "cat > /proc/1/fd/1",
                text=json.dumps({"type": "routine-sweep", "runId": second_id}) + "\n")
-        retry(lambda: hits(f'SELECT * FROM "default" WHERE run_id = \'{second_id}\''), "new record after restart")
+        retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE run_id = \'{second_id}\''), "new record after restart")
         require(True, "stored records survive restart and new ones arrive")
         record("result.json", {"runtime_services": sorted(set(r["service_name"] for r in runtime)),
                "runtime_records": len(runtime), "redaction_fixtures": len(markers), "access": statuses,
@@ -323,7 +396,8 @@ services:
         raise RuntimeError(f"Docker command failed (exit {error.returncode}); see {work}/command-errors.log") from None
     finally:
         if not keep:
-            docker("container", "rm", "-f", unrelated, failing_worker, check=False)
+            leftovers = [unrelated, failing_worker] + ([computer_container] if computer_container else [])
+            docker("container", "rm", "-f", *leftovers, check=False)
             docker(*obs, "down", "-v", check=False)
             docker(*app, "down", "-v", check=False)
 

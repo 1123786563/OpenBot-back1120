@@ -8,6 +8,7 @@ import {
   carryOverProfile,
   DockerUnavailableError,
   ensure,
+  fluentdLogConfig,
   listOwned,
   NameHeldError,
   reachable,
@@ -75,6 +76,23 @@ if (!resolvedMemory.ok) {
 const memoryBytes = resolvedMemory.bytes;
 const spireSocketVolume =
   process.env.SPIRE_AGENT_SOCKET_VOLUME?.trim() || undefined;
+
+/**
+ * Log forwarding for the containers this process creates, off by default.
+ *
+ * A deployment that runs the collector's Forward receiver sets this to its loopback address; the
+ * desktop and the CLI leave it unset and every container keeps Docker's own driver. The tags are
+ * fixed source labels — one for computers, one for the one-shot carry-over helpers — so nothing a
+ * request named reaches the log pipeline, and the address never enters a computer's Env.
+ */
+const logForwardAddress =
+  process.env.COMPUTER_LOG_FORWARD_ADDRESS?.trim() || undefined;
+const computerLogConfig = logForwardAddress
+  ? fluentdLogConfig(logForwardAddress, "openbot.computer")
+  : undefined;
+const carryOverLogConfig = logForwardAddress
+  ? fluentdLogConfig(logForwardAddress, "openbot.carry-over")
+  : undefined;
 
 const app = new Hono();
 
@@ -153,6 +171,7 @@ app.post("/computers/:kind/:id/ensure", async (context) => {
       ...(runtime ? { runtime } : {}),
       ...(memoryBytes ? { memoryBytes } : {}),
       ...(spireSocketVolume ? { spireSocketVolume } : {}),
+      ...(computerLogConfig ? { logConfig: computerLogConfig } : {}),
     });
     /*
      * After the computer is up, before the server is answered: the server sends the Bot nothing until
@@ -164,6 +183,7 @@ app.post("/computers/:kind/:id/ensure", async (context) => {
       carriedOver[bot] = await carryOverProfile(parsed.names, bot, {
         image,
         ...(runtime ? { runtime } : {}),
+        ...(carryOverLogConfig ? { logConfig: carryOverLogConfig } : {}),
       });
     }
     return context.json({

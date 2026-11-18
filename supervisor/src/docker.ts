@@ -524,7 +524,51 @@ export type EnsureOptions = {
    * failure.
    */
   spireSocketVolume?: string;
+  /**
+   * The log driver for the created container, from server-side configuration. Unset leaves Docker's
+   * default driver, which is how deployments without log forwarding (and the desktop and CLI, which
+   * do not pass an address) keep the behaviour they had.
+   */
+  logConfig?: LogConfig;
 };
+
+/**
+ * The log driver a container this supervisor creates is given, when the deployment asked for one.
+ *
+ * Built once from server-side configuration (`COMPUTER_LOG_FORWARD_ADDRESS`), never from caller
+ * input, and never passed into a computer's `Env`: a Bot can read its own `/proc/1/environ`, and a
+ * log address is the deployment's plumbing, not the Bot's.
+ */
+export type LogConfig = {
+  Type: string;
+  Config: Record<string, string>;
+};
+
+/**
+ * Fluentd forwarding for containers created here, with the same non-blocking buffer, retry and
+ * timeout settings the Compose overlay gives the fixed services. The tag is a fixed source label:
+ * a Bot's id, its environment or anything a request carried never rides into the log pipeline.
+ */
+export function fluentdLogConfig(
+  address: string,
+  tag: "openbot.computer" | "openbot.carry-over",
+): LogConfig {
+  return {
+    Type: "fluentd",
+    Config: {
+      "fluentd-address": address,
+      "fluentd-async": "true",
+      "fluentd-request-ack": "true",
+      "fluentd-buffer-limit": "4096",
+      "fluentd-max-retries": "12",
+      "fluentd-retry-wait": "1s",
+      "fluentd-write-timeout": "3s",
+      mode: "non-blocking",
+      "max-buffer-size": "1m",
+      tag,
+    },
+  };
+}
 
 /**
  * Confinement applied to every computer.
@@ -574,6 +618,7 @@ function hostConfig(names: ComputerNames, options: EnsureOptions) {
     PidsLimit: options.pidsLimit ?? 512,
     // Chromium's sandbox wants shared memory and will crash on the 64MB default.
     ShmSize: 1_073_741_824,
+    ...(options.logConfig ? { LogConfig: options.logConfig } : {}),
   };
 }
 
@@ -891,6 +936,7 @@ async function copyVolume(input: {
   dest: string;
   image: string;
   runtime?: string;
+  logConfig?: LogConfig;
 }): Promise<Exclude<CarryOverOutcome, "absent">> {
   let helper: Docker.Container;
   try {
@@ -914,6 +960,7 @@ async function copyVolume(input: {
         CapDrop: ["ALL"],
         CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER"],
         ...(input.runtime ? { Runtime: input.runtime } : {}),
+        ...(input.logConfig ? { LogConfig: input.logConfig } : {}),
       },
     });
   } catch (error) {
@@ -959,7 +1006,7 @@ async function copyVolume(input: {
 export async function carryOverProfile(
   person: ComputerNames,
   botId: string,
-  options: { image: string; runtime?: string },
+  options: { image: string; runtime?: string; logConfig?: LogConfig },
 ): Promise<CarryOverOutcome> {
   if (person.kind !== "person") return "absent";
   const legacy = legacyNamesFor(botId);

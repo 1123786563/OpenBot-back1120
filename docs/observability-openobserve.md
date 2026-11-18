@@ -14,8 +14,12 @@ The Compose overlay enables Docker's Fluentd log driver per service. Traffic goe
 | `postgres` | Database startup, readiness and diagnostics |
 | `agent-bot`, `agent-langgraph`, `agent-computer` | Managed Agent startup and runtime diagnostics |
 | `supervisor`, `agent-harness` | Supervisor and the optional Compose harness when enabled |
+| `spire-init`, `spire-server`, `spire-agent` | Identity initialization, registration and workload-attestation runs |
+| Computers and carry-over helpers the supervisor creates | Per-Bot browser and workspace runs, one-shot profile copies |
 
-Only containers recreated with the overlay forward new records. Earlier logs, other Compose projects, desktop or CLI logs, and computers created dynamically by the supervisor stay outside this configuration. Apply the same explicit forwarding policy to any additional deployment-specific jobs before adding them to your collection inventory.
+Only containers recreated with the overlay forward new records. Earlier logs, other Compose projects, desktop or CLI logs stay outside this configuration.
+
+Computers created by the supervisor pick the driver up through `COMPUTER_LOG_FORWARD_ADDRESS`, which the overlay sets on the supervisor from the same `OO_FORWARD_PORT`. The supervisor passes a Fluentd `LogConfig` with a fixed source tag (`openbot.computer`, or `openbot.carry-over` for the one-shot volume-copy helpers) at container create time; a Bot's id, its environment or anything a request carried never becomes a log tag, and the address never enters a computer's `Env`. A computer that already exists keeps the driver it was created with until the supervisor replaces it (image, token or network change) — forwarding is not retroactive. Deployments that do not apply the overlay, including the desktop and the CLI, leave the setting unset and keep Docker's default driver.
 
 The overlay also sets the server's audit OTLP endpoint. Audit export uses the deployment's data network, away from the default Agent network.
 
@@ -41,7 +45,22 @@ The overlay also sets the server's audit OTLP endpoint. Audit export uses the de
      --profile openbot up -d
    ```
 
-OpenObserve v1.1.2 and Collector Contrib 0.165.0 are pinned by digest. The `openobserve-data` volume holds stored logs. The `collector-state` volume holds the bounded exporter queue and rotates a sanitized export snapshot. Compose recreation preserves both volumes. Docker forwarding is asynchronous with bounded buffers and retries. Extended outages can drop records. Set the global retention window with `ZO_COMPACT_DATA_RETENTION_DAYS` and size the storage volume for the expected rate.
+OpenObserve v1.1.2 and Collector Contrib 0.165.0 are pinned by digest. The `openobserve-data` volume holds stored logs. The `collector-state` volume holds the bounded exporter queue and rotates a sanitized export snapshot. Compose recreation preserves both volumes. Docker forwarding is asynchronous with bounded buffers and retries. Extended outages can drop records. Size the storage volume for the expected rate.
+
+## Separate streams and retention
+
+The collector writes runtime records to the `openbot_runtime` stream and audit copies to `openbot_audit`, using OpenObserve's `stream-name` header on the OTLP endpoint. Each stream carries its own retention: runtime 30 days, audit 90. Both streams come into existence on their first record, so set the retention after the first records arrive:
+
+```sh
+curl --fail -X PUT "http://127.0.0.1:5080/api/default/streams/openbot_runtime/settings" \
+  -u "$ZO_ROOT_USER_EMAIL:$ZO_ROOT_USER_PASSWORD" -H 'Content-Type: application/json' \
+  -d '{"data_retention": 30}'
+curl --fail -X PUT "http://127.0.0.1:5080/api/default/streams/openbot_audit/settings" \
+  -u "$ZO_ROOT_USER_EMAIL:$ZO_ROOT_USER_PASSWORD" -H 'Content-Type: application/json' \
+  -d '{"data_retention": 90}'
+```
+
+Read the values back from `GET /api/default/streams` (`settings.data_retention` per stream). A stream with no setting falls back to the global `ZO_COMPACT_DATA_RETENTION_DAYS`, which the Compose file pins to 30 — set the audit stream explicitly or its copies expire with the runtime window.
 
 ## Query as the operator
 
@@ -52,11 +71,13 @@ The collector uses an organization ingestion token, which cannot sign in to the 
 Useful fields include `_timestamp`, `service_name`, `deployment_environment`, `severity`, `log_class`, and `openbot_log_type`. Use `request_id` or `run_id` when the source includes a UUID for that field.
 
 ```sql
-SELECT _timestamp, service_name, severity, openbot_log_type, body
-FROM "default"
+SELECT _timestamp, service_name, severity, openbot_log_type, request_id, run_id, body
+FROM "openbot_runtime"
 WHERE service_name = 'server' AND severity = 'Error'
 ORDER BY _timestamp DESC
 ```
+
+Audit copies live in the `openbot_audit` stream and keep the authoritative `openbot_event_type`, `openbot_target_type` and `openbot_target_id` fields. The `body` of every record is a fixed label or summary — locate the free-form diagnostic in the deployment's restricted local logs.
 
 The collector replaces all raw runtime and audit bodies with a registered event label or a fixed summary. It discards free text, exception details, arbitrary attributes, audit payloads, tool data, model input and output, and nested values before the exporter. Forks adding an event label must register it in the allowlist. Inspect the original diagnostic through the deployment's restricted local logs when you need the free-form text.
 
@@ -68,4 +89,4 @@ Run from the repository root with Docker Compose and Python 3. Build the applica
 bash scripts/observability/verify-openobserve.sh --build
 ```
 
-The command creates a disposable project, generates scoped credentials, and uses free loopback ports. It checks actual service logs, an audit event from the settings API, content removal in the exporter and in stored results, authorization, and reads before and after restarting the collector and OpenObserve. It uses synthetic sensitive text and removes the test projects and volumes on exit. `--keep` retains them for diagnosis. The command prints the location of its local evidence.
+The command creates a disposable project, generates scoped credentials, and uses free loopback ports. It builds the supervisor from the checkout on every run, so the dynamic-computer path is exercised against this checkout's code. It checks records from every source above — including the SPIRE services and a computer the real supervisor creates through its API with the Fluentd `LogConfig` — an audit event from the settings API, stream separation and per-stream retention (30/90 days, read back from the settings API), content removal in the exporter and in stored results, authorization, and reads before and after restarting the collector and OpenObserve. It uses synthetic sensitive text and removes the test projects and volumes on exit. `--keep` retains them for diagnosis. The command prints the location of its local evidence.
