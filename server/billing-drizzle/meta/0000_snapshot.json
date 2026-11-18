@@ -1,0 +1,1259 @@
+{
+  "id": "eaf23619-3965-49b8-ac82-449b78241b72",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "billing.account": {
+      "name": "account",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_subject_id": {
+          "name": "owner_subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personal_workspace_id": {
+          "name": "personal_workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "revision": {
+          "name": "revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "1"
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at_us": {
+          "name": "updated_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_account_owner_uq": {
+          "name": "billing_account_owner_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "owner_subject_id"
+          ]
+        },
+        "billing_account_workspace_uq": {
+          "name": "billing_account_workspace_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "personal_workspace_id"
+          ]
+        },
+        "billing_account_org_id_uq": {
+          "name": "billing_account_org_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "billing_account_status_check": {
+          "name": "billing_account_status_check",
+          "value": "\"billing\".\"account\".\"status\" IN ('active', 'suspended', 'closed')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.adjustment": {
+      "name": "adjustment",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_event_id": {
+          "name": "original_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adjustment_type": {
+          "name": "adjustment_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_namespace": {
+          "name": "source_namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed_delta_microcredits": {
+          "name": "signed_delta_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_subject_id": {
+          "name": "actor_subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_period_id": {
+          "name": "original_period_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_at_us": {
+          "name": "effective_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "compensation_lot_id": {
+          "name": "compensation_lot_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_adjustment_account_fk": {
+          "name": "billing_adjustment_account_fk",
+          "tableFrom": "adjustment",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_adjustment_original_fk": {
+          "name": "billing_adjustment_original_fk",
+          "tableFrom": "adjustment",
+          "tableTo": "ledger_event",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "original_event_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_adjustment_compensation_lot_fk": {
+          "name": "billing_adjustment_compensation_lot_fk",
+          "tableFrom": "adjustment",
+          "tableTo": "credit_lot",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "compensation_lot_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_adjustment_org_account_id_uq": {
+          "name": "billing_adjustment_org_account_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "id"
+          ]
+        },
+        "billing_adjustment_scope_uq": {
+          "name": "billing_adjustment_scope_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "account_id",
+            "original_event_id",
+            "adjustment_type"
+          ]
+        },
+        "billing_adjustment_source_uq": {
+          "name": "billing_adjustment_source_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "source_namespace",
+            "source_event_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "billing_adjustment_type_check": {
+          "name": "billing_adjustment_type_check",
+          "value": "\"billing\".\"adjustment\".\"adjustment_type\" IN ('charge_correction', 'compensation', 'late_usage_attribution', 'expiry_correction', 'revocation')"
+        },
+        "billing_adjustment_zero_only_attribution_check": {
+          "name": "billing_adjustment_zero_only_attribution_check",
+          "value": "\"billing\".\"adjustment\".\"signed_delta_microcredits\" <> 0 OR \"billing\".\"adjustment\".\"adjustment_type\" = 'late_usage_attribution'"
+        },
+        "billing_adjustment_negative_no_lot_check": {
+          "name": "billing_adjustment_negative_no_lot_check",
+          "value": "\"billing\".\"adjustment\".\"signed_delta_microcredits\" >= 0 OR \"billing\".\"adjustment\".\"compensation_lot_id\" IS NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.business_event": {
+      "name": "business_event",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_namespace": {
+          "name": "source_namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_result": {
+          "name": "first_result",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_business_event_account_fk": {
+          "name": "billing_business_event_account_fk",
+          "tableFrom": "business_event",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_business_event_key_uq": {
+          "name": "billing_business_event_key_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "source_namespace",
+            "source_event_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "billing.credit_lot": {
+      "name": "credit_lot",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_period_id": {
+          "name": "source_period_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "granted_microcredits": {
+          "name": "granted_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_microcredits": {
+          "name": "available_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "reserved_microcredits": {
+          "name": "reserved_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "refund_frozen_microcredits": {
+          "name": "refund_frozen_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "consumed_microcredits": {
+          "name": "consumed_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "expired_microcredits": {
+          "name": "expired_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "revoked_microcredits": {
+          "name": "revoked_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "valid_from_us": {
+          "name": "valid_from_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at_us": {
+          "name": "expires_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "revision": {
+          "name": "revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "1"
+        },
+        "compensation_for_event_id": {
+          "name": "compensation_for_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at_us": {
+          "name": "updated_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "billing_credit_lot_consumption_idx": {
+          "name": "billing_credit_lot_consumption_idx",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "billing_credit_lot_account_fk": {
+          "name": "billing_credit_lot_account_fk",
+          "tableFrom": "credit_lot",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_credit_lot_origin_fk": {
+          "name": "billing_credit_lot_origin_fk",
+          "tableFrom": "credit_lot",
+          "tableTo": "ledger_event",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "compensation_for_event_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_credit_lot_org_account_id_uq": {
+          "name": "billing_credit_lot_org_account_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "billing_credit_lot_source_check": {
+          "name": "billing_credit_lot_source_check",
+          "value": "\"billing\".\"credit_lot\".\"source_type\" IN ('subscription', 'pack', 'compensation')"
+        },
+        "billing_credit_lot_status_check": {
+          "name": "billing_credit_lot_status_check",
+          "value": "\"billing\".\"credit_lot\".\"status\" IN ('scheduled', 'active', 'frozen', 'exhausted', 'expired', 'revoked')"
+        },
+        "billing_credit_lot_nonnegative_check": {
+          "name": "billing_credit_lot_nonnegative_check",
+          "value": "\"billing\".\"credit_lot\".\"available_microcredits\" >= 0 AND \"billing\".\"credit_lot\".\"reserved_microcredits\" >= 0 AND \"billing\".\"credit_lot\".\"refund_frozen_microcredits\" >= 0\n          AND \"billing\".\"credit_lot\".\"consumed_microcredits\" >= 0 AND \"billing\".\"credit_lot\".\"expired_microcredits\" >= 0 AND \"billing\".\"credit_lot\".\"revoked_microcredits\" >= 0\n          AND \"billing\".\"credit_lot\".\"granted_microcredits\" >= 0"
+        },
+        "billing_credit_lot_conservation_check": {
+          "name": "billing_credit_lot_conservation_check",
+          "value": "\"billing\".\"credit_lot\".\"granted_microcredits\" = \"billing\".\"credit_lot\".\"available_microcredits\" + \"billing\".\"credit_lot\".\"reserved_microcredits\" + \"billing\".\"credit_lot\".\"refund_frozen_microcredits\"\n          + \"billing\".\"credit_lot\".\"consumed_microcredits\" + \"billing\".\"credit_lot\".\"expired_microcredits\" + \"billing\".\"credit_lot\".\"revoked_microcredits\""
+        },
+        "billing_credit_lot_pack_lifetime_check": {
+          "name": "billing_credit_lot_pack_lifetime_check",
+          "value": "\"billing\".\"credit_lot\".\"source_type\" <> 'pack' OR (\"billing\".\"credit_lot\".\"source_period_id\" IS NULL AND \"billing\".\"credit_lot\".\"expires_at_us\" IS NULL)"
+        },
+        "billing_credit_lot_subscription_period_check": {
+          "name": "billing_credit_lot_subscription_period_check",
+          "value": "\"billing\".\"credit_lot\".\"source_type\" <> 'subscription' OR (\"billing\".\"credit_lot\".\"source_period_id\" IS NOT NULL AND \"billing\".\"credit_lot\".\"expires_at_us\" IS NOT NULL AND \"billing\".\"credit_lot\".\"expires_at_us\" > \"billing\".\"credit_lot\".\"valid_from_us\")"
+        },
+        "billing_credit_lot_compensation_expiry_check": {
+          "name": "billing_credit_lot_compensation_expiry_check",
+          "value": "\"billing\".\"credit_lot\".\"source_type\" <> 'compensation' OR (\"billing\".\"credit_lot\".\"expires_at_us\" IS NOT NULL AND \"billing\".\"credit_lot\".\"expires_at_us\" > \"billing\".\"credit_lot\".\"valid_from_us\")"
+        },
+        "billing_credit_lot_compensation_origin_check": {
+          "name": "billing_credit_lot_compensation_origin_check",
+          "value": "\"billing\".\"credit_lot\".\"source_type\" <> 'compensation' OR \"billing\".\"credit_lot\".\"compensation_for_event_id\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.idempotency": {
+      "name": "idempotency",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "logical_resource_id": {
+          "name": "logical_resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request": {
+          "name": "request",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response": {
+          "name": "response",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_idempotency_account_fk": {
+          "name": "billing_idempotency_account_fk",
+          "tableFrom": "idempotency",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_idempotency_scope_uq": {
+          "name": "billing_idempotency_scope_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "operation",
+            "logical_resource_id",
+            "key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "billing.ledger_event": {
+      "name": "ledger_event",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_seq": {
+          "name": "account_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_namespace": {
+          "name": "source_namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adjustment_id": {
+          "name": "adjustment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_subject_id": {
+          "name": "actor_subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "original_period_id": {
+          "name": "original_period_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at_us": {
+          "name": "occurred_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "committed_at_us": {
+          "name": "committed_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_ledger_event_account_fk": {
+          "name": "billing_ledger_event_account_fk",
+          "tableFrom": "ledger_event",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_ledger_event_org_account_id_uq": {
+          "name": "billing_ledger_event_org_account_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "id"
+          ]
+        },
+        "billing_ledger_event_account_seq_uq": {
+          "name": "billing_ledger_event_account_seq_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "account_id",
+            "account_seq"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "billing_ledger_event_type_check": {
+          "name": "billing_ledger_event_type_check",
+          "value": "\"billing\".\"ledger_event\".\"event_type\" IN ('credit.granted', 'credit.adjusted', 'credit.expired')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.ledger_line": {
+      "name": "ledger_line",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lot_id": {
+          "name": "lot_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delta_granted_microcredits": {
+          "name": "delta_granted_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_available_microcredits": {
+          "name": "delta_available_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_reserved_microcredits": {
+          "name": "delta_reserved_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_refund_frozen_microcredits": {
+          "name": "delta_refund_frozen_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_consumed_microcredits": {
+          "name": "delta_consumed_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_expired_microcredits": {
+          "name": "delta_expired_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "delta_revoked_microcredits": {
+          "name": "delta_revoked_microcredits",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "balances_after": {
+          "name": "balances_after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_ledger_line_account_fk": {
+          "name": "billing_ledger_line_account_fk",
+          "tableFrom": "ledger_line",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_ledger_line_event_fk": {
+          "name": "billing_ledger_line_event_fk",
+          "tableFrom": "ledger_line",
+          "tableTo": "ledger_event",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "event_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_ledger_line_lot_fk": {
+          "name": "billing_ledger_line_lot_fk",
+          "tableFrom": "ledger_line",
+          "tableTo": "credit_lot",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "lot_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_ledger_line_org_account_id_uq": {
+          "name": "billing_ledger_line_org_account_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "id"
+          ]
+        },
+        "billing_ledger_line_event_lot_uq": {
+          "name": "billing_ledger_line_event_lot_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "event_id",
+            "lot_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "billing_ledger_line_identity_check": {
+          "name": "billing_ledger_line_identity_check",
+          "value": "\"billing\".\"ledger_line\".\"delta_granted_microcredits\" = \"billing\".\"ledger_line\".\"delta_available_microcredits\" + \"billing\".\"ledger_line\".\"delta_reserved_microcredits\"\n          + \"billing\".\"ledger_line\".\"delta_refund_frozen_microcredits\" + \"billing\".\"ledger_line\".\"delta_consumed_microcredits\" + \"billing\".\"ledger_line\".\"delta_expired_microcredits\"\n          + \"billing\".\"ledger_line\".\"delta_revoked_microcredits\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.outbox_delivery": {
+      "name": "outbox_delivery",
+      "schema": "billing",
+      "columns": {
+        "outbox_event_id": {
+          "name": "outbox_event_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "lease_until_us": {
+          "name": "lease_until_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "published_at_us": {
+          "name": "published_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at_us": {
+          "name": "updated_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_outbox_delivery_event_fk": {
+          "name": "billing_outbox_delivery_event_fk",
+          "tableFrom": "outbox_delivery",
+          "tableTo": "outbox_event",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "outbox_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "billing_outbox_delivery_status_check": {
+          "name": "billing_outbox_delivery_status_check",
+          "value": "\"billing\".\"outbox_delivery\".\"status\" IN ('pending', 'sent', 'failed')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "billing.outbox_event": {
+      "name": "outbox_event",
+      "schema": "billing",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ledger_event_id": {
+          "name": "ledger_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_seq": {
+          "name": "account_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at_us": {
+          "name": "created_at_us",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "billing_outbox_event_account_fk": {
+          "name": "billing_outbox_event_account_fk",
+          "tableFrom": "outbox_event",
+          "tableTo": "account",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "billing_outbox_event_ledger_fk": {
+          "name": "billing_outbox_event_ledger_fk",
+          "tableFrom": "outbox_event",
+          "tableTo": "ledger_event",
+          "schemaTo": "billing",
+          "columnsFrom": [
+            "organization_id",
+            "account_id",
+            "ledger_event_id"
+          ],
+          "columnsTo": [
+            "organization_id",
+            "account_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "billing_outbox_event_org_account_id_uq": {
+          "name": "billing_outbox_event_org_account_id_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "account_id",
+            "id"
+          ]
+        },
+        "billing_outbox_event_ledger_uq": {
+          "name": "billing_outbox_event_ledger_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ledger_event_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "billing": "billing"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

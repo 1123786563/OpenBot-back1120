@@ -12,12 +12,13 @@
     "original_event_id": "evt_settle_call_9f8e7d6c",
     "adjustment_type": "compensation",
     "source_event_id": "evt_comp_2026_0001",
-    "signed_delta_microcredits": "-5000",
+    "signed_delta_microcredits": "5000",
     "reason": "platform fault duplicated a step charge",
     "actor_subject_id": "subj_op_771",
     "original_period_id": "period_2026-11",
     "effective_at_us": "1700000400000000",
     "compensation_lot_id": "7f8091a2-b3c4-4d5e-8f6a-7b8c9d0e1f2a",
     "status": "posted"
-  }
+  },
+  "note": "POSITIVE compensation delta restores entitlement and is the only sign allowed to carry a compensation_lot_id (#64 unified sign semantics)"
 }

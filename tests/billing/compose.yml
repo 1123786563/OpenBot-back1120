@@ -53,6 +53,29 @@ services:
       timeout: 3s
       retries: 30
 
+  # ------------------------------------------------ #64 isolated ledger driver
+  # The repo is bind-mounted READ-ONLY: the acceptance driver and the ledger
+  # service under test run here, on the internal network only. Credentials are
+  # injected by the runner as one-time environment variables — never baked
+  # into this file.
+  ledger-app:
+    image: oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598
+    container_name: billing62_${BILLING62_RUN_ID}-ledger-app
+    working_dir: /work
+    environment:
+      BILLING62_RUN_ID: ${BILLING62_RUN_ID}
+      BILLING_LEDGER_OWNER_URL: postgres://${BILLING62_PG_USER}:${BILLING62_PG_PASSWORD}@postgres:5432/billing62_${BILLING62_RUN_ID}
+      BILLING_LEDGER_APP_URL: postgres://billing_ledger_app:${BILLING_LEDGER_APP_PASSWORD:?one-time app password}@postgres:5432/billing62_${BILLING62_RUN_ID}
+      BILLING_LEDGER_APP_PASSWORD: ${BILLING_LEDGER_APP_PASSWORD}
+      BILLING_LEDGER_CURSOR_SECRET: ${BILLING_LEDGER_CURSOR_SECRET:?one-time cursor secret}
+      BILLING62_LAGO_URL: http://lago-api:3000
+    networks: [billing62-internal]
+    volumes:
+      - ../..:/work:ro
+    command: ["sleep", "infinity"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
   # ------------------------------------------------------------- Lago CE stack
   lago-db:
     image: getlago/postgres-partman:15.0-alpine@sha256:ff4616c24367f3643aac27061a0c4e757ca8f78af967249cb4b3fd64049d290d

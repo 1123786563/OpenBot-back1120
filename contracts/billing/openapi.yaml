@@ -735,7 +735,177 @@ paths:
         logical_resource_id: reservation_id
       x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, rate_limited, ledger_unavailable]
 
+  /internal/v1/billing/accounts:
+    post:
+      operationId: registerBillingAccount
+      tags: [internal-billing]
+      summary: Register the single personal billing account for a stable subject (trusted identity service)
+      description: >-
+        Trusted internal account-registration entry used by the identity
+        adapter (#67) and, in the isolated environment, by a registration-only
+        credential. The stable subject and Personal Workspace are supplied by
+        the TRUSTED SERVICE, never self-reported by a browser user; a database
+        unique constraint guarantees exactly one active personal account per
+        subject and per Personal Workspace even under concurrent
+        registration. A closed account never reopens under a new id. This
+        endpoint grants NO credits — granting requires the separate
+        billing:grant capability and createCreditGrant. Idempotent under
+        (organization_id, billing_account_id, registerBillingAccount,
+        account-root, key); the billing_account_id is derived server-side from
+        the subject, so the same registration replayed under a new key still
+        answers the original account.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:register-account
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/objects.yaml#/components/schemas/RegisterBillingAccountRequest"
+      responses:
+        "201":
+          description: Account registered (or replayed); the same subject always answers the same account id.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/RegisterBillingAccountResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: registerBillingAccount
+        logical_resource_id: billing_account_root
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, idempotency_conflict, idempotency_in_progress, invalid_integer, out_of_range, unknown_payer, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/accounts/{billing_account_id}:
+    get:
+      operationId: getInternalBillingAccount
+      tags: [internal-billing]
+      summary: Exact balance projection of one billing account (trusted service read)
+      description: >-
+        Internal read alias of getBillingAccount for trusted services: same
+        BillingAccount response object and revision semantics. The service
+        credential is checked against its authorized organization and account
+        scope; an account outside that scope answers 404 without revealing
+        existence. Never browser-reachable.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:read
+      parameters:
+        - $ref: "#/components/parameters/BillingAccountId"
+      responses:
+        "200":
+          description: The billing account with exact balances.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/BillingAccount"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/credit-lots:
+    get:
+      operationId: listInternalCreditLots
+      tags: [internal-billing]
+      summary: Paginated credit lots of one billing account (trusted service read)
+      description: >-
+        Internal read alias of listCreditLots for trusted services, scoped to
+        the billing_account_id query parameter and the credential's
+        organization. Same CreditLot response objects, ordering
+        (created_at_us, id) and cursor semantics.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:read
+      parameters:
+        - $ref: "#/components/parameters/BillingAccountIdQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of credit lots ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/CreditLotPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
   /internal/v1/billing/adjustments:
+    get:
+      operationId: listInternalAdjustments
+      tags: [internal-billing]
+      summary: Paginated adjustments of one billing account (trusted service read)
+      description: >-
+        Internal read alias of listAdjustments for trusted services, scoped to
+        the billing_account_id query parameter and the credential's
+        organization. Same Adjustment response objects and cursor semantics.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:read
+      parameters:
+        - $ref: "#/components/parameters/BillingAccountIdQuery"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of immutable adjustments ordered by (created_at_us, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/AdjustmentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
+
     post:
       operationId: createAdjustment
       tags: [internal-billing]
@@ -744,10 +914,21 @@ paths:
         Requires the billing:adjust capability and an audited
         actor_subject_id. Business uniqueness
         (billing_account_id, original_event_id, adjustment_type) holds
-        independently of the idempotency key. Positive compensation deltas
-        create/extend a CompensationLot; compensation sourced from an expired
-        subscription is valid 30 days from grant. Adjustments stay in the
-        ORIGINAL period. Idempotent under (organization_id, billing_account_id,
+        independently of the idempotency key. Sign semantics are LEDGER
+        BALANCE semantics: a POSITIVE delta increases consumable entitlement
+        (it restores entitlement from the original deduction's lot
+        allocations, or creates/extends a CompensationLot
+        when the original source is an expired subscription — valid 30 days
+        from grant); a NEGATIVE delta withdraws entitlement by moving
+        revocable available credits of the ORIGINAL event's lots to revoked.
+        A negative delta never chases reserved/consumed/refund-frozen credits
+        and never drives a balance negative — when the revocable available is
+        insufficient the adjustment is refused with 409 state_conflict and
+        nothing is written. A zero delta is valid only for a
+        late_usage_attribution that appends period ownership without a second
+        consumption. Adjustments stay in the ORIGINAL period; packs have no
+        period, so original_period_id is nullable. Idempotent under
+        (organization_id, billing_account_id,
         createAdjustment, original_event_id+adjustment_type, key).
       security:
         - ServiceCredentialAuth: []
@@ -789,6 +970,115 @@ paths:
         operation: createAdjustment
         logical_resource_id: original_event_id+adjustment_type
       x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/accounts/{billing_account_id}/ledger-events:
+    get:
+      operationId: listLedgerEvents
+      tags: [internal-billing]
+      summary: Paginated immutable ledger events with their lot lines (trusted service read)
+      description: >-
+        Trusted query contract for the append-only ledger evidence: every
+        grant, adjustment and expiry event with its per-lot component changes
+        and balances after the change, the originating business key, the
+        original period and any adjustment linkage. Scoped to the path account
+        and the credential's organization; cross-scope ids answer 404 without
+        revealing existence. Ordered by the per-account sequence (account_seq),
+        which is assigned inside the account lock — NOT a database global
+        sequence.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:read
+      parameters:
+        - $ref: "#/components/parameters/BillingAccountId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/FromUs"
+        - $ref: "#/components/parameters/ToUs"
+      responses:
+        "200":
+          description: Page of ledger events ordered by (account_seq, id).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/pagination.yaml#/components/schemas/LedgerEventPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [invalid_cursor, unauthenticated, forbidden, resource_not_found, rate_limited, ledger_unavailable]
+
+  /internal/v1/billing/credit-grants:
+    post:
+      operationId: createCreditGrant
+      tags: [internal-billing]
+      summary: Grant one credit lot from a trusted business event (authorized entitlement service)
+      description: >-
+        The ONLY entry that adds credits. Requires the billing:grant
+        capability; the source namespace and actor are derived from the
+        authenticated service credential, never from the request. The stable
+        business key (source_namespace, source_event_id) binds to the account,
+        amount, period and validity once: the same key with the same content
+        under ANY new Idempotency-Key replays the first result, and the same
+        key with a different account/amount/period/validity is refused — a
+        re-grant through a changed request or a second account can never
+        happen. The credit lot, the grant ledger event, the pending outbox
+        record and the successful idempotency row all commit in ONE
+        transaction; no external network call runs inside it. subscription
+        grants carry their period and a finite expiry from the trusted period
+        result (#65); packs are long-lived (expires_at_us null, period null);
+        compensation grants link their original deduction event and, when the
+        original source was an expired subscription, expire 30 days after
+        grant. Idempotent under (organization_id, billing_account_id,
+        createCreditGrant, source_event_id, key).
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:grant
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/objects.yaml#/components/schemas/CreateCreditGrantRequest"
+      responses:
+        "201":
+          description: Credit lot granted (or first-execution replay returned) with the grant ledger event id.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/CreditGrantMutationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-idempotency-scope:
+        scope: [organization_id, billing_account_id, operation, logical_resource_id, key]
+        operation: createCreditGrant
+        logical_resource_id: source_event_id
+      x-error-codes: [missing_idempotency_key, unauthenticated, forbidden, resource_not_found, idempotency_conflict, idempotency_in_progress, state_conflict, invalid_integer, out_of_range, unknown_payer, rate_limited, ledger_unavailable]
 
   /internal/v1/billing/refunds/{refund_id}/review:
     post:
@@ -885,6 +1175,19 @@ components:
       required: true
       schema:
         $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    BillingAccountId:
+      name: billing_account_id
+      in: path
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+    BillingAccountIdQuery:
+      name: billing_account_id
+      in: query
+      required: true
+      schema:
+        $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+      description: Target billing account; the service credential must be authorized for its organization.
     OrderId:
       name: order_id
       in: path
@@ -1370,6 +1673,7 @@ components:
     CreateAdjustmentRequest:
       type: object
       required:
+        - billing_account_id
         - original_event_id
         - adjustment_type
         - source_event_id
@@ -1380,6 +1684,10 @@ components:
         - effective_at_us
       additionalProperties: false
       properties:
+        billing_account_id:
+          type: string
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: Target account; the original event MUST belong to it (cross-account reference refused by the database).
         original_event_id:
           type: string
           minLength: 1
@@ -1396,6 +1704,7 @@ components:
         signed_delta_microcredits:
           type: string
           $ref: "./schemas/scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+          description: Ledger balance semantics — positive increases consumable entitlement, negative withdraws revocable available credits, zero only for late_usage_attribution.
         reason:
           type: string
           minLength: 1
@@ -1403,10 +1712,11 @@ components:
         actor_subject_id:
           $ref: "./schemas/scalars.yaml#/components/schemas/SubjectId"
         original_period_id:
-          type: string
+          type: ["string", "null"]
           minLength: 1
           maxLength: 128
           pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          description: The ORIGINAL period of the referenced event; null when the original source has no period (pack). Never invented.
         effective_at_us:
           type: string
           $ref: "./schemas/scalars.yaml#/components/schemas/TimestampUs"

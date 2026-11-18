@@ -274,7 +274,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/v1/billing/adjustments": {
+    "/internal/v1/billing/accounts": {
         parameters: {
             query?: never;
             header?: never;
@@ -284,10 +284,114 @@ export interface paths {
         get?: never;
         put?: never;
         /**
+         * Register the single personal billing account for a stable subject (trusted identity service)
+         * @description Trusted internal account-registration entry used by the identity adapter (#67) and, in the isolated environment, by a registration-only credential. The stable subject and Personal Workspace are supplied by the TRUSTED SERVICE, never self-reported by a browser user; a database unique constraint guarantees exactly one active personal account per subject and per Personal Workspace even under concurrent registration. A closed account never reopens under a new id. This endpoint grants NO credits — granting requires the separate billing:grant capability and createCreditGrant. Idempotent under (organization_id, billing_account_id, registerBillingAccount, account-root, key); the billing_account_id is derived server-side from the subject, so the same registration replayed under a new key still answers the original account.
+         */
+        post: operations["registerBillingAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/accounts/{billing_account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exact balance projection of one billing account (trusted service read)
+         * @description Internal read alias of getBillingAccount for trusted services: same BillingAccount response object and revision semantics. The service credential is checked against its authorized organization and account scope; an account outside that scope answers 404 without revealing existence. Never browser-reachable.
+         */
+        get: operations["getInternalBillingAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/credit-lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated credit lots of one billing account (trusted service read)
+         * @description Internal read alias of listCreditLots for trusted services, scoped to the billing_account_id query parameter and the credential's organization. Same CreditLot response objects, ordering (created_at_us, id) and cursor semantics.
+         */
+        get: operations["listInternalCreditLots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated adjustments of one billing account (trusted service read)
+         * @description Internal read alias of listAdjustments for trusted services, scoped to the billing_account_id query parameter and the credential's organization. Same Adjustment response objects and cursor semantics.
+         */
+        get: operations["listInternalAdjustments"];
+        put?: never;
+        /**
          * Append an immutable ledger correction (authorized operations/compensation service)
-         * @description Requires the billing:adjust capability and an audited actor_subject_id. Business uniqueness (billing_account_id, original_event_id, adjustment_type) holds independently of the idempotency key. Positive compensation deltas create/extend a CompensationLot; compensation sourced from an expired subscription is valid 30 days from grant. Adjustments stay in the ORIGINAL period. Idempotent under (organization_id, billing_account_id, createAdjustment, original_event_id+adjustment_type, key).
+         * @description Requires the billing:adjust capability and an audited actor_subject_id. Business uniqueness (billing_account_id, original_event_id, adjustment_type) holds independently of the idempotency key. Sign semantics are LEDGER BALANCE semantics: a POSITIVE delta increases consumable entitlement (it restores entitlement from the original deduction's lot allocations, or creates/extends a CompensationLot when the original source is an expired subscription — valid 30 days from grant); a NEGATIVE delta withdraws entitlement by moving revocable available credits of the ORIGINAL event's lots to revoked. A negative delta never chases reserved/consumed/refund-frozen credits and never drives a balance negative — when the revocable available is insufficient the adjustment is refused with 409 state_conflict and nothing is written. A zero delta is valid only for a late_usage_attribution that appends period ownership without a second consumption. Adjustments stay in the ORIGINAL period; packs have no period, so original_period_id is nullable. Idempotent under (organization_id, billing_account_id, createAdjustment, original_event_id+adjustment_type, key).
          */
         post: operations["createAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/accounts/{billing_account_id}/ledger-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated immutable ledger events with their lot lines (trusted service read)
+         * @description Trusted query contract for the append-only ledger evidence: every grant, adjustment and expiry event with its per-lot component changes and balances after the change, the originating business key, the original period and any adjustment linkage. Scoped to the path account and the credential's organization; cross-scope ids answer 404 without revealing existence. Ordered by the per-account sequence (account_seq), which is assigned inside the account lock — NOT a database global sequence.
+         */
+        get: operations["listLedgerEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/credit-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant one credit lot from a trusted business event (authorized entitlement service)
+         * @description The ONLY entry that adds credits. Requires the billing:grant capability; the source namespace and actor are derived from the authenticated service credential, never from the request. The stable business key (source_namespace, source_event_id) binds to the account, amount, period and validity once: the same key with the same content under ANY new Idempotency-Key replays the first result, and the same key with a different account/amount/period/validity is refused — a re-grant through a changed request or a second account can never happen. The credit lot, the grant ledger event, the pending outbox record and the successful idempotency row all commit in ONE transaction; no external network call runs inside it. subscription grants carry their period and a finite expiry from the trusted period result (#65); packs are long-lived (expires_at_us null, period null); compensation grants link their original deduction event and, when the original source was an expired subscription, expire 30 days after grant. Idempotent under (organization_id, billing_account_id, createCreditGrant, source_event_id, key).
+         */
+        post: operations["createCreditGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -451,14 +555,18 @@ export interface components {
             request_id: string;
         };
         CreateAdjustmentRequest: {
+            /** @description Target account; the original event MUST belong to it (cross-account reference refused by the database). */
+            billing_account_id: components["schemas"]["Uuid"];
             original_event_id: string;
             /** @enum {string} */
             adjustment_type: "charge_correction" | "compensation" | "late_usage_attribution" | "expiry_correction" | "revocation";
             source_event_id: string;
+            /** @description Ledger balance semantics — positive increases consumable entitlement, negative withdraws revocable available credits, zero only for late_usage_attribution. */
             signed_delta_microcredits: components["schemas"]["SignedAdjustmentDelta"];
             reason: string;
             actor_subject_id: components["schemas"]["SubjectId"];
-            original_period_id: string;
+            /** @description The ORIGINAL period of the referenced event; null when the original source has no period (pack). Never invented. */
+            original_period_id: string | null;
             effective_at_us: components["schemas"]["TimestampUs"];
         };
         AdjustmentMutationResult: {
@@ -682,7 +790,7 @@ export interface components {
             /** @description Absolute expiry instant; null for long-lived packs. Packs are long-lived; subscription grants expire with the period. */
             expires_at_us: components["schemas"]["TimestampUsNullable"];
             /**
-             * @description scheduled -> active at valid_from_us. active -> exhausted when available+reserved+refund_frozen reach 0. active -> expired at expires_at_us (remaining available+reserved released to expired). active/frozen -> revoked on revocation (terminal). frozen is a partial marker and returns to the pre-freeze state when the freeze is lifted.
+             * @description scheduled -> active at valid_from_us (before that the available part is NOT counted in the account's spendable balance). active -> exhausted when available+reserved+refund_frozen reach 0. active -> expired at expires_at_us, where ONLY the remaining available moves to expired; reserved and refund_frozen are PRESERVED in flight for the later settlement/refund step (#66/#71) and are never dropped or revived by expiry — a release arriving after expiry moves its amount to expired, never back to available. active/frozen -> revoked on revocation (terminal). frozen is a partial marker and returns to the pre-freeze state when the freeze is lifted. status is an auxiliary projection: spendability is always computed from valid_from_us/expires_at_us AND the components together.
              * @enum {string}
              */
             status: "scheduled" | "active" | "frozen" | "exhausted" | "expired" | "revoked";
@@ -1087,7 +1195,7 @@ export interface components {
         SignedAdjustmentDelta: string;
         /** @description Uuid or null (no referenced object yet). */
         UuidNullable: string & (null | components["schemas"]["Uuid"]);
-        /** @description Immutable appended correction to the ledger. Business uniqueness scope = (billing_account_id, original_event_id, adjustment_type): the same scope cannot be duplicated even with a different HTTP idempotency key. Any legitimate follow-up correction must carry its own distinct source event id and explicit linkage. Negative deltas credit the account by creating/adding to a CompensationLot when compensation_lot_id is set; compensation created from an expired-subscription source is valid for 30 days after grant.actor_subject_id records the audited human or service operator. */
+        /** @description Immutable appended correction to the ledger. Business uniqueness scope = (billing_account_id, original_event_id, adjustment_type): the same scope cannot be duplicated even with a different HTTP idempotency key. Any legitimate follow-up correction must carry its own distinct source event id and explicit linkage. Sign semantics are ledger balance semantics: a POSITIVE delta increases consumable entitlement — it restores the original deduction's consumed allocations back to available in the original lots, or creates a CompensationLot when the original source is an expired subscription (valid for 30 days after grant) — recorded in compensation_lot_id. A NEGATIVE delta withdraws revocable available credits of the original event's lots into revoked and never drives anything negative or chases reserved/consumed/frozen credits. actor_subject_id records the audited human or service operator. */
         Adjustment: components["schemas"]["CommonFields"] & {
             /** @description Ledger event being corrected. */
             original_event_id: string;
@@ -1102,8 +1210,8 @@ export interface components {
             reason: string;
             /** @description Audited operator (authorized operations / compensation service), not the payer. */
             actor_subject_id: components["schemas"]["SubjectId"];
-            /** @description Adjustment stays attributed to the ORIGINAL period; old snapshots only gain appended confirmation adjustments. */
-            original_period_id: string;
+            /** @description Adjustment stays attributed to the ORIGINAL period of the referenced event; null when that source has no period (pack); never invented. */
+            original_period_id: string | null;
             effective_at_us: components["schemas"]["TimestampUs"];
             /** @description Compensation lot created/extended by a positive delta; null when the adjustment does not create one. */
             compensation_lot_id: components["schemas"]["UuidNullable"];
@@ -1112,7 +1220,7 @@ export interface components {
              * @enum {string}
              */
             status: "posted";
-        };
+        } & unknown;
         AdjustmentPage: {
             items: components["schemas"]["Adjustment"][];
             next_cursor: components["schemas"]["CursorTokenNull"];
@@ -1154,6 +1262,100 @@ export interface components {
             /** @enum {string} */
             code: "SUCCESS" | "FAIL";
             message: string;
+        };
+        /** @description Trusted registration input from the identity service; a browser can never reach this. The subject and Personal Workspace are stable identity facts — never an email or a client payer claim. */
+        RegisterBillingAccountRequest: {
+            organization_id: components["schemas"]["Uuid"];
+            owner_subject_id: components["schemas"]["SubjectId"];
+            /** @description Personal Workspace relation the account is derived from; unique across accounts. */
+            personal_workspace_id: string;
+        };
+        /** @description Registered (or replayed) account; one stable subject always answers the same account id. */
+        RegisterBillingAccountResult: {
+            billing_account: components["schemas"]["BillingAccount"];
+            request_id: string;
+        };
+        /** @description One credit lot's component change caused by one ledger event, with the lot's component balances AFTER the change. Signed per-component deltas always conserve the lot: the sum of the deltas of granted, available, reserved, refund_frozen, consumed, expired and revoked is zero, and granted itself only changes on the grant event that created the lot — source type, source event, original period and original granted amount are never rewritten afterwards. */
+        LedgerLine: {
+            lot_id: components["schemas"]["Uuid"];
+            delta_granted_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_available_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_reserved_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_refund_frozen_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_consumed_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_expired_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_revoked_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            /** @description The lot's seven conservation components after this change. */
+            balances_after: {
+                granted_microcredits: components["schemas"]["Microcredits"];
+                available_microcredits: components["schemas"]["Microcredits"];
+                reserved_microcredits: components["schemas"]["Microcredits"];
+                refund_frozen_microcredits: components["schemas"]["Microcredits"];
+                consumed_microcredits: components["schemas"]["Microcredits"];
+                expired_microcredits: components["schemas"]["Microcredits"];
+                revoked_microcredits: components["schemas"]["Microcredits"];
+            };
+        };
+        /** @description Immutable event head of the append-only ledger: one grant, adjustment or expiry fact with its per-lot lines. account_seq is the per-account sequence assigned inside the account lock (never a global database sequence). Event content — including its business key, original event reference, actor, reason, original period and lines — is never rewritten; corrections are appended as new events linked by adjustment_id/original_event_id. Every committed event has exactly one pending outbox record whose aggregate_id equals this id. */
+        LedgerEvent: {
+            id: components["schemas"]["Uuid"];
+            schema_version: components["schemas"]["SchemaVersion"];
+            organization_id: components["schemas"]["Uuid"];
+            billing_account_id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            event_type: "credit.granted" | "credit.adjusted" | "credit.expired";
+            /** @description Per-account committed sequence; the recovery watermark for outbox delivery. */
+            account_seq: components["schemas"]["UnsignedInt64"];
+            /** @description Trusted source namespace of the grant's business key; null for internal expiry events. */
+            source_namespace: string | null;
+            /** @description Business key inside the namespace; null for adjustment/expiry events (their keys live on the adjustment). */
+            source_event_id: string | null;
+            /** @description Ledger event id an adjustment corrects; null otherwise. */
+            original_event_id: string | null;
+            /** @description Adjustment row that produced this event; null for grant/expiry events. */
+            adjustment_id: components["schemas"]["UuidNullable"];
+            /** @description Audited actor (service identity's operator for grants/adjustments; system actor for expiry). */
+            actor_subject_id: components["schemas"]["SubjectIdNullable"];
+            /** @description Adjustment reason or expiry cause; null on grants. */
+            reason: string | null;
+            /** @description Original period this event stays attributed to; null for period-less packs. */
+            original_period_id: string | null;
+            /** @description Business time of the fact (e.g. the expiry instant), preserved verbatim. */
+            occurred_at_us: components["schemas"]["TimestampUs"];
+            /** @description Server commit time. */
+            committed_at_us: components["schemas"]["TimestampUs"];
+            lines: components["schemas"]["LedgerLine"][];
+        };
+        LedgerEventPage: {
+            items: components["schemas"]["LedgerEvent"][];
+            next_cursor: components["schemas"]["CursorTokenNull"];
+        };
+        /** @description Trusted grant input. The source namespace and actor come from the authenticated service credential; the request can never choose them. Period and expiry follow the source type: subscription requires a period id and a finite expiry after valid_from (from the trusted period result); pack forbids both; compensation requires the original deduction event reference. */
+        CreateCreditGrantRequest: {
+            /** @description Target account; the credential must be authorized for its organization. */
+            billing_account_id: components["schemas"]["Uuid"];
+            /** @description Stable business key of THIS grant inside the credential's source namespace; dedupe anchor across idempotency keys. */
+            source_event_id: string;
+            /** @enum {string} */
+            source_type: "subscription" | "pack" | "compensation";
+            /** @description Original billing period; REQUIRED and non-null for subscription, null for pack/compensation. */
+            source_period_id?: string | null;
+            granted_microcredits: components["schemas"]["PositiveMicrocredits"];
+            /** @description When the lot becomes spendable; earlier instants answer the scheduled status until reached. */
+            valid_from_us: components["schemas"]["TimestampUs"];
+            /** @description Absolute expiry; REQUIRED finite and after valid_from_us for subscription and compensation, null for pack. */
+            expires_at_us: components["schemas"]["TimestampUsNullable"];
+            /** @description Original deduction event a compensation restores; REQUIRED for source_type=compensation, null otherwise. */
+            original_event_id: string | null;
+            /** @description Audited operator on whose behalf the trusted service acts. */
+            actor_subject_id: components["schemas"]["SubjectId"];
+        } & (unknown & unknown & unknown);
+        /** @description Created (or replayed) grant; the lot id, ledger event id and account revision are stable under replay. */
+        CreditGrantMutationResult: {
+            credit_lot: components["schemas"]["CreditLot"];
+            ledger_event_id: components["schemas"]["Uuid"];
+            billing_account: components["schemas"]["BillingAccount"];
+            request_id: string;
         };
     };
     responses: {
@@ -1242,6 +1444,9 @@ export interface components {
     };
     parameters: {
         OrganizationId: components["schemas"]["Uuid"];
+        BillingAccountId: components["schemas"]["Uuid"];
+        /** @description Target billing account; the service credential must be authorized for its organization. */
+        BillingAccountIdQuery: components["schemas"]["Uuid"];
         OrderId: components["schemas"]["Uuid"];
         ReservationId: components["schemas"]["Uuid"];
         RefundId: components["schemas"]["Uuid"];
@@ -1803,6 +2008,131 @@ export interface operations {
             503: components["responses"]["LedgerUnavailable"];
         };
     };
+    registerBillingAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description REQUIRED on every business write (POST). 1..128 ASCII printable characters. Scope (organization_id, billing_account_id, operation, logical_resource_id, key) with operation pinned by the operationId. GET requests do not require a key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterBillingAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Account registered (or replayed); the same subject always answers the same account id. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterBillingAccountResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    getInternalBillingAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                billing_account_id: components["parameters"]["BillingAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The billing account with exact balances. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingAccount"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listInternalCreditLots: {
+        parameters: {
+            query: {
+                /** @description Target billing account; the service credential must be authorized for its organization. */
+                billing_account_id: components["parameters"]["BillingAccountIdQuery"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of credit lots ordered by (created_at_us, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditLotPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listInternalAdjustments: {
+        parameters: {
+            query: {
+                /** @description Target billing account; the service credential must be authorized for its organization. */
+                billing_account_id: components["parameters"]["BillingAccountIdQuery"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of immutable adjustments ordered by (created_at_us, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustmentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
     createAdjustment: {
         parameters: {
             query?: never;
@@ -1826,6 +2156,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdjustmentMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listLedgerEvents: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path: {
+                billing_account_id: components["parameters"]["BillingAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of ledger events ordered by (account_seq, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    createCreditGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description REQUIRED on every business write (POST). 1..128 ASCII printable characters. Scope (organization_id, billing_account_id, operation, logical_resource_id, key) with operation pinned by the operationId. GET requests do not require a key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCreditGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Credit lot granted (or first-execution replay returned) with the grant ledger event id. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditGrantMutationResult"];
                 };
             };
             400: components["responses"]["BadRequest"];
