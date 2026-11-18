@@ -132,10 +132,15 @@ export type GatewaySocketData = {
   /** Undoes the revocation registration; set when one was made. */
   detachFromRevocation?: () => void;
   /**
-   * The frame pipeline, serialized so the per-frame session check can never reorder what it
-   * carries. Both directions feed it.
+   * The outward frame pipeline (gateway → browser), serialized so the per-frame session check can
+   * never reorder what it carries.
    */
   forward?: Promise<void>;
+  /**
+   * The same chain for the inward direction (browser → gateway), independent of the outward one:
+   * a browser's join must never wait behind a gateway tick.
+   */
+  inwardBound?: Promise<void>;
   /** Set once the session was revoked or the socket ended: nothing forwards after it. */
   ended?: boolean;
 };
@@ -275,11 +280,13 @@ export function openGatewaySocket(
   /*
    * One frame, after its session has answered for it. The gate read is the authority — the sessions
    * table is the shared state every replica reads, so the answer is about the session as it is NOW;
-   * the frames queue behind the read and go in order, which is why the pipeline is a chain rather
-   * than one read per fire-and-forget callback: a conversation whose frames arrive reordered is a
-   * broken protocol, and a refused one is ended, not skipped.
+   * the frames queue behind the read and go in order, which is why each direction is a serialized
+   * chain rather than one read per fire-and-forget callback: a conversation whose frames arrive
+   * reordered is a broken protocol, and a refused one is ended, not skipped. The directions are
+   * independent chains — a browser's join must never wait behind a gateway tick — but within one
+   * direction order is exactly arrival order.
    */
-  const carry = async (frame: string | Uint8Array): Promise<void> => {
+  const carryOutward = async (frame: string | Uint8Array): Promise<void> => {
     if (revocation && !(await revocation.gate.maySend(sessionId))) {
       endSocket(ws, 1008, "Your session has ended.");
       return;
@@ -291,24 +298,49 @@ export function openGatewaySocket(
       ws.data.inward?.close();
     }
   };
-  const pipeline = (frame: string | Uint8Array): void => {
+  const carryInward = async (frame: string | Uint8Array): Promise<void> => {
+    if (revocation && !(await revocation.gate.maySend(sessionId))) {
+      endSocket(ws, 1008, "Your session has ended.");
+      return;
+    }
+    const inward = ws.data.inward;
+    if (inward?.readyState === WebSocket.OPEN) {
+      inward.send(frame);
+      return;
+    }
+    // Still connecting: held for the open, which will drain this queue through this same chain,
+    // so the held frame keeps its place behind the ones before it. A frame is pushed here only
+    // while the socket is CONNECTING — one synchronous check — so it is always drained by the
+    // open that follows it.
+    if (!inward || inward.readyState === WebSocket.CONNECTING)
+      ws.data.pending.push(frame);
+  };
+  const outward = (frame: string | Uint8Array): void => {
     if (ws.data.ended) return;
     ws.data.forward = (ws.data.forward ?? Promise.resolve())
-      .then(() => carry(frame))
+      .then(() => carryOutward(frame))
       .catch(() => {
         // One refused frame does not serialize the next: the chain survives, the socket above
         // already saw the refusal that ended it.
       });
+  };
+  const inwardBound = (frame: string | Uint8Array): void => {
+    if (ws.data.ended) return;
+    ws.data.inwardBound = (ws.data.inwardBound ?? Promise.resolve())
+      .then(() => carryInward(frame))
+      .catch(() => {});
   };
 
   const inward = new WebSocket(ws.data.gatewayUpstream);
   inward.binaryType = "arraybuffer";
   ws.data.inward = inward;
   inward.onopen = () => {
-    for (const frame of ws.data.pending.splice(0)) pipeline(frame);
+    // Held frames are the BROWSER's own first words, queued while the gateway's side opened: they
+    // go INWARD now, asked of the gate in order like everything else this session speaks.
+    for (const frame of ws.data.pending.splice(0)) inwardBound(frame);
   };
   inward.onmessage = (event) => {
-    pipeline(
+    outward(
       typeof event.data === "string"
         ? event.data
         : new Uint8Array(event.data as ArrayBuffer),
@@ -335,7 +367,13 @@ export function gatewaySocketMessage(
   message: string | Uint8Array,
   revocation?: GatewayRevocation,
 ): void {
-  const relay = (): void => {
+  /*
+   * The same session rule as the outward direction, because a signed-out session has lost more
+   * than its right to HEAR: it has lost its standing to speak into the conversation too. The frame
+   * is asked of the gate on the inward chain, in order, and a refused one ends the socket. Without
+   * a revocation to answer to — single-user mode — the frame goes as it came.
+   */
+  if (!revocation) {
     const inward = ws.data.inward;
     if (inward?.readyState === WebSocket.OPEN) {
       inward.send(message);
@@ -344,20 +382,20 @@ export function gatewaySocketMessage(
     if (!inward || inward.readyState === WebSocket.CONNECTING) {
       ws.data.pending.push(message);
     }
-  };
-  if (!revocation) {
-    relay();
     return;
   }
   if (ws.data.ended) return;
   const { sessionId } = ws.data;
-  ws.data.forward = (ws.data.forward ?? Promise.resolve())
+  ws.data.inwardBound = (ws.data.inwardBound ?? Promise.resolve())
     .then(async () => {
       if (!(await revocation.gate.maySend(sessionId))) {
         endSocket(ws, 1008, "Your session has ended.");
         return;
       }
-      relay();
+      const inward = ws.data.inward;
+      if (inward?.readyState === WebSocket.OPEN) inward.send(message);
+      else if (!inward || inward.readyState === WebSocket.CONNECTING)
+        ws.data.pending.push(message);
     })
     .catch(() => {});
 }

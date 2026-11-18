@@ -1,0 +1,1 @@
+GET /api/v3.1/auth_configs?limit=1000&show_disabled=true&toolkit_slug=linear
