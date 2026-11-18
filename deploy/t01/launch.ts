@@ -16,7 +16,7 @@ import {
 const state = "deploy/t01/.runtime/processes.json";
 const action = process.argv[2];
 const root = resolve(".");
-function identity(pid: number) {
+function observation(pid: number) {
   try {
     return {
       command: execFileSync("ps", ["-p", String(pid), "-o", "command="], {
@@ -27,26 +27,31 @@ function identity(pid: number) {
       }).trim(),
     };
   } catch (error) {
-    // Locked-down hosts can refuse to exec ps. Fall back to lsof, which exposes the
-    // executable (txt) and working directory (cwd) of a live process; ownsProcess
-    // matches the recorded "executable cwd" form and still refuses unrelated PIDs.
+    // Locked-down hosts can refuse to exec ps. Fall back to lsof, which exposes
+    // the executable (txt), the working directory (cwd) and — crucially — the
+    // fd 1/2 targets, i.e. the per-launch instance file. Executable and cwd are
+    // shared by server, worker and unrelated scripts, so only that file can
+    // identify the instance; ownsProcess refuses to signal without it.
     if ((error as NodeJS.ErrnoException)?.code !== "EPERM") throw error;
     const out = execFileSync("lsof", ["-w", "-p", String(pid)], {
       encoding: "utf8",
     });
     let cwd: string | undefined;
     let txt: string | undefined;
+    const stdio: string[] = [];
     for (const line of out.split("\n")) {
       const columns = line.trim().split(/\s+/);
       const name = columns.at(-1);
-      if (columns[3] === "cwd" && name?.startsWith("/")) cwd = name;
-      if (columns[3] === "txt" && !txt && name?.startsWith("/")) txt = name;
+      if (!name?.startsWith("/")) continue;
+      if (columns[3] === "cwd") cwd = name;
+      if (columns[3] === "txt" && !txt) txt = name;
+      if (/^[12][rwu]$/.test(columns[3] ?? "")) stdio.push(name);
     }
     if (!cwd || !txt)
       throw new Error(
         `Process ${pid} identity unavailable: neither ps nor lsof could observe it`,
       );
-    return { command: `${txt} ${cwd}`, started: cwd };
+    return { command: `${txt} ${cwd}`, started: "", stdio };
   }
 }
 if (!existsSync("server/src/production-entry.ts"))
@@ -55,9 +60,9 @@ if (action === "stop") {
   if (!existsSync(state)) process.exit(0);
   const saved: ProcessRecord[] = JSON.parse(readFileSync(state, "utf8"));
   for (const record of saved) {
-    let current: ReturnType<typeof identity>;
+    let current: ReturnType<typeof observation>;
     try {
-      current = identity(record.pid);
+      current = observation(record.pid);
     } catch {
       continue;
     }
@@ -75,6 +80,7 @@ if (action === "stop") {
     throw new Error("Process is still stopping; do not restart it yet");
   }
   writeFileSync(state, "[]", { mode: 0o600 });
+  console.log("Tracked processes stopped");
 } else if (action === "up") {
   if (existsSync(state) && JSON.parse(readFileSync(state, "utf8")).length)
     throw new Error("Stop tracked processes before starting again");
@@ -101,7 +107,14 @@ if (action === "stop") {
       ),
     ],
   ] as const) {
-    const fd = openSync(`deploy/t01/.runtime/${name}.log`, "a", 0o600);
+    // Unique per launch: the open fd 1/2 on this file is the instance identity
+    // used by the lsof fallback when ps is unavailable.
+    const instance = resolve(
+      `deploy/t01/.runtime/${name}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}.log`,
+    );
+    const fd = openSync(instance, "a", 0o600);
     const file = resolve(entry);
     const child = spawn(process.execPath, [file], {
       cwd: resolve("server"),
@@ -113,13 +126,19 @@ if (action === "stop") {
     closeSync(fd);
     if (!child.pid) throw new Error("Spawn failed");
     await Bun.sleep(100);
-    const started = identity(child.pid).started;
-    saved.push({
+    const current = observation(child.pid);
+    const record: ProcessRecord = {
       pid: child.pid,
       entry: file,
       executable: process.execPath,
-      started,
-    });
+      started: current.started,
+      instance,
+    };
+    if (!ownsProcess(record, current, root))
+      throw new Error(
+        "Spawned process identity unverifiable; refusing to track it",
+      );
+    saved.push(record);
     writeFileSync(state, JSON.stringify(saved), { mode: 0o600 });
   }
   for (let n = 0; n < 60; n++) {
@@ -131,6 +150,6 @@ if (action === "stop") {
     await Bun.sleep(1000);
   }
   throw new Error(
-    "Server did not become healthy; inspect private .runtime/server.log and stop tracked processes",
+    "Server did not become healthy; inspect the private per-instance logs in .runtime and stop tracked processes",
   );
 } else throw new Error("Expected up or stop");

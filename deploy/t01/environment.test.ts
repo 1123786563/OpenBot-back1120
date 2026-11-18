@@ -25,14 +25,15 @@ test("PID reuse or an editor mentioning the entry is not our Bun process", () =>
   const p = {
     entry: "/repo/server/src/production-entry.ts",
     executable: "/bin/bun",
-    started: "time1",
+    started: "Mon Nov 18 19:00:00 2026",
+    instance: "/repo/deploy/t01/.runtime/server-1-abc.log",
   };
   expect(
     ownsProcess(
       p,
       {
         command: "/bin/bun /repo/server/src/production-entry.ts",
-        started: "time1",
+        started: "Mon Nov 18 19:00:00 2026",
       },
       "/repo",
     ),
@@ -40,7 +41,10 @@ test("PID reuse or an editor mentioning the entry is not our Bun process", () =>
   expect(
     ownsProcess(
       p,
-      { command: "vim /repo/server/src/production-entry.ts", started: "time1" },
+      {
+        command: "vim /repo/server/src/production-entry.ts",
+        started: "Mon Nov 18 19:00:00 2026",
+      },
       "/repo",
     ),
   ).toBe(false);
@@ -49,47 +53,101 @@ test("PID reuse or an editor mentioning the entry is not our Bun process", () =>
       p,
       {
         command: "/bin/bun /repo/server/src/production-entry.ts",
-        started: "time2",
+        started: "Mon Nov 18 19:00:01 2026",
       },
-      "/repo",
-    ),
-  ).toBe(false);
-  expect(
-    ownsProcess(
-      { ...p, started: "" },
-      { command: "/bin/bun /repo/server/src/production-entry.ts", started: "" },
       "/repo",
     ),
   ).toBe(false);
 });
 
-test("lsof fallback identity (executable cwd) still refuses an unrelated PID", () => {
+test("lsof fallback refuses a same-executable same-cwd different instance", () => {
   const p = {
     entry: "/repo/server/src/production-entry.ts",
     executable: "/bin/bun",
-    started: "/repo/server",
+    started: "",
+    instance: "/repo/deploy/t01/.runtime/server-1-abc.log",
   };
+  // Our own instance: fd 1/2 still point at the per-launch log file.
   expect(
-    ownsProcess(p, { command: "/bin/bun /repo/server", started: "/repo/server" }, "/repo"),
+    ownsProcess(
+      p,
+      {
+        command: "/bin/bun /repo/server",
+        started: "",
+        stdio: [
+          "/repo/deploy/t01/.runtime/server-1-abc.log",
+          "/repo/deploy/t01/.runtime/server-1-abc.log",
+        ],
+      },
+      "/repo",
+    ),
   ).toBe(true);
+  // A reused PID running a different Bun script with the same executable and
+  // the same working directory (e.g. another deploy/t01 helper): its stdio is
+  // not our per-launch file, so it must be refused even though executable and
+  // cwd match exactly.
   expect(
     ownsProcess(
       p,
-      { command: "/bin/other /repo/server", started: "/repo/server" },
+      {
+        command: "/bin/bun /repo/server",
+        started: "",
+        stdio: ["/repo/other-script.log", "/repo/other-script.log"],
+      },
+      "/repo",
+    ),
+  ).toBe(false);
+  // No stdio observable: fail closed rather than guess.
+  expect(
+    ownsProcess(
+      p,
+      { command: "/bin/bun /repo/server", started: "", stdio: [] },
+      "/repo",
+    ),
+  ).toBe(false);
+  expect(
+    ownsProcess(p, { command: "/bin/bun /repo/server", started: "" }, "/repo"),
+  ).toBe(false);
+  // Legacy record without an instance file (pre-fix launch.ts): refuse.
+  expect(
+    ownsProcess(
+      { ...p, instance: "" },
+      {
+        command: "/bin/bun /repo/server",
+        started: "",
+        stdio: ["/repo/deploy/t01/.runtime/server-1-abc.log"],
+      },
+      "/repo",
+    ),
+  ).toBe(false);
+  // Right file but a different executable in the same directory.
+  expect(
+    ownsProcess(
+      p,
+      {
+        command: "/bin/tail /repo/server",
+        started: "",
+        stdio: ["/repo/deploy/t01/.runtime/server-1-abc.log"],
+      },
+      "/repo",
+    ),
+  ).toBe(false);
+  // Instance file must be held as fd 1/2, not merely open somewhere.
+  expect(
+    ownsProcess(
+      p,
+      { command: "/bin/bun /repo", started: "", stdio: [p.instance] },
       "/repo",
     ),
   ).toBe(false);
   expect(
     ownsProcess(
-      p,
-      { command: "/bin/bun /somewhere/else", started: "/somewhere/else" },
-      "/repo",
-    ),
-  ).toBe(false);
-  expect(
-    ownsProcess(
-      p,
-      { command: "/bin/bun /repo", started: "/repo" },
+      { ...p, entry: "/repo/server/src/other.ts" },
+      {
+        command: "/bin/bun /repo/server",
+        started: "",
+        stdio: [p.instance],
+      },
       "/repo",
     ),
   ).toBe(false);
