@@ -499,7 +499,7 @@ async function runFull(): Promise<number> {
     BILLING62_LAGO_PASSWORD: lagoPassword,
     BILLING_LEDGER_APP_PASSWORD: appPassword,
     BILLING_LEDGER_CURSOR_SECRET: cursorSecret,
-    BILLING62_LAGO_RSA_KEY: lagoRsa.out.trim(),
+    BILLING62_LAGO_RSA_KEY_B64: Buffer.from(lagoRsa.out.trim()).toString("base64"),
     BILLING62_LAGO_ENC_PRIMARY: lagoEnc,
     BILLING62_LAGO_ENC_DETERMINISTIC: lagoEncDet,
     BILLING62_LAGO_ENC_SALT: lagoSalt,
