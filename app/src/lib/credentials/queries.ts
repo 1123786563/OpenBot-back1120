@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -20,7 +21,7 @@ export function credentialListQueryOptions() {
     queryKey: credentialKeys.list(),
     queryFn: async (): Promise<CredentialStatus[]> => {
       return client("/api/admin/credentials", "credentials", {
-        fallback: "Could not load credentials",
+        fallback: ui("Could not load credentials"),
       });
     },
   });

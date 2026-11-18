@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ComponentPreview } from "@/components/component-preview";
@@ -37,21 +38,37 @@ export const Route = createFileRoute("/_authed/settings/components-gallery/")({
  */
 const WORDS = {
   team: {
-    intro:
-      "Browse components that Bots can display in conversations. An admin controls which components each Bot can use.",
-    emptyTitle: "Nothing published yet",
-    empty: "When an admin publishes a component, it will show up here.",
+    get intro() {
+      return ui(
+        "Browse components that Bots can display in conversations. An admin controls which components each Bot can use.",
+      );
+    },
+    get emptyTitle() {
+      return ui("Nothing published yet");
+    },
+    get empty() {
+      return ui("When an admin publishes a component, it will show up here.");
+    },
   },
   personal: {
-    intro:
-      "Browse the components your Bots can show in conversations. Every Bot can use all of them.",
-    emptyTitle: "No components yet",
-    empty:
-      "Components show up here once OpenBot has loaded them. Reload the page if this stays empty.",
+    get intro() {
+      return ui(
+        "Browse the components your Bots can show in conversations. Every Bot can use all of them.",
+      );
+    },
+    get emptyTitle() {
+      return ui("No components yet");
+    },
+    get empty() {
+      return ui(
+        "Components show up here once OpenBot has loaded them. Reload the page if this stays empty.",
+      );
+    },
   },
 } as const;
 
 function RouteComponent() {
+  useLocale();
   const components = useQuery(componentListQueryOptions());
   // Until the edition is known, the team edition's words, as everywhere else that reads it.
   const edition =
@@ -60,10 +77,10 @@ function RouteComponent() {
   const published = components.data?.filter((component) => component.published);
 
   return (
-    <PageShell description={words.intro} title="Components gallery">
+    <PageShell description={words.intro} title={ui("Components gallery")}>
       {components.isPending ? null : components.error ? (
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load components. Reload the page.
+          {ui("Couldn't load components. Reload the page.")}
         </p>
       ) : published?.length === 0 ? (
         <Empty className="mt-12 min-h-[30dvh] border border-dashed">

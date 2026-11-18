@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconBrandGithub, IconChevronRight } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -51,6 +52,7 @@ export function IdentityConnectionPage({
   linked: string | undefined;
   provider: LinkableProvider;
 }) {
+  useLocale();
   const title = linkableProviderTitle(provider);
   const [arrival] = useState(() => linkedNotice(linked));
   const links = useQuery(linkedAccountsQueryOptions());
@@ -71,7 +73,10 @@ export function IdentityConnectionPage({
 
   return (
     <PageShell
-      backButton={{ label: "Connections", linkProps: { to: "/connections" } }}
+      backButton={{
+        label: ui("Connections"),
+        linkProps: { to: "/connections" },
+      }}
       description={IDENTITY_SUMMARIES[provider]}
       title={title}
     >
@@ -104,6 +109,7 @@ export function IdentityConnectionPage({
  * which makes this the way to it.
  */
 function GithubTools() {
+  useLocale();
   const plugins = useQuery(pluginsPageQueryOptions());
   const connections = useQuery(connectionsQueryOptions());
   const app = plugins.data?.composioConfigured
@@ -117,8 +123,10 @@ function GithubTools() {
   ).some((row) => row.serverId === app.id);
   return (
     <PageSection
-      description="Lets your Bots read and change your repositories as you. You connect this separately from your account above."
-      title="Tools"
+      description={ui(
+        "Lets your Bots read and change your repositories as you. You connect this separately from your account above.",
+      )}
+      title={ui("Tools")}
     >
       <PageRows>
         <Item
@@ -129,9 +137,9 @@ function GithubTools() {
             <IconBrandGithub />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>GitHub tools</ItemTitle>
+            <ItemTitle>{ui("GitHub tools")}</ItemTitle>
             <ItemDescription>
-              {connected ? "Connected" : "Not connected"}
+              {connected ? ui("Connected") : ui("Not connected")}
             </ItemDescription>
           </ItemContent>
           <ItemActions>

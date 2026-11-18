@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { PageShell } from "@/components/layout/page-shell";
 import { SetupChecklist } from "@/components/setup/setup-checklist";
@@ -27,11 +28,14 @@ export const Route = createFileRoute("/_authed/settings/setup")({
 });
 
 function SetupSettingsPage() {
+  useLocale();
   const navigate = useNavigate();
   return (
     <PageShell
-      description="See what's ready and what still needs setting up. After you change a setting and restart OpenBot, check again here."
-      title="Setup"
+      description={ui(
+        "See what's ready and what still needs setting up. After you change a setting and restart OpenBot, check again here.",
+      )}
+      title={ui("Setup")}
     >
       <SetupChecklist openPage={(target) => navigate({ to: target.path })} />
     </PageShell>

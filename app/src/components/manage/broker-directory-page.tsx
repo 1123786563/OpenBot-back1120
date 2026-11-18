@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
 import { BrokerDirectory } from "@/components/plugins/broker-directory";
@@ -25,6 +26,7 @@ import { pluginsPageQueryOptions } from "@/lib/plugins/queries";
  * made on their settings page, not here.
  */
 export function BrokerDirectoryPage({ provider }: { provider: Broker }) {
+  useLocale();
   const paths = useManagePaths();
   const plugins = useQuery(pluginsPageQueryOptions());
   /*
@@ -35,7 +37,7 @@ export function BrokerDirectoryPage({ provider }: { provider: Broker }) {
   if (plugins.isError) {
     return (
       <p className="m-4 text-destructive text-sm" role="alert">
-        Couldn't load the plugin settings. Reload the page.
+        {ui("Couldn't load the plugin settings. Reload the page.")}
       </p>
     );
   }

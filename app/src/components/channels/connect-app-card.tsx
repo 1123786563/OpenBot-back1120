@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
@@ -41,6 +42,7 @@ export function ConnectAppCard({
   message: string;
   place?: CardPlace | undefined;
 }) {
+  useLocale();
   const {
     open: openTab,
     waiting,
@@ -93,55 +95,69 @@ export function ConnectAppCard({
       data-connect-app={serverId}
     >
       <div className="flex flex-col gap-1">
-        <p className="font-medium text-sm">Connect {title}</p>
+        <p className="font-medium text-sm">
+          {uiNodes("Connect {{slot0}}", [title])}
+        </p>
         <p className="text-muted-foreground text-sm">{message}</p>
       </div>
       {connected ? (
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm" role="status">
             {carried || offer
-              ? `${title} is connected.`
-              : `${title} is connected. Ask again and the Bot can use it.`}
+              ? ui("{{value0}} is connected.", { value0: String(title) })
+              : ui(
+                  "{{value0}} is connected. Ask again and the Bot can use it.",
+                  { value0: String(title) },
+                )}
           </p>
           {offer ? (
             <Button onClick={offer} size="sm">
-              Continue
+              {ui("Continue")}
             </Button>
           ) : null}
         </div>
       ) : needsKey ? (
         <p className="text-sm" role="status">
-          {title} needs a key from you.{" "}
-          <Link
-            className="underline underline-offset-2"
-            params={{ key: serverId }}
-            to="/connections/$key"
-          >
-            Enter it on {title}'s page
-          </Link>
-          , then ask again.
+          {uiNodes(
+            "{{slot0}}needs a key from you. {{slot1}}, then ask again.",
+            [
+              title,
+              <Link
+                key="slot1"
+                className="underline underline-offset-2"
+                params={{ key: serverId }}
+                to="/connections/$key"
+              >
+                {ui("Enter it on")} {title}
+                {ui("'s page")}
+              </Link>,
+            ],
+          )}
         </p>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           {/* The heading above already names the app; the button says what pressing it does. */}
           <Button disabled={pending} onClick={open} size="sm">
-            {waiting ? `Waiting for ${title}…` : "Connect"}
+            {waiting
+              ? ui("Waiting for {{value0}}…", { value0: String(title) })
+              : ui("Connect")}
           </Button>
           {waiting ? (
             <p className="text-muted-foreground text-sm" role="status">
-              Finish in the tab that opened, then come back here.
+              {ui("Finish in the tab that opened, then come back here.")}
             </p>
           ) : null}
           {blockedUrl ? (
             <p className="text-sm" role="status">
-              This browser blocked the tab.{" "}
+              {ui("This browser blocked the tab.")}{" "}
               <a
                 className="underline underline-offset-2"
                 href={blockedUrl}
                 rel="noreferrer"
                 target="_blank"
               >
-                Open {title}'s sign-in
+                {ui("Open")} {title}
+                {ui("'s sign-in")}
               </a>
               .
             </p>

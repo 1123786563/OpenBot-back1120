@@ -2035,7 +2035,7 @@ describe("GET /:id", () => {
     expect(result.fetched.headers.get("Content-Type")).toContain(
       "application/json",
     );
-    expect((await result.fetched.json()) as { error: string }).toEqual({
+    expect((await result.fetched.json()) as { error: string }).toMatchObject({
       error: "Couldn't open that attachment. Try again.",
     });
     // Both reads are written down, naming the row and the asker, because that is what it would take
@@ -2178,7 +2178,7 @@ describe("DELETE /:id", () => {
     expect(response.status).toBe(409);
     expect(selected.flat()).not.toContain("attachedAt");
     // The 409 is still the one it was, said the one way it is said.
-    expect((await response.json()) as { error: string }).toEqual({
+    expect((await response.json()) as { error: string }).toMatchObject({
       error: "This attachment is already part of a sent message.",
     });
   });

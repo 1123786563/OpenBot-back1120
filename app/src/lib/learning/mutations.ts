@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type {
   LearningPersonalReview,
   LearningSettings,
@@ -59,7 +60,7 @@ export function reviewLearningProposalMutationOptions(
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't save your decision. Try again.",
+          fallback: ui("Couldn't save your decision. Try again."),
         },
       ),
     onSuccess: () =>
@@ -77,7 +78,7 @@ export function startLearningRunMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't start Learning. Try again.",
+          fallback: ui("Couldn't start Learning. Try again."),
         },
       ),
     onSuccess: () =>
@@ -101,7 +102,7 @@ export function reviewPersonalProposalMutationOptions(
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't save your decision. Try again.",
+          fallback: ui("Couldn't save your decision. Try again."),
         },
       ),
     onSuccess: () =>
@@ -121,7 +122,7 @@ export function startPersonalLearningRunMutationOptions(
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't start Learning. Try again.",
+          fallback: ui("Couldn't start Learning. Try again."),
         },
       ),
     onSuccess: () =>
@@ -143,7 +144,7 @@ export function reviewPersonProposalMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't save your decision. Try again.",
+          fallback: ui("Couldn't save your decision. Try again."),
         },
       ),
     onSuccess: () =>
@@ -160,7 +161,7 @@ export function requestSkillSharingMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: {},
-          fallback: "Couldn't send your request. Try again.",
+          fallback: ui("Couldn't send your request. Try again."),
         },
       );
     },
@@ -184,7 +185,7 @@ export function decideSharingMutationOptions(queryClient: QueryClient) {
         {
           method: "POST",
           body: { requestedAt: variables.requestedAt },
-          fallback: "Couldn't save your decision. Try again.",
+          fallback: ui("Couldn't save your decision. Try again."),
         },
       ),
     onSuccess: () =>
@@ -203,7 +204,7 @@ export function savePersonalReviewMutationOptions(queryClient: QueryClient) {
       client("/api/admin/learning/personal-review", "settings", {
         method: "PUT",
         body: { personalReview },
-        fallback: "Couldn't save who approves. Try again.",
+        fallback: ui("Couldn't save who approves. Try again."),
       }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: learningKeys.all }),
@@ -217,7 +218,7 @@ export function saveAutoApproveMutationOptions(queryClient: QueryClient) {
       client("/api/settings/learning/auto-approve", {
         method: "PUT",
         body: { autoApprove },
-        fallback: "Couldn't save automatic approval. Try again.",
+        fallback: ui("Couldn't save automatic approval. Try again."),
       }).then((response) => response.json()),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: learningKeys.all }),

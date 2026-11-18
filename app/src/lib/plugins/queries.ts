@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 // This import closes a cycle: `./provider-vocabulary` imports `pluginsProvider` from this file.
@@ -478,7 +479,7 @@ export function connectionsQueryOptions() {
     queryKey: pluginKeys.connections(),
     queryFn: async (): Promise<PluginConnections> => {
       const response = await client("/api/plugins/connections", {
-        fallback: "Couldn't load your connections.",
+        fallback: ui("Couldn't load your connections."),
       });
       return response.json();
     },
@@ -501,7 +502,7 @@ export function connectionSiblingsQueryOptions(serverId: string) {
       const response = await client(
         `/api/plugins/servers/${encodeURIComponent(serverId)}/connection/siblings`,
         {
-          fallback: "Couldn't read which other apps share this connection.",
+          fallback: ui("Couldn't read which other apps share this connection."),
         },
       );
       const body: Partial<ConnectionSiblings> = await response.json();
@@ -525,7 +526,7 @@ export function pluginsPageQueryOptions() {
     queryKey: pluginKeys.page(),
     queryFn: async (): Promise<PluginsPage> => {
       const response = await client("/api/plugins", {
-        fallback: "Couldn't load your apps. Reload the page.",
+        fallback: ui("Couldn't load your apps. Reload the page."),
       });
       return response.json();
     },
@@ -565,7 +566,7 @@ export function agentPluginsQueryOptions(agentId: string) {
     queryFn: async (): Promise<GrantedPlugins> => {
       const response = await client(
         `/api/plugins/for/${encodeURIComponent(agentId)}`,
-        { fallback: "Couldn't load this Bot's apps." },
+        { fallback: ui("Couldn't load this Bot's apps.") },
       );
       return response.json();
     },
@@ -601,7 +602,7 @@ export function brokeredAccountsQueryOptions(serverId: string) {
     queryFn: async (): Promise<BrokeredAccounts> => {
       const response = await client(
         `/api/plugins/servers/${encodeURIComponent(serverId)}/accounts`,
-        { fallback: "Couldn't list your accounts. Reload the page." },
+        { fallback: ui("Couldn't list your accounts. Reload the page.") },
       );
       const body: Partial<BrokeredAccounts> = await response.json();
       return {

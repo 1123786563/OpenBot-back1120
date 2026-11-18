@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -68,7 +69,7 @@ test("a boundary that could not be read says so instead of leaving the page blan
   const view = drawBoundaries();
 
   const alert = await view.findByRole("alert");
-  expect(alert.textContent).toBe("The boundary could not be read.");
+  expect(readErrorDetails(alert)).toBe("The boundary could not be read.");
 });
 
 test("a refused read shows the server's own reason", async () => {
@@ -81,7 +82,7 @@ test("a refused read shows the server's own reason", async () => {
   const view = drawBoundaries();
 
   const alert = await view.findByRole("alert");
-  expect(alert.textContent).toBe(
+  expect(readErrorDetails(alert)).toBe(
     "Only an administrator may read the boundary.",
   );
 });

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { whatIfExplainable } from "@openbot/shared/what-if";
 import { IconHelpCircle } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
@@ -23,11 +24,21 @@ export function explainable(event: AuditEvent): boolean {
 }
 
 const RECORDED_WORDS = {
-  allowed: "Allowed",
-  refused: "Refused",
-  asks: "Asked first",
-  hands_off: "Handed to the person",
-  failed: "Allowed, then didn't finish",
+  get allowed() {
+    return ui("Allowed");
+  },
+  get refused() {
+    return ui("Refused");
+  },
+  get asks() {
+    return ui("Asked first");
+  },
+  get hands_off() {
+    return ui("Handed to the person");
+  },
+  get failed() {
+    return ui("Allowed, then didn't finish");
+  },
 } as const;
 
 /**
@@ -36,6 +47,7 @@ const RECORDED_WORDS = {
  * today, and where the two differ because a setting has changed since.
  */
 export function WhyButton({ event }: { event: AuditEvent }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState<WhatIfExplained | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -71,16 +83,16 @@ export function WhyButton({ event }: { event: AuditEvent }) {
         size="xs"
         variant="ghost"
       >
-        <IconHelpCircle />
-        Why?
+        {uiNodes("{{slot0}}Why?", [<IconHelpCircle key="slot0" />])}
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Why did this happen?</DialogTitle>
+            <DialogTitle>{ui("Why did this happen?")}</DialogTitle>
             <DialogDescription>
-              Each of OpenBot's controls, asked about this event's own facts
-              with today's settings.
+              {ui(
+                "Each of OpenBot's controls, asked about this event's own facts with today's settings.",
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 overflow-y-auto">
@@ -105,7 +117,7 @@ export function WhyButton({ event }: { event: AuditEvent }) {
                     {RECORDED_WORDS[answer.recorded.outcome]}
                   </span>
                   <span>
-                    <span className="font-medium">Then: </span>
+                    <span className="font-medium">{ui("Then:")} </span>
                     <span className="text-muted-foreground">
                       {answer.recorded.summary}
                     </span>
@@ -113,8 +125,9 @@ export function WhyButton({ event }: { event: AuditEvent }) {
                 </div>
                 {differs ? (
                   <p className="text-amber-700 text-sm dark:text-amber-500">
-                    Today's settings decide this differently. Something has
-                    changed since it happened.
+                    {ui(
+                      "Today's settings decide this differently. Something has changed since it happened.",
+                    )}
                   </p>
                 ) : null}
                 <WhatIfResultView inDialog result={answer.result} />
@@ -134,11 +147,11 @@ export function WhyButton({ event }: { event: AuditEvent }) {
                 size="sm"
                 variant="outline"
               >
-                Try a change
+                {ui("Try a change")}
               </Button>
             ) : null}
             <Button onClick={() => setOpen(false)} size="sm">
-              Done
+              {ui("Done")}
             </Button>
           </DialogFooter>
         </DialogContent>

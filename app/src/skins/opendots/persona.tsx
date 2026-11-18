@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconDots } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -12,6 +13,7 @@ import { agentListQueryOptions } from "@/lib/agents/queries";
  * hides it the moment the page shows a message, so it never sits over a conversation.
  */
 export function CoworkerPersona({ botId }: { botId: string }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const bot = agents.data?.find((agent) => agent.id === botId);
   if (!bot) return null;
@@ -38,7 +40,7 @@ export function CoworkerPersona({ botId }: { botId: string }) {
           params={{ agentId: bot.id }}
           to="/bots/$agentId"
         >
-          Edit Bot <IconDots className="size-3.5" />
+          {ui("Edit Bot")} <IconDots className="size-3.5" />
         </Link>
       </div>
     </div>

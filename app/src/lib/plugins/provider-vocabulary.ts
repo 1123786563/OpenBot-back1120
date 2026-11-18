@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { type PluginsPage, pluginsProvider } from "./queries";
 
 /**
@@ -92,7 +93,7 @@ export function providerVocabulary(
  * fallback once spelled a vendor on its own and printed Composio's name on an Arcade deployment.
  */
 export function directoryReadFailure(_provider: PluginsProvider): string {
-  return "Couldn't load the apps you can connect. Reload the page.";
+  return ui("Couldn't load the apps you can connect. Reload the page.");
 }
 
 /**
@@ -107,12 +108,16 @@ export function directoryDescriptions(edition: Edition = "team"): {
 } {
   return edition === "personal"
     ? {
-        page: "Add an app and connect your account so your Bots can use it.",
-        search: "Search by name. OpenBot hasn't reviewed these apps.",
+        page: ui(
+          "Add an app and connect your account so your Bots can use it.",
+        ),
+        search: ui("Search by name. OpenBot hasn't reviewed these apps."),
       }
     : {
-        page: "Add an app to make its tools available to Bots. Each person still connects their own account before a Bot reads anything.",
-        search: "Search by name. Nobody here has reviewed these apps.",
+        page: ui(
+          "Add an app to make its tools available to Bots. Each person still connects their own account before a Bot reads anything.",
+        ),
+        search: ui("Search by name. Nobody here has reviewed these apps."),
       };
 }
 
@@ -121,7 +126,9 @@ export function directoryDescriptions(edition: Edition = "team"): {
  * apps under Connections, with the directory as one more tile ({@link moreAppsRow}).
  */
 export function moreAppsSectionDescription(_provider: PluginsProvider): string {
-  return "More apps people can connect through OpenBot. Nobody here has reviewed them.";
+  return ui(
+    "More apps people can connect through OpenBot. Nobody here has reviewed them.",
+  );
 }
 
 /**
@@ -162,8 +169,13 @@ export function moreAppsRow(
       title: directoryLabel,
       description:
         edition === "personal"
-          ? `Not set up yet. ${PERSONAL_SET_UP}`
-          : `Not set up. Set ${envVar} on this deployment to browse its apps.`,
+          ? ui("Not set up yet. {{value0}}", {
+              value0: String(PERSONAL_SET_UP),
+            })
+          : ui(
+              "Not set up. Set {{value0}} on this deployment to browse its apps.",
+              { value0: String(envVar) },
+            ),
       linked: false,
     };
   }
@@ -188,10 +200,14 @@ export function brokeredConnectionDescription(
   personal?: BrokeredApp,
 ): string {
   if (!personal)
-    return "Each person connects their own account through OpenBot.";
+    return ui("Each person connects their own account through OpenBot.");
   if (personal.kind === "no-auth")
-    return `${capitalised(personal.title)} works through OpenBot without an account.`;
-  return `Connect your ${personal.title} account through OpenBot.`;
+    return ui("{{value0}} works through OpenBot without an account.", {
+      value0: String(capitalised(personal.title)),
+    });
+  return ui("Connect your {{value0}} account through OpenBot.", {
+    value0: String(personal.title),
+  });
 }
 
 /**
@@ -218,8 +234,12 @@ export function brokeredReach(
   if (!personal) {
     return {
       description: takesKey
-        ? "Each person connects their own account with a key from the app, and a Bot sees only what that person can see."
-        : "This deployment holds one key for every app like this. Each person connects their own account, and a Bot sees only what that person can see. There is no token to paste.",
+        ? ui(
+            "Each person connects their own account with a key from the app, and a Bot sees only what that person can see.",
+          )
+        : ui(
+            "This deployment holds one key for every app like this. Each person connects their own account, and a Bot sees only what that person can see. There is no token to paste.",
+          ),
       badge,
     };
   }
@@ -227,17 +247,23 @@ export function brokeredReach(
   return {
     description:
       kind === "consent"
-        ? `You sign in to ${title} in your browser. OpenBot never sees your password.`
+        ? ui(
+            "You sign in to {{value0}} in your browser. OpenBot never sees your password.",
+            { value0: String(title) },
+          )
         : kind === "fields"
-          ? `You connect with a key from your ${title} account. Your Bots use it as you.`
-          : "There's nothing to sign in to.",
+          ? ui(
+              "You connect with a key from your {{value0}} account. Your Bots use it as you.",
+              { value0: String(title) },
+            )
+          : ui("There's nothing to sign in to."),
     badge,
   };
 }
 
 /** What disconnecting a brokered account does, said where the button is. */
 export function brokeredDisconnectNote(_provider: PluginsProvider): string {
-  return "Disconnecting also removes OpenBot's access to your account.";
+  return ui("Disconnecting also removes OpenBot's access to your account.");
 }
 
 /**
@@ -256,10 +282,18 @@ export function brokeredKeyMissing(
   reader: "admin" | "person" = "admin",
 ): string {
   if (edition === "personal")
-    return `Connecting apps isn't set up yet, so you can't connect or disconnect this account here. ${PERSONAL_SET_UP}`;
+    return ui(
+      "Connecting apps isn't set up yet, so you can't connect or disconnect this account here. {{value0}}",
+      { value0: String(PERSONAL_SET_UP) },
+    );
   if (reader === "person")
-    return "Connecting apps isn't set up yet, so this account can't be connected or disconnected here. Ask an admin to set it up.";
-  return `Set ${VOCABULARY[provider].envVar} on this deployment. Until then, this account can't be connected or disconnected here. The app stays turned on, and its tool grants still stand.`;
+    return ui(
+      "Connecting apps isn't set up yet, so this account can't be connected or disconnected here. Ask an admin to set it up.",
+    );
+  return ui(
+    "Set {{value0}} on this deployment. Until then, this account can't be connected or disconnected here. The app stays turned on, and its tool grants still stand.",
+    { value0: String(VOCABULARY[provider].envVar) },
+  );
 }
 
 /**
@@ -297,7 +331,10 @@ export function disconnectSiblingsNotice(answer: {
 
 function joinNames(names: readonly string[]): string {
   if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return ui("{{value0}} and {{value1}}", {
+    value0: String(names.slice(0, -1).join(", ")),
+    value1: String(names[names.length - 1]),
+  });
 }
 
 /**

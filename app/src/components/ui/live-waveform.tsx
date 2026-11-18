@@ -24,6 +24,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+import { ui, useLocale } from "@/lib/i18n";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ export function LiveWaveform({
   height?: number;
   className?: string;
 }) {
+  useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const reduceMotion = useReducedMotion();
@@ -146,16 +148,16 @@ export function LiveWaveform({
       role="img"
       aria-label={
         unavailable
-          ? "Waveform unavailable; recording continues"
+          ? ui("Waveform unavailable; recording continues")
           : processing
-            ? "Processing audio"
-            : "Live audio waveform"
+            ? ui("Processing audio")
+            : ui("Live audio waveform")
       }
     >
       <canvas ref={canvasRef} className="block size-full" />
       {unavailable && (
         <span className="absolute inset-0 flex items-center bg-card text-xs text-muted-foreground">
-          Recording · waveform unavailable
+          {ui("Recording · waveform unavailable")}
         </span>
       )}
     </div>

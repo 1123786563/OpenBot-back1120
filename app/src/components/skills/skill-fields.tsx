@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useForm } from "@tanstack/react-form";
 import { PageCard, PageSection } from "@/components/layout/page-shell";
 import { SkillTools } from "@/components/skills/skill-tools";
@@ -57,6 +59,7 @@ export function SkillFields({
    */
   slugLocked?: boolean;
 }) {
+  useLocale();
   const form = useForm({
     defaultValues,
     validators: { onSubmit: skillFormSchema },
@@ -72,7 +75,7 @@ export function SkillFields({
           field.state.meta.isTouched && !field.state.meta.isValid;
         return (
           <Field data-invalid={isInvalid}>
-            <FieldLabel htmlFor={field.name}>Command</FieldLabel>
+            <FieldLabel htmlFor={field.name}>{ui("Command")}</FieldLabel>
             <Input
               aria-invalid={isInvalid}
               className={sections ? "font-mono" : undefined}
@@ -87,7 +90,7 @@ export function SkillFields({
               onChange={(event) =>
                 field.handleChange(event.target.value.toLowerCase())
               }
-              placeholder="standup"
+              placeholder={ui("standup")}
               value={field.state.value}
             />
             {isInvalid ? (
@@ -95,11 +98,13 @@ export function SkillFields({
             ) : (
               <FieldDescription>
                 {slugLocked ? (
-                  "You can't change a command. To rename this skill, write a new one and delete this one."
+                  ui(
+                    "You can't change a command. To rename this skill, write a new one and delete this one.",
+                  )
                 ) : (
                   <>
-                    What people type after <code>/</code>. Lower-case letters,
-                    numbers and hyphens.
+                    {ui("What people type after")} <code>/</code>
+                    {ui(". Lower-case letters, numbers and hyphens.")}
                   </>
                 )}
               </FieldDescription>
@@ -117,14 +122,14 @@ export function SkillFields({
           field.state.meta.isTouched && !field.state.meta.isValid;
         return (
           <Field data-invalid={isInvalid}>
-            <FieldLabel htmlFor={field.name}>Title</FieldLabel>
+            <FieldLabel htmlFor={field.name}>{ui("Title")}</FieldLabel>
             <Input
               aria-invalid={isInvalid}
               id={field.name}
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
-              placeholder="Standup notes"
+              placeholder={ui("Standup notes")}
               value={field.state.value}
             />
             {isInvalid ? <FieldError errors={field.state.meta.errors} /> : null}
@@ -141,21 +146,22 @@ export function SkillFields({
           field.state.meta.isTouched && !field.state.meta.isValid;
         return (
           <Field data-invalid={isInvalid}>
-            <FieldLabel htmlFor={field.name}>One-liner</FieldLabel>
+            <FieldLabel htmlFor={field.name}>{ui("One-liner")}</FieldLabel>
             <Input
               aria-invalid={isInvalid}
               id={field.name}
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
-              placeholder="Turns yesterday's work into a standup update"
+              placeholder={ui("Turns yesterday's work into a standup update")}
               value={field.state.value}
             />
             {isInvalid ? (
               <FieldError errors={field.state.meta.errors} />
             ) : (
               <FieldDescription>
-                Shown beside the command in the <code>/</code> menu. Optional.
+                {ui("Shown beside the command in the")} <code>/</code>{" "}
+                {ui("menu. Optional.")}
               </FieldDescription>
             )}
           </Field>
@@ -176,7 +182,7 @@ export function SkillFields({
               className={sections ? "sr-only" : undefined}
               htmlFor={field.name}
             >
-              Instructions
+              {ui("Instructions")}
             </FieldLabel>
             <Textarea
               aria-invalid={isInvalid}
@@ -185,15 +191,18 @@ export function SkillFields({
               name={field.name}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
-              placeholder="Summarise what I did yesterday in this conversation, then list what is left."
+              placeholder={ui(
+                "Summarise what I did yesterday in this conversation, then list what is left.",
+              )}
               value={field.state.value}
             />
             {isInvalid ? (
               <FieldError errors={field.state.meta.errors} />
             ) : sections ? null : (
               <FieldDescription>
-                What the Bot is told when you use the command. Write it as
-                instructions to the Bot.
+                {ui(
+                  "What the Bot is told when you use the command. Write it as instructions to the Bot.",
+                )}
               </FieldDescription>
             )}
           </Field>
@@ -217,7 +226,7 @@ export function SkillFields({
     <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
       {([canSubmit, isSubmitting]) => (
         <Button disabled={!canSubmit || isSubmitting} type="submit">
-          {isSubmitting ? "Saving…" : submitLabel}
+          {isSubmitting ? ui("Saving…") : submitLabel}
         </Button>
       )}
     </form.Subscribe>
@@ -225,7 +234,7 @@ export function SkillFields({
 
   const failure = error ? (
     <p className="mt-4 text-sm text-destructive" role="alert">
-      {error.message}
+      {<ErrorDetails error={error} />}
     </p>
   ) : null;
 
@@ -241,8 +250,10 @@ export function SkillFields({
         <>
           <PageSection
             className={cn(sections.flush && "mt-0")}
-            description="How the skill shows in the / menu, and what people type to run it."
-            title="Name"
+            description={ui(
+              "How the skill shows in the / menu, and what people type to run it.",
+            )}
+            title={ui("Name")}
           >
             <PageCard className="mt-4">
               <FieldGroup>
@@ -254,14 +265,16 @@ export function SkillFields({
           </PageSection>
 
           <PageSection
-            description="What the Bot is told when someone uses this skill. Write it as instructions to the Bot."
-            title="Instructions"
+            description={ui(
+              "What the Bot is told when someone uses this skill. Write it as instructions to the Bot.",
+            )}
+            title={ui("Instructions")}
           >
             {/* The box alone: a card around one text box is a frame around a frame. */}
             <div className="mt-4">{instructionsField}</div>
           </PageSection>
 
-          <PageSection description={TOOLS_HINT} title="Tools">
+          <PageSection description={ui(TOOLS_HINT)} title={ui("Tools")}>
             {toolsField}
           </PageSection>
 
@@ -279,9 +292,9 @@ export function SkillFields({
             {summaryField}
             {instructionsField}
             <Field>
-              <FieldLabel>Tools it needs</FieldLabel>
+              <FieldLabel>{ui("Tools it needs")}</FieldLabel>
               {toolsField}
-              <FieldDescription>{TOOLS_HINT}</FieldDescription>
+              <FieldDescription>{ui(TOOLS_HINT)}</FieldDescription>
             </Field>
           </FieldGroup>
           {/*
@@ -294,7 +307,7 @@ export function SkillFields({
           <div className="mt-4 flex justify-end gap-2">
             {onCancel ? (
               <Button onClick={onCancel} type="button" variant="outline">
-                Cancel
+                {ui("Cancel")}
               </Button>
             ) : null}
             {submit}

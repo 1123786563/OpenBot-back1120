@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -35,6 +36,7 @@ export function DescribeField({
   action: string;
   write: (text: string) => Promise<string | null>;
 }) {
+  useLocale();
   const [text, setText] = useState("");
   const [writing, setWriting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function DescribeField({
           type="button"
           variant="outline"
         >
-          {writing ? "Writing…" : action}
+          {writing ? ui("Writing…") : action}
         </Button>
       </div>
       {problem ? (
@@ -107,17 +109,22 @@ export function DescribeRule({
 }: {
   onWritten: (written: WrittenRule) => void;
 }) {
+  useLocale();
   return (
     <DescribeField
-      action="Write rule"
-      description="Say in a sentence what no Bot may do, and your model writes the rule. A second reading that never sees your words says what the rule does."
+      action={ui("Write rule")}
+      description={ui(
+        "Say in a sentence what no Bot may do, and your model writes the rule. A second reading that never sees your words says what the rule does.",
+      )}
       id="rule-description-english"
-      label="Describe the rule"
-      placeholder="Bots may not visit social media sites"
+      label={ui("Describe the rule")}
+      placeholder={ui("Bots may not visit social media sites")}
       write={async (described) => {
         const translation = await translatePolicyRule(described);
         if (translation.effect === "allow")
-          return "That says what Bots may do. A rule here stops an action, so describe what no Bot may do.";
+          return ui(
+            "That says what Bots may do. A rule here stops an action, so describe what no Bot may do.",
+          );
         onWritten({ ...translation, text: described });
         return null;
       }}

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { ActivityMessage, Message } from "@ag-ui/core";
 import type { Attachment } from "@copilotkit/react-core/v2";
 import {
@@ -255,9 +256,10 @@ const RESTORING_ANSWER_LINES = [
 ] as const;
 
 function RestoringTranscript() {
+  useLocale();
   return (
     // One announcement, with every bar hidden from it: nine empty shapes read aloud is worse.
-    <div aria-label="Loading this conversation" role="status">
+    <div aria-label={ui("Loading this conversation")} role="status">
       <div aria-hidden="true" className="flex justify-end pb-7">
         <Skeleton className="h-10 w-64 rounded-xl bg-muted/40 motion-reduce:animate-none" />
       </div>
@@ -285,6 +287,7 @@ function RestoringTranscript() {
  * work is a tool call or a model that has not spoken yet.
  */
 function Thinking() {
+  useLocale();
   return (
     <p
       className="tool-line-running text-muted-foreground text-sm"
@@ -292,7 +295,7 @@ function Thinking() {
       // is doing. The text says it, so a screen reader is told the same thing the shimmer implies.
       role="status"
     >
-      Thinking
+      {ui("Thinking")}
     </p>
   );
 }
@@ -311,6 +314,7 @@ function Thinking() {
  * own obituary as something it had written.
  */
 function Stopped({ reason }: { reason: string }) {
+  useLocale();
   return (
     <p
       className="text-destructive text-sm"
@@ -421,6 +425,7 @@ function Queued({
   text: string;
   onRemove?: (() => void) | undefined;
 }) {
+  useLocale();
   /*
    * THE FILES COME WITH IT, and until they did they were on NO SURFACE IN THE APP AT ALL. Parking
    * consumes the draft, so the composer's strip empties in the same beat this line appears; drawing
@@ -454,7 +459,7 @@ function Queued({
            * `status` rather than `alert`, matching the thinking line: a person who has just chosen
            * to queue something is not being interrupted by the news that it is queued.
            */}
-          <span role="status">Queued</span>
+          <span role="status">{ui("Queued")}</span>
           {onRemove ? (
             <button
               /*
@@ -467,12 +472,14 @@ function Queued({
                * `describeParked`. An attachment-only message named the label after an empty string
                * and read as "Remove queued message:", which is the same nothing three times over.
                */
-              aria-label={`Remove queued message: ${describeParked(text, files)}`}
+              aria-label={ui("Remove queued message: {{value0}}", {
+                value0: String(describeParked(text, files)),
+              })}
               className="ml-2 underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               onClick={onRemove}
               type="button"
             >
-              Remove
+              {ui("Remove")}
             </button>
           ) : null}
         </MessageFooter>
@@ -514,6 +521,7 @@ function ScrollNewestQueuedIntoView({
   newest: string | null;
   onQueued: () => void;
 }) {
+  useLocale();
   useEffect(() => {
     if (newest === null) {
       return;
@@ -576,6 +584,7 @@ const ArrivalsLiveContext = createContext<React.RefObject<
 const AT_REST: React.RefObject<number | null> = { current: null };
 
 function ArrivalsLive({ children }: { children: React.ReactNode }) {
+  useLocale();
   const live = useRef<number | null>(null);
   useEffect(() => {
     live.current = Date.now();
@@ -596,6 +605,7 @@ function ArrivalsLive({ children }: { children: React.ReactNode }) {
  * among rows on screen but is history, and draws at rest.
  */
 function useArrivedLive(happenedAt?: string): boolean {
+  useLocale();
   const liveRef = useContext(ArrivalsLiveContext);
   const [live] = useState(() => {
     if (liveRef === null) return true;
@@ -650,6 +660,7 @@ function Arriving({
   /** When what the row shows happened, if it can say; see `useArrivedLive`. */
   happenedAt?: string;
 }) {
+  useLocale();
   const shouldReduceMotion = useReducedMotion();
   const live = useArrivedLive(happenedAt);
 
@@ -706,6 +717,7 @@ function Arriving({
  * the part a person wrote and the only part addressed to them.
  */
 function RoutineFiring({ instruction }: { instruction: string }) {
+  useLocale();
   const responsibility = readResponsibilityTurn(instruction);
   if (responsibility) {
     return <ResponsibilityFiring raw={instruction} turn={responsibility} />;
@@ -714,7 +726,7 @@ function RoutineFiring({ instruction }: { instruction: string }) {
     <div className="flex min-w-0 items-baseline gap-2 text-muted-foreground text-sm">
       <IconClock aria-hidden className="size-4 shrink-0 translate-y-0.5" />
       <span className="min-w-0">
-        <span className="font-medium">Routine ran.</span>{" "}
+        <span className="font-medium">{ui("Routine ran.")}</span>{" "}
         <span className="whitespace-pre-wrap">{instruction}</span>
       </span>
     </div>
@@ -744,22 +756,29 @@ function ResponsibilityFiring({
   raw: string;
   turn: { instruction: string; trigger: string };
 }) {
+  useLocale();
   return (
     <div className="flex min-w-0 items-baseline gap-2 text-muted-foreground text-sm">
       <IconClock aria-hidden className="size-4 shrink-0 translate-y-0.5" />
       <div className="min-w-0">
         <p>
-          <span className="font-medium">Worked on a goal.</span> Trigger:{" "}
-          {describeTrigger(turn.trigger)}
+          {uiNodes("{{slot0}}Trigger: {{slot1}}", [
+            <span key="slot0" className="font-medium">
+              {ui("Worked on a goal.")}
+            </span>,
+            describeTrigger(turn.trigger),
+          ])}
         </p>
         <p className="whitespace-pre-wrap">{turn.instruction}</p>
         <details className="group mt-1">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            Details
-            <IconChevronDown
-              aria-hidden
-              className="size-3 transition-transform group-open:rotate-180 motion-reduce:transition-none"
-            />
+            {uiNodes("Details{{slot0}}", [
+              <IconChevronDown
+                key="slot0"
+                aria-hidden
+                className="size-3 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+              />,
+            ])}
           </summary>
           <p className="mt-1 whitespace-pre-wrap break-words text-xs">{raw}</p>
         </details>
@@ -799,6 +818,7 @@ const TranscriptMessage = memo(function TranscriptMessage({
   settled?: boolean;
   text: string;
 }) {
+  useLocale();
   const isUser = role === "user";
   const live = useArrivedLive();
   const [mode] = useState(() => messageMode(live, streaming));
@@ -873,7 +893,7 @@ const TranscriptMessage = memo(function TranscriptMessage({
                 <span className="whitespace-pre-wrap">
                   {origin && (
                     <span className="mr-1.5 inline-flex items-center rounded bg-foreground/10 px-1.5 py-0.5 align-middle text-foreground/70 text-xs">
-                      via {origin.via}
+                      {uiNodes("via {{slot0}}", [origin.via])}
                     </span>
                   )}
                   {invoked ? (
@@ -925,12 +945,13 @@ const TranscriptMessage = memo(function TranscriptMessage({
 
 /** Whose answer this is, by the name the person knows the Bot by. */
 function AnswererName({ botId }: { botId: string }) {
+  useLocale();
   const { data: bots } = useQuery(agentListQueryOptions());
   // Nothing until the roster arrives, rather than a placeholder that is replaced a moment later.
   if (!bots) return null;
   return (
     <MessageHeader className="text-xs font-medium text-muted-foreground">
-      {bots.find((bot) => bot.id === botId)?.name ?? "A Bot no longer here"}
+      {bots.find((bot) => bot.id === botId)?.name ?? ui("A Bot no longer here")}
     </MessageHeader>
   );
 }
@@ -1001,6 +1022,7 @@ export function sameAttachmentRow(
 export const TranscriptAttachments = memo(function TranscriptAttachments({
   attachments,
 }: AttachmentRowProps) {
+  useLocale();
   return (
     <MessageRow align="end">
       <MessageContent>
@@ -1031,6 +1053,7 @@ function AttachmentTiles({
   attachments: readonly SentAttachment[];
   className?: string;
 }) {
+  useLocale();
   return (
     <ul
       className={cn(
@@ -1166,6 +1189,7 @@ function probeDocument(url: string): Promise<boolean> {
  * broken image, not a sentence swearing the file was deleted.
  */
 function useDocumentIsGone(url: string, ask: boolean): boolean {
+  useLocale();
   const [gone, setGone] = useState(false);
 
   useEffect(() => {
@@ -1196,6 +1220,7 @@ function useDocumentIsGone(url: string, ask: boolean): boolean {
 }
 
 function SentAttachmentTile({ attachment }: { attachment: SentAttachment }) {
+  useLocale();
   const [failedToLoad, setFailedToLoad] = useState(false);
   const { filename, modality, url } = attachment;
   /*
@@ -1256,9 +1281,9 @@ function SentAttachmentTile({ attachment }: { attachment: SentAttachment }) {
         <div className="min-w-0">
           {/* `title` because the tile is fixed-width and a long name is cut, not wrapped. */}
           <p className="truncate font-medium text-sm" title={filename}>
-            {filename ?? "Untitled file"}
+            {filename ?? ui("Untitled file")}
           </p>
-          <p className="text-muted-foreground text-xs">Attachment</p>
+          <p className="text-muted-foreground text-xs">{ui("Attachment")}</p>
         </div>
       </div>
     );
@@ -1267,7 +1292,11 @@ function SentAttachmentTile({ attachment }: { attachment: SentAttachment }) {
   return (
     <AttachmentLightbox filename={filename} url={url}>
       <img
-        alt={filename ? `Attachment: ${filename}` : "Attachment"}
+        alt={
+          filename
+            ? ui("Attachment: {{value0}}", { value0: String(filename) })
+            : ui("Attachment")
+        }
         className="size-32 rounded-xl object-cover"
         onError={() => setFailedToLoad(true)}
         src={url}
@@ -1288,8 +1317,8 @@ function SentAttachmentTile({ attachment }: { attachment: SentAttachment }) {
  */
 function unavailableSentence(filename?: string): string {
   return filename
-    ? `${filename} is unavailable.`
-    : "This attachment is unavailable.";
+    ? ui("{{value0}} is unavailable.", { value0: String(filename) })
+    : ui("This attachment is unavailable.");
 }
 
 /**
@@ -1327,6 +1356,7 @@ export function LightboxPicture({
   filename?: string;
   url: string;
 }) {
+  useLocale();
   const [failedToLoad, setFailedToLoad] = useState(false);
 
   if (failedToLoad) {
@@ -1349,7 +1379,7 @@ export function LightboxPicture({
 
   return (
     <img
-      alt={filename ?? "Attachment"}
+      alt={filename ?? ui("Attachment")}
       className="max-h-[88svh] max-w-[92vw] rounded-lg object-contain"
       onError={() => setFailedToLoad(true)}
       src={url}
@@ -1383,6 +1413,7 @@ function AttachmentLightbox({
   filename?: string;
   url: string;
 }) {
+  useLocale();
   const label = filename ?? "Attachment";
   /*
    * Controlled only so that clicking the dark space around the picture closes it, the way every
@@ -1398,7 +1429,12 @@ function AttachmentLightbox({
         // tab to a raw image file is not the promise this makes. `block` so the tile is not sitting
         // on a text baseline with a stray gap under it.
         className="block cursor-zoom-in overflow-hidden rounded-xl"
-        render={<button aria-label={`Open ${label}`} type="button" />}
+        render={
+          <button
+            aria-label={ui("Open {{value0}}", { value0: String(label) })}
+            type="button"
+          />
+        }
       >
         {children}
       </DialogTrigger>
@@ -1428,7 +1464,7 @@ function AttachmentLightbox({
         <DialogClose
           render={
             <button
-              aria-label="Close"
+              aria-label={ui("Close")}
               className="absolute top-4 right-4 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
               type="button"
             />
@@ -1450,7 +1486,7 @@ function AttachmentLightbox({
  */
 function activityName(activityType: string): string {
   return activityType === "open-generative-ui"
-    ? "This Bot's generated interface"
+    ? ui("This Bot's generated interface")
     : activityType;
 }
 
@@ -1472,6 +1508,7 @@ const TranscriptActivity = memo(function TranscriptActivity({
 }: {
   message: ActivityMessage;
 }) {
+  useLocale();
   const { renderActivityMessage } = useRenderActivityMessage();
   /*
    * Drawn before generative UI was switched on (a cold load: the capabilities answer or the runtime
@@ -1527,15 +1564,16 @@ const ToolCallBody = memo(function ToolCallBody({
   /** The Bot said something after this call in its turn. See `ToolPlace`. */
   spokeAfter: boolean;
 }) {
+  const interfaceLocale = useLocale();
   const renderToolCall = useRenderToolCall();
-  const toolCall = useMemo(
-    () => ({
+  const toolCall = useMemo(() => {
+    void interfaceLocale;
+    return {
       id: toolCallId,
       type: "function" as const,
       function: { name, arguments: args },
-    }),
-    [toolCallId, name, args],
-  );
+    };
+  }, [toolCallId, name, args, interfaceLocale]);
 
   // Another harness's tool under one of Claude Code's names is drawn as any other tool is.
   const drawn = foreignCodingCall(name, args)
@@ -1554,10 +1592,10 @@ const ToolCallBody = memo(function ToolCallBody({
             }),
       });
 
-  const place = useMemo(
-    () => ({ toolCallId, latest, spokeAfter }),
-    [toolCallId, latest, spokeAfter],
-  );
+  const place = useMemo(() => {
+    void interfaceLocale;
+    return { toolCallId, latest, spokeAfter };
+  }, [toolCallId, latest, spokeAfter, interfaceLocale]);
 
   return (
     <ToolRenderBoundary
@@ -1652,6 +1690,7 @@ const ToolRow = memo(function ToolRow({
   latest,
   spokeAfter,
 }: ToolRowProps) {
+  useLocale();
   const [only] = steps;
   return (
     <TurnInFlightContext.Provider value={inFlight}>
@@ -1700,8 +1739,9 @@ export function ServerToolLine({
   /** Where this call sits in the conversation, for an app card that may carry the task on. */
   place?: CardPlace;
 }) {
+  useLocale();
   const running = result === undefined;
-  const named = readToolName(name, running);
+  const named = readToolName(name, running, ui);
   const { label } = named;
   const folders = useContext(FolderNamesContext);
   // The file a file step read or saved, as a computer's own file steps name it; a step on a folder
@@ -1759,7 +1799,7 @@ export function ServerToolLine({
    */
   const folderRefusal =
     refused && name.startsWith("host_")
-      ? [detail, outcomeForPerson(reason ?? "")].filter(Boolean).join(" · ")
+      ? [detail, outcomeForPerson(reason ?? "", ui)].filter(Boolean).join(" · ")
       : undefined;
   const shown =
     name === SHOW_APP_ACCESS_TOOL || folderRefusal !== undefined
@@ -1767,7 +1807,7 @@ export function ServerToolLine({
       : unoffered
         ? UNOFFERED_TOOL_SENTENCE
         : refused && body
-          ? outcomeForPerson(body)
+          ? outcomeForPerson(body, ui)
           : answersTheModel(name)
             ? // Written for the model. A tool search opens to the tools it found, in words.
               name === SEARCH_TOOLS
@@ -1802,7 +1842,7 @@ export function ServerToolLine({
         ? { detail: folderRefusal ?? detail }
         : {})}
       // A blocked step did not happen: "Blocked: Save a file", never "Blocked: Saved a file".
-      {...(refused ? { attempted: ownToolAttempt(name) ?? undefined } : {})}
+      {...(refused ? { attempted: ownToolAttempt(name, ui) ?? undefined } : {})}
       label={label}
       refused={refused}
       failed={failed}
@@ -1827,7 +1867,7 @@ function foundToolsInWords(answer: string | undefined): string | undefined {
   if (names.length === 0) return undefined;
   return names
     .map((name) => {
-      const { label, detail } = readToolName(name);
+      const { label, detail } = readToolName(name, false, ui);
       return `- ${detail ? `${label} on ${detail}` : label}`;
     })
     .join("\n");
@@ -1964,6 +2004,7 @@ function useSmoothSendScroll(
   restoring: boolean,
   onSend: () => void,
 ) {
+  useLocale();
   const reducedMotion = useReducedMotion();
   const seenRef = useRef<string | null>(null);
   /*
@@ -2021,6 +2062,7 @@ function TranscriptRenderersWatch({
 }: {
   onVersion: (version: number) => void;
 }) {
+  useLocale();
   const { copilotkit } = useCopilotKit();
   const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
   return (
@@ -2044,6 +2086,7 @@ export function ChatTranscript({
   stopped,
   working,
 }: ChatTranscriptProps) {
+  useLocale();
   const isDrawn = useDrawnTool();
   // Which calls draw a component, so one asked for too early is left out. See `shared/tool-steps.ts`.
   const isComponent = useComponentTest();

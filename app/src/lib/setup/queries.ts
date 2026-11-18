@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -64,7 +65,7 @@ export function setupChecklistQueryOptions() {
     queryKey: setupKeys.checklist(),
     queryFn: (): Promise<SetupChecklist> =>
       client("/api/setup", "checklist", {
-        fallback: "Couldn't check your setup.",
+        fallback: ui("Couldn't check your setup."),
       }),
   });
 }

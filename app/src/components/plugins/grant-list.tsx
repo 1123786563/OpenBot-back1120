@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { PageRows, PageSection } from "@/components/layout/page-shell";
@@ -55,6 +56,7 @@ export function GrantList({
   landedAction: string | null;
   returnTo: "settings" | "admin";
 }) {
+  useLocale();
   const grants = useQuery(grantsQueryOptions(serverId, true));
   const [search, setSearch] = useState("");
   const [choosing, setChoosing] = useState<string | null>(null);
@@ -77,17 +79,22 @@ export function GrantList({
   if (grants.isPending) return null;
   if (grants.error) {
     return (
-      <PageSection title="Actions">
+      <PageSection title={ui("Actions")}>
         <p className="text-destructive text-sm" role="alert">
-          Couldn't read what this account allows right now.{" "}
-          <Button
-            onClick={() => grants.refetch()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Retry
-          </Button>
+          {uiNodes(
+            "Couldn't read what this account allows right now. {{slot0}}",
+            [
+              <Button
+                key="slot0"
+                onClick={() => grants.refetch()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {ui("Retry")}
+              </Button>,
+            ],
+          )}
         </p>
       </PageSection>
     );
@@ -97,20 +104,25 @@ export function GrantList({
   if (couldNotRead(all, appNames)) {
     const [only] = all;
     return (
-      <PageSection title="Actions">
+      <PageSection title={ui("Actions")}>
         {/* Not an action: the entry's label is the toolkit's own name, which a person must not
             see in their grant list as if it were one. */}
         <p data-could-not-read="" role="status" className="text-sm">
-          Couldn't read what this account allows right now.
-          {only?.state === "unknown" ? ` ${only.reason}` : null}{" "}
-          <Button
-            onClick={() => grants.refetch()}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            Retry
-          </Button>
+          {uiNodes(
+            "Couldn't read what this account allows right now.{{slot0}} {{slot1}}",
+            [
+              only?.state === "unknown" ? ` ${only.reason}` : null,
+              <Button
+                key="slot1"
+                onClick={() => grants.refetch()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {ui("Retry")}
+              </Button>,
+            ],
+          )}
         </p>
       </PageSection>
     );
@@ -141,8 +153,10 @@ export function GrantList({
 
   return (
     <PageSection
-      description="Grouped by the permission each action asks for. This matches what the consent screen shows."
-      title="Actions"
+      description={ui(
+        "Grouped by the permission each action asks for. This matches what the consent screen shows.",
+      )}
+      title={ui("Actions")}
     >
       {notice ? (
         <p className="text-destructive text-sm" role="alert">
@@ -150,9 +164,9 @@ export function GrantList({
         </p>
       ) : null}
       <Input
-        aria-label="Search actions"
+        aria-label={ui("Search actions")}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search actions"
+        placeholder={ui("Search actions")}
         type="search"
         value={search}
       />
@@ -165,10 +179,12 @@ export function GrantList({
         >
           <p className="mb-1 text-muted-foreground text-xs">
             {group.kind === "whole-app"
-              ? "Everything in this app, approved together"
+              ? ui("Everything in this app, approved together")
               : group.kind === "none"
-                ? "Asks for no permission of its own"
-                : `Needs ${group.scopes.join(", ")}`}
+                ? ui("Asks for no permission of its own")
+                : ui("Needs {{value0}}", {
+                    value0: String(group.scopes.join(", ")),
+                  })}
           </p>
           <PageRows>
             {group.grants.map((grant) => (
@@ -196,7 +212,7 @@ export function GrantList({
                       type="button"
                       variant="outline"
                     >
-                      Authorize
+                      {ui("Authorize")}
                     </Button>
                   ) : null}
                   {grant.state === "unknown" ? (
@@ -206,7 +222,7 @@ export function GrantList({
                       type="button"
                       variant="outline"
                     >
-                      Retry
+                      {ui("Retry")}
                     </Button>
                   ) : null}
                 </ItemActions>
@@ -217,13 +233,14 @@ export function GrantList({
       ))}
       {hidden > 0 ? (
         <p className="text-muted-foreground text-sm">
-          {hidden} more {hidden === 1 ? "action" : "actions"} not yet
-          authorized. Search to find {hidden === 1 ? "it" : "one"}.
+          {hidden} {ui("more")} {hidden === 1 ? ui("action") : ui("actions")}{" "}
+          {ui("not yet authorized. Search to find")}{" "}
+          {hidden === 1 ? ui("it") : ui("one")}.
         </p>
       ) : null}
       {term.length > 0 && groups.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No action matches that search.
+          {ui("No action matches that search.")}
         </p>
       ) : null}
       {choosing !== null ? (
@@ -256,16 +273,19 @@ function ConsentNotice({
   onCancel: () => void;
   onContinue: () => void;
 }) {
+  useLocale();
   return (
     <fieldset
-      aria-label={`Before you authorize ${action}`}
+      aria-label={ui("Before you authorize {{value0}}", {
+        value0: String(action),
+      })}
       className="m-0 flex min-w-0 flex-col gap-2 rounded-lg border p-3"
       data-consent-copy=""
     >
       <p className="text-sm">{sentence}</p>
       <div className="flex justify-end gap-2">
         <Button onClick={onCancel} size="sm" type="button" variant="ghost">
-          Cancel
+          {ui("Cancel")}
         </Button>
         <Button
           disabled={busy}
@@ -274,7 +294,7 @@ function ConsentNotice({
           type="button"
           variant="outline"
         >
-          Continue to consent
+          {ui("Continue to consent")}
         </Button>
       </div>
     </fieldset>
@@ -286,17 +306,24 @@ function describe(grant: GrantState, canAuthorize: boolean): string {
     case "authorized":
       // Nobody authorized an action that needs no authorization, so the row does not say they did.
       return grant.authorization === "not-required"
-        ? "Needs no authorization."
+        ? ui("Needs no authorization.")
         : "Authorized.";
     case "needs-consent":
       return canAuthorize
-        ? "Not authorized yet."
-        : "Not authorized yet. An admin can authorize it.";
+        ? ui("Not authorized yet.")
+        : ui("Not authorized yet. An admin can authorize it.");
     case "needs-operator":
       return grant.missing.length > 0
-        ? `Missing ${grant.missing.join(", ")}. An admin has to set it. Authorizing can't fix it.`
-        : "A setting is missing. An admin has to set it. Authorizing can't fix it.";
+        ? ui(
+            "Missing {{value0}}. An admin has to set it. Authorizing can't fix it.",
+            { value0: String(grant.missing.join(", ")) },
+          )
+        : ui(
+            "A setting is missing. An admin has to set it. Authorizing can't fix it.",
+          );
     case "unknown":
-      return `Couldn't read this one right now. ${grant.reason}`;
+      return ui("Couldn't read this one right now. {{value0}}", {
+        value0: String(grant.reason),
+      });
   }
 }

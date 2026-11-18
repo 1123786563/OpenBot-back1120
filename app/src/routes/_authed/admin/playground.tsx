@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { OpenGenerativeUIActivityRenderer } from "@copilotkit/react-core/v2";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -116,6 +117,7 @@ export function validatePlaygroundDraft(draft: Draft): PlaygroundValidation {
 }
 
 function PlaygroundPage() {
+  useLocale();
   const [deleting, setDeleting] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { data: components } = useQuery(sandboxedListQueryOptions());
@@ -206,11 +208,12 @@ function PlaygroundPage() {
           <SidebarToggle className="-ml-2 shrink-0" />
           <div>
             <h1 className="font-semibold text-2xl tracking-tight">
-              Playground
+              {ui("Playground")}
             </h1>
             <p className="mt-1 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed">
-              Write a component and publish it without redeploying. Your edits
-              are a draft. Conversations only show what is published.
+              {ui(
+                "Write a component and publish it without redeploying. Your edits are a draft. Conversations only show what is published.",
+              )}
             </p>
           </div>
         </div>
@@ -222,7 +225,7 @@ function PlaygroundPage() {
             type="button"
             variant="outline"
           >
-            Save draft
+            {ui("Save draft")}
           </Button>
           <Button
             /* `publish` saves first, since publishing acts on the stored draft, not the editors. */
@@ -231,7 +234,7 @@ function PlaygroundPage() {
             size="sm"
             type="button"
           >
-            Publish
+            {ui("Publish")}
           </Button>
         </div>
       </header>
@@ -257,28 +260,38 @@ function PlaygroundPage() {
         <div className="space-y-3">
           <div className="grid gap-2 md:grid-cols-2">
             <TextField
-              label="Name"
+              label={ui("Name")}
               onChange={set("slug")}
-              placeholder="refund_card"
+              placeholder={ui("refund_card")}
               value={draft.slug}
             />
             <TextField
-              label="Title"
+              label={ui("Title")}
               onChange={set("title")}
-              placeholder="Refund card"
+              placeholder={ui("Refund card")}
               value={draft.title}
             />
           </div>
           <TextField
-            label="What the model is told about it"
+            label={ui("What the model is told about it")}
             onChange={set("description")}
-            placeholder="Show a refund with its amount, reason and status."
+            placeholder={ui(
+              "Show a refund with its amount, reason and status.",
+            )}
             value={draft.description}
           />
-          <CodeField label="HTML" onChange={set("html")} value={draft.html} />
-          <CodeField label="CSS" onChange={set("css")} value={draft.css} />
           <CodeField
-            label="JavaScript"
+            label={ui("HTML")}
+            onChange={set("html")}
+            value={draft.html}
+          />
+          <CodeField
+            label={ui("CSS")}
+            onChange={set("css")}
+            value={draft.css}
+          />
+          <CodeField
+            label={ui("JavaScript")}
             onChange={set("jsFunctions")}
             value={draft.jsFunctions}
           />
@@ -286,7 +299,7 @@ function PlaygroundPage() {
             error={
               !validation.ok ? validation.fields.argumentSchema : undefined
             }
-            label="Arguments (JSON Schema)"
+            label={ui("Arguments (JSON Schema)")}
             onChange={set("argumentSchema")}
             value={draft.argumentSchema}
           />
@@ -294,7 +307,7 @@ function PlaygroundPage() {
             error={
               !validation.ok ? validation.fields.sampleArguments : undefined
             }
-            label="Sample arguments"
+            label={ui("Sample arguments")}
             onChange={set("sampleArguments")}
             value={draft.sampleArguments}
           />
@@ -302,13 +315,13 @@ function PlaygroundPage() {
 
         <div className="space-y-4">
           <div className="rounded-lg border p-4">
-            <div className="mb-2 text-sm font-medium">Preview</div>
+            <div className="mb-2 text-sm font-medium">{ui("Preview")}</div>
             {sample === null ? (
               <p className="text-sm text-destructive">
                 {validation.ok
-                  ? "The sample arguments aren't available."
+                  ? ui("The sample arguments aren't available.")
                   : (validation.fields.sampleArguments ??
-                    "Fix the JSON fields before previewing.")}
+                    ui("Fix the JSON fields before previewing."))}
               </p>
             ) : (
               <OpenGenerativeUIActivityRenderer
@@ -332,11 +345,11 @@ function PlaygroundPage() {
 
           <div className="rounded-lg border border-border bg-card">
             <div className="border-border border-b px-4 py-2 font-medium text-sm">
-              Saved here
+              {ui("Saved here")}
             </div>
             {(components ?? []).length === 0 ? (
               <p className="px-4 py-3 text-muted-foreground text-sm">
-                Nothing saved yet. Save a draft to see it here.
+                {ui("Nothing saved yet. Save a draft to see it here.")}
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -349,10 +362,12 @@ function PlaygroundPage() {
                       <div className="font-mono text-xs">{component.name}</div>
                       <div className="text-xs text-muted-foreground">
                         {component.published
-                          ? `published, revision ${component.revision}`
-                          : "draft only, no Bot can draw it"}
+                          ? ui("published, revision {{value0}}", {
+                              value0: String(component.revision),
+                            })
+                          : ui("draft only, no Bot can draw it")}
                         {component.hasUnpublishedChanges
-                          ? " · edited since publishing"
+                          ? ui(" · edited since publishing")
                           : ""}
                       </div>
                     </div>
@@ -363,7 +378,7 @@ function PlaygroundPage() {
                         type="button"
                         variant="outline"
                       >
-                        Open
+                        {ui("Open")}
                       </Button>
                       <Button
                         onClick={() => setDeleting(component.name)}
@@ -371,7 +386,7 @@ function PlaygroundPage() {
                         type="button"
                         variant="ghost"
                       >
-                        Delete
+                        {ui("Delete")}{" "}
                       </Button>
                     </div>
                   </li>
@@ -379,8 +394,9 @@ function PlaygroundPage() {
               </ul>
             )}
             <p className="border-border border-t px-4 py-2 text-muted-foreground text-xs">
-              Publishing makes it available to every Bot. Turn it off for one
-              Bot on the UI components page.
+              {ui(
+                "Publishing makes it available to every Bot. Turn it off for one Bot on the UI components page.",
+              )}
             </p>
           </div>
         </div>
@@ -398,15 +414,18 @@ function PlaygroundPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {deleting}?</DialogTitle>
+            <DialogTitle>
+              {ui("Delete")} {deleting}?
+            </DialogTitle>
             <DialogDescription>
-              It's removed from this deployment, and no Bot can draw it. You
-              can't undo this.
+              {ui(
+                "It's removed from this deployment, and no Bot can draw it. You can't undo this.",
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setDeleting(null)} size="sm" variant="ghost">
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -420,7 +439,7 @@ function PlaygroundPage() {
               size="sm"
               variant="destructive"
             >
-              Delete it
+              {ui("Delete it")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -440,6 +459,7 @@ function TextField({
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
+  useLocale();
   /*
    * An explicit `htmlFor`, not a wrapping label. The label used to wrap a bare `<input>`; now that
    * the control is a component the association has to be written down rather than implied by
@@ -470,6 +490,7 @@ function CodeField({
   onChange: (value: string) => void;
   error?: string;
 }) {
+  useLocale();
   const id = useId();
   return (
     <Field data-invalid={Boolean(error)}>

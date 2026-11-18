@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type Attachment,
   type AttachmentsConfig,
@@ -367,6 +368,7 @@ export function Composer({
   queuedAttachmentCount = 0,
   routine,
 }: ComposerProps) {
+  const interfaceLocale = useLocale();
   const [value, setValue] = useState<Segment[]>(
     initialValue ? [{ type: "text", text: initialValue }] : [],
   );
@@ -506,18 +508,17 @@ export function Composer({
     }
   }, []);
 
-  const attachmentsConfig = useMemo(
-    () =>
-      channelId
-        ? attachmentsConfigFor(
-            channelId,
-            uploadGroup,
-            recordRejection,
-            recordUpload,
-          )
-        : undefined,
-    [channelId, uploadGroup, recordRejection, recordUpload],
-  );
+  const attachmentsConfig = useMemo(() => {
+    void interfaceLocale;
+    return channelId
+      ? attachmentsConfigFor(
+          channelId,
+          uploadGroup,
+          recordRejection,
+          recordUpload,
+        )
+      : undefined;
+  }, [channelId, uploadGroup, recordRejection, recordUpload, interfaceLocale]);
 
   /**
    * The queue just left these behind, and they need the same rejection treatment a pick-time
@@ -607,10 +608,10 @@ export function Composer({
    * draft both buttons are enabled from — so there is no path left on which an attachment that has
    * already been sent can be counted, drawn, or sent again.
    */
-  const staged = useMemo(
-    () => attachments.filter((attachment) => !sending.includes(attachment.id)),
-    [attachments, sending],
-  );
+  const staged = useMemo(() => {
+    void interfaceLocale;
+    return attachments.filter((attachment) => !sending.includes(attachment.id));
+  }, [attachments, sending, interfaceLocale]);
 
   /**
    * Take a chip off the strip. That is all this does, and the row it stood for is deliberately
@@ -1053,18 +1054,17 @@ export function Composer({
    * the answer, which would make every ordinary attachment feel slower to spare a rare one a
    * flicker.
    */
-  const images = useMemo(
-    () =>
-      staged
-        .filter((attachment) => stagedModality(attachment) === "image")
-        .map((attachment) => ({
-          id: attachment.id,
-          url: attachment.source.value,
-          alt: attachment.filename,
-          loading: attachment.status === "uploading",
-        })),
-    [staged],
-  );
+  const images = useMemo(() => {
+    void interfaceLocale;
+    return staged
+      .filter((attachment) => stagedModality(attachment) === "image")
+      .map((attachment) => ({
+        id: attachment.id,
+        url: attachment.source.value,
+        alt: attachment.filename,
+        loading: attachment.status === "uploading",
+      }));
+  }, [staged, interfaceLocale]);
 
   /**
    * NO `type` HERE, BECAUSE NOTHING HAS EVER READ ONE. This carried
@@ -1081,45 +1081,47 @@ export function Composer({
    * card, so both halves must ask the same question of the same field or an attachment lands in
    * both strips or in neither.
    */
-  const files = useMemo(
-    () =>
-      staged
-        .filter((attachment) => stagedModality(attachment) !== "image")
-        .map((attachment) => ({
-          id: attachment.id,
-          name: attachment.filename ?? "Attachment",
-          size: attachment.size,
-          loading: attachment.status === "uploading",
-          /*
-           * Warned, never refused. The server accepts the whole file and the
-           * model reads its first MAX_EXTRACTED_CHARACTERS; mayBeTruncatedForModel
-           * is exact in the safe direction (N bytes decode to at most N chars),
-           * so a file at or under the ceiling cannot be cut. Only text reaches
-           * the extraction path: images are excluded by the filter above, and an
-           * unnamed pick whose type is still unknown gets no warning until the
-           * server has sniffed it (then the strip re-renders off the url source).
-           *
-           * THE FILTER IS THE ONLY IMAGE TEST, DELIBERATELY. `attachment.type` is
-           * the browser's claim, fixed at pick time and never revised; the filter
-           * runs `stagedModality`, which prefers what the server sniffed. Testing
-           * both would not narrow this to text, it would only subtract: a file the
-           * browser called a PNG and the server read as text lands in this strip,
-           * goes down the extraction path, and is exactly the one that gets cut.
-           */
-          mayTruncate:
-            attachment.status !== "uploading" &&
-            attachment.size !== undefined &&
-            mayBeTruncatedForModel(attachment.size),
-        })),
-    [staged],
-  );
+  const files = useMemo(() => {
+    void interfaceLocale;
+    return staged
+      .filter((attachment) => stagedModality(attachment) !== "image")
+      .map((attachment) => ({
+        id: attachment.id,
+        name: attachment.filename ?? "Attachment",
+        size: attachment.size,
+        loading: attachment.status === "uploading",
+        /*
+         * Warned, never refused. The server accepts the whole file and the
+         * model reads its first MAX_EXTRACTED_CHARACTERS; mayBeTruncatedForModel
+         * is exact in the safe direction (N bytes decode to at most N chars),
+         * so a file at or under the ceiling cannot be cut. Only text reaches
+         * the extraction path: images are excluded by the filter above, and an
+         * unnamed pick whose type is still unknown gets no warning until the
+         * server has sniffed it (then the strip re-renders off the url source).
+         *
+         * THE FILTER IS THE ONLY IMAGE TEST, DELIBERATELY. `attachment.type` is
+         * the browser's claim, fixed at pick time and never revised; the filter
+         * runs `stagedModality`, which prefers what the server sniffed. Testing
+         * both would not narrow this to text, it would only subtract: a file the
+         * browser called a PNG and the server read as text lands in this strip,
+         * goes down the extraction path, and is exactly the one that gets cut.
+         */
+        mayTruncate:
+          attachment.status !== "uploading" &&
+          attachment.size !== undefined &&
+          mayBeTruncatedForModel(attachment.size),
+      }));
+  }, [staged, interfaceLocale]);
 
   const isBusy = pending || isSubmitting;
-  const triggers = useMemo(
-    () => buildTriggers({ agents, commands }),
-    [agents, commands],
-  );
-  const draft = useMemo(() => toDraft(value, staged), [staged, value]);
+  const triggers = useMemo(() => {
+    void interfaceLocale;
+    return buildTriggers({ agents, commands });
+  }, [agents, commands, interfaceLocale]);
+  const draft = useMemo(() => {
+    void interfaceLocale;
+    return toDraft(value, staged);
+  }, [staged, value, interfaceLocale]);
 
   /**
    * MORE FILES ON THIS STRIP THAN ONE MESSAGE MAY CARRY — a state the screening is supposed to make
@@ -1446,7 +1448,7 @@ export function Composer({
   );
   const primaryAction = canStop ? (
     <Button
-      aria-label="Stop the Bot"
+      aria-label={ui("Stop the Bot")}
       className={actionClassName}
       data-slot="composer-stop"
       data-testid="composer-stop"
@@ -1458,13 +1460,15 @@ export function Composer({
     </Button>
   ) : callAction ? (
     <Button
-      aria-label={callAction.active ? "Show voice call" : "Start voice call"}
+      aria-label={
+        callAction.active ? ui("Show voice call") : ui("Start voice call")
+      }
       title={
         callAction.supported
           ? callAction.active
-            ? "Show voice call"
-            : "Call this Bot"
-          : "Voice calls need a microphone and a secure (HTTPS) connection"
+            ? ui("Show voice call")
+            : ui("Call this Bot")
+          : ui("Voice calls need a microphone and a secure (HTTPS) connection")
       }
       className={actionClassName}
       disabled={disabled || dictation.busy || !callAction.supported}
@@ -1614,7 +1618,7 @@ export function Composer({
              */}
             <div className="min-w-0" data-slot="composer-input">
               <PromptArea
-                aria-label="Message"
+                aria-label={ui("Message")}
                 className={cn(
                   "w-full border-0 bg-transparent p-0 text-sm shadow-none",
                   editorClassName,
@@ -1635,7 +1639,7 @@ export function Composer({
               <div className="flex min-w-0 items-center gap-1">
                 {attachmentsEnabled ? (
                   <Button
-                    aria-label="Attach a file"
+                    aria-label={ui("Attach a file")}
                     data-slot="composer-attach"
                     // The button stays, and stays labelled: a conversation that cannot take another
                     // message has not lost the ability to attach, it has lost the message.
@@ -1649,7 +1653,7 @@ export function Composer({
                   </Button>
                 ) : (
                   <Button
-                    aria-label="More message options unavailable"
+                    aria-label={ui("More message options unavailable")}
                     className="disabled:opacity-100"
                     disabled
                     size="icon"
@@ -1717,7 +1721,7 @@ export function Composer({
             />
             <div data-slot="composer-input">
               <PromptArea
-                aria-label="Message"
+                aria-label={ui("Message")}
                 autoGrow
                 className={cn(
                   "w-full border-0 bg-transparent p-0 text-sm shadow-none",
@@ -1739,7 +1743,7 @@ export function Composer({
           <div className="flex items-center justify-between">
             {attachmentsEnabled ? (
               <Button
-                aria-label="Attach a file"
+                aria-label={ui("Attach a file")}
                 className="size-7 rounded-full p-0"
                 data-slot="composer-attach"
                 disabled={disabled}

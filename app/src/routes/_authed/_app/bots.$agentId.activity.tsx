@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { BotActivitySections } from "@/components/bot-profile/activity";
 import { BotSubpage } from "@/components/bot-profile/bot-subpage";
@@ -12,12 +13,15 @@ export const Route = createFileRoute("/_authed/_app/bots/$agentId/activity")({
  * and pushed its settings out of reach; there, one row counts them and opens this.
  */
 function ActivityPage() {
+  useLocale();
   const { agentId } = Route.useParams();
   return (
     <BotSubpage
       agentId={agentId}
-      description="Review the tasks, routines and goals this Bot is running, has scheduled and has finished."
-      title="Activity"
+      description={ui(
+        "Review the tasks, routines and goals this Bot is running, has scheduled and has finished.",
+      )}
+      title={ui("Activity")}
     >
       {(agent) => <BotActivitySections agentId={agent.id} />}
     </BotSubpage>

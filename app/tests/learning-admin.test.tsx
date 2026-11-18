@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -647,7 +648,7 @@ describe("reviewing proposed skills", () => {
     await view.findByText("Ask whether the quote still fits.");
     fireEvent.click(view.getByRole("button", { name: "Approve sharing" }));
     const alert = await view.findByRole("alert");
-    expect(alert.textContent).toBe(CHANGED);
+    expect(readErrorDetails(alert)).toBe(CHANGED);
     expect(
       view.queryByText("Ask whether the quote still fits."),
     ).not.toBeNull();
@@ -986,7 +987,12 @@ describe("reviewing proposed skills", () => {
     );
     const view = shared();
     await view.findByText("Sharing requests");
-    await view.findByText("Couldn't load sharing requests. Try again.");
+    const summary = await view.findByText(
+      "Something went wrong. Please try again.",
+    );
+    const alert = summary.closest<HTMLElement>('[role="alert"]');
+    if (!alert) throw new Error("Sharing request error is missing its alert");
+    expect(readErrorDetails(alert)).toBe("{}");
   });
 
   test("people's proposals are not listed once each person approves their own", async () => {

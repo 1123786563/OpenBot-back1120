@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconDeviceDesktop } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ export function ComputerControlButton({
   /** Take control drawn solid rather than outlined: where it is the one action offered, over the Bot's screen. */
   prominent?: boolean;
 }) {
+  useLocale();
   const { control, busy, problem, change, someoneElse } =
     useComputerControl(computerId);
   // Someone else's wheel is not the person's to hand back, and not theirs to take from under them either.
@@ -31,11 +33,11 @@ export function ComputerControlButton({
           }
         }}
       >
-        {human ? "Hand back" : "Take control"}
+        {human ? ui("Hand back") : ui("Take control")}
       </Button>
       {control?.transitioning ? (
         <span className="text-xs text-muted-foreground" role="status">
-          Finishing the current action…
+          {ui("Finishing the current action…")}
         </span>
       ) : null}
       {problem ? (
@@ -61,6 +63,7 @@ export function ComputerChatControls({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  useLocale();
   const { control, someoneElse } = useComputerControl(
     computerId ?? "",
     Boolean(computerId),
@@ -85,7 +88,7 @@ export function ComputerChatControls({
   return (
     <Button
       aria-expanded={open}
-      aria-label={open ? "Close Computer" : "Open Computer"}
+      aria-label={open ? ui("Close Computer") : ui("Open Computer")}
       className={open ? "relative bg-foreground/5" : "relative"}
       disabled={!computerId}
       onClick={() => onOpenChange(!open)}
@@ -95,7 +98,7 @@ export function ComputerChatControls({
       <IconDeviceDesktop className="size-4.5" />
       {needsYou ? (
         <span
-          aria-label="Needs you"
+          aria-label={ui("Needs you")}
           className="absolute top-1 right-1 size-2 rounded-full bg-amber-500 ring-2 ring-background"
           role="img"
         />

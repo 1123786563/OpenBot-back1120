@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { UpdateReadiness } from "@openbot/shared/desktop-updates";
 import { queryOptions } from "@tanstack/react-query";
 import { desktopShell } from "./shell";
@@ -227,9 +228,13 @@ export function desktopUsageDataQueryOptions() {
 
 /** "1.2 GB", "340 MB": decimal, as macOS reports memory. */
 export function formatBytes(bytes: number): string {
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+  if (bytes >= 1e9)
+    return ui("{{value0}} GB", { value0: String((bytes / 1e9).toFixed(1)) });
+  if (bytes >= 1e6)
+    return ui("{{value0}} MB", { value0: String(Math.round(bytes / 1e6)) });
+  return ui("{{value0}} KB", {
+    value0: String(Math.max(1, Math.round(bytes / 1e3))),
+  });
 }
 
 /** What a list of parts uses together, or null when none of them could be measured. */
@@ -262,7 +267,7 @@ export function diagnostics(
     `  containers: ${parts(status.containers)}`,
     status.intelligenceStack
       ? `Backend: ${status.intelligenceStack}, ${readiness ?? "not checked"}`
-      : "Backend: not on this computer",
+      : ui("Backend: not on this computer"),
     ...(status.intelligenceStack
       ? [`  containers: ${parts(status.intelligenceContainers)}`]
       : []),

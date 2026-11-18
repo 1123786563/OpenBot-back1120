@@ -1,3 +1,4 @@
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import type { LauncherState } from "@openbot/shared/openbot-browser";
 import type { RecordingRow } from "@openbot/shared/recorder-api";
 import { IconVideo } from "@tabler/icons-react";
@@ -31,12 +32,14 @@ const STOP_REASONS: Record<string, string> = {
  * arrived, is badged too, so it never reads as a success.
  */
 function endedLabel(row: RecordingRow): string | null {
-  if (row.ended === "sending") return "Still sending";
-  if (row.ended === "missing") return "Not in the backend";
-  if (row.ended === "unknown") return "No result";
+  if (row.ended === "sending") return ui("Still sending");
+  if (row.ended === "missing") return ui("Not in the backend");
+  if (row.ended === "unknown") return ui("No result");
   if (row.ended !== "stopped") return null;
   const reason = row.reason ? STOP_REASONS[row.reason] : undefined;
-  return reason ? `Stopped early: ${reason}` : "Stopped early";
+  return reason
+    ? ui("Stopped early: {{value0}}", { value0: String(reason) })
+    : ui("Stopped early");
 }
 
 /**
@@ -72,6 +75,7 @@ export function YourRecordings({
   waiting?: boolean;
   action?: ReactNode;
 }) {
+  useLocale();
   const recordings = useInfiniteQuery(recordingsQueryOptions({ waiting }));
   if (recordings.isPending) return null;
   const unavailable = recordings.data?.pages.at(-1)?.unavailable;
@@ -80,7 +84,7 @@ export function YourRecordings({
   // A failed "Show more" or refresh keeps the rows already loaded: the error goes below them, where Show more retries.
   const failure = recordings.error;
   const section = (
-    <PageSection action={action} title="Your recordings">
+    <PageSection action={action} title={ui("Your recordings")}>
       {failure && rows.length === 0 ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
           {failure.message}
@@ -88,9 +92,9 @@ export function YourRecordings({
       ) : rows.length === 0 && !recordings.hasNextPage && !unavailable ? (
         variant === "pane" ? (
           // One line under the browser, not a box: every bit of height here is taken from the page above.
-          <p className="mt-1 text-muted-foreground text-sm">{EMPTY}</p>
+          <p className="mt-1 text-muted-foreground text-sm">{ui(EMPTY)}</p>
         ) : (
-          <PageEmpty>{EMPTY}</PageEmpty>
+          <PageEmpty>{ui(EMPTY)}</PageEmpty>
         )
       ) : (
         <>
@@ -105,9 +109,11 @@ export function YourRecordings({
                       <IconVideo />
                     </ItemMedia>
                     <ItemContent>
-                      <ItemTitle>{row.title ?? "Untitled recording"}</ItemTitle>
+                      <ItemTitle>
+                        {row.title ?? ui("Untitled recording")}
+                      </ItemTitle>
                       <ItemDescription>
-                        {new Date(row.recordedAt).toLocaleString()}
+                        {new Date(row.recordedAt).toLocaleString(getLocale())}
                       </ItemDescription>
                     </ItemContent>
                     {ended ? (
@@ -125,15 +131,19 @@ export function YourRecordings({
           {unavailable ? (
             <p className="mt-4 text-muted-foreground text-sm">
               {unavailable === "unreachable"
-                ? "Couldn't reach the backend to list your recordings. Try again in a moment."
-                : "The backend isn't available, so your recordings can't be listed."}
+                ? ui(
+                    "Couldn't reach the backend to list your recordings. Try again in a moment.",
+                  )
+                : ui(
+                    "The backend isn't available, so your recordings can't be listed.",
+                  )}
             </p>
           ) : null}
           {failure ? (
             <p className="mt-4 text-destructive text-sm">
               {recordings.isFetchNextPageError
-                ? "Couldn't load more recordings. Try again."
-                : "Couldn't refresh your recordings."}
+                ? ui("Couldn't load more recordings. Try again.")
+                : ui("Couldn't refresh your recordings.")}
             </p>
           ) : null}
           {recordings.hasNextPage ? (
@@ -144,7 +154,7 @@ export function YourRecordings({
               size="sm"
               variant="outline"
             >
-              Show more
+              {ui("Show more")}
             </Button>
           ) : null}
         </>

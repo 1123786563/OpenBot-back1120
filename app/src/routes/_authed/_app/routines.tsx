@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { PageShell } from "@/components/layout/page-shell";
 import { NewRoutineButton } from "@/components/routines/new-routine-button";
@@ -20,11 +21,14 @@ export const Route = createFileRoute("/_authed/_app/routines")({
 });
 
 function RoutinesPage() {
+  useLocale();
   return (
     <PageShell
       action={<NewRoutineButton />}
-      description="Bots do work for you on a schedule and post what they did. Set one up here, or ask a Bot something like “every weekday at 9, send me…”."
-      title="Routines"
+      description={ui(
+        "Bots do work for you on a schedule and post what they did. Set one up here, or ask a Bot something like “every weekday at 9, send me…”.",
+      )}
+      title={ui("Routines")}
     >
       <RoutinesList />
     </PageShell>

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { ConversationModel, ModelCatalogue, ModelOption } from "./queries";
 
 /**
@@ -10,13 +11,27 @@ import type { ConversationModel, ModelCatalogue, ModelOption } from "./queries";
 export type ModelPick = { model: string; effort: string | null };
 
 const EFFORT_LABELS: Record<string, string> = {
-  none: "None",
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
+  get none() {
+    return ui("None");
+  },
+  get minimal() {
+    return ui("Minimal");
+  },
+  get low() {
+    return ui("Low");
+  },
+  get medium() {
+    return ui("Medium");
+  },
+  get high() {
+    return ui("High");
+  },
+  get xhigh() {
+    return ui("Extra high");
+  },
+  get max() {
+    return ui("Max");
+  },
 };
 
 /** An effort as a person reads it. One the list does not know is shown as given, capitalised. */

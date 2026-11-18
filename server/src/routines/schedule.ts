@@ -251,7 +251,46 @@ function parsePlainInt(field: string, min: number, max: number): number | null {
  * so unrecognized shapes fall back to the raw expression rather than raising anything, and the
  * whole body is wrapped in a belt-and-suspenders try/catch to guarantee it.
  */
-export function describeCron(cron: string): string {
+export function describeCron(
+  cron: string,
+  language: "en" | "zh-CN" = "en",
+): string {
+  const english = describeCronEnglish(cron);
+  if (language === "en" || english === cron) return english;
+  const days: Record<string, string> = {
+    Sundays: "星期日",
+    Mondays: "星期一",
+    Tuesdays: "星期二",
+    Wednesdays: "星期三",
+    Thursdays: "星期四",
+    Fridays: "星期五",
+    Saturdays: "星期六",
+  };
+  if (english === "Every hour") return "每小时";
+  const interval = /^Every (\d+) minutes$/.exec(english);
+  if (interval) return `每 ${interval[1]} 分钟`;
+  const hourly = /^Every hour at (\d+) past$/.exec(english);
+  if (hourly) return `每小时第 ${hourly[1]} 分钟`;
+  const monthly = /^On the (\d+)(?:st|nd|rd|th) of the month at (.+)$/.exec(
+    english,
+  );
+  if (monthly) return `每月 ${monthly[1]} 日 ${monthly[2]}`;
+  const daily = /^Every day at (.+)$/.exec(english);
+  if (daily) return `每天 ${daily[1].replaceAll(" and ", " 和 ")}`;
+  const weekdays = /^Weekdays at (.+)$/.exec(english);
+  if (weekdays) return `工作日 ${weekdays[1]}`;
+  return english
+    .replace(
+      /Sundays|Mondays|Tuesdays|Wednesdays|Thursdays|Fridays|Saturdays/g,
+      (day) => days[day] ?? day,
+    )
+    .replaceAll(", and ", "、")
+    .replaceAll(" and ", "、")
+    .replaceAll(", ", "、")
+    .replace(" at ", " ");
+}
+
+function describeCronEnglish(cron: string): string {
   try {
     const fields = cron.trim().split(/\s+/);
     if (fields.length !== 5) return cron;

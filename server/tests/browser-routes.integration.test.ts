@@ -1035,7 +1035,7 @@ describe("opening a person's own browser", () => {
       title: "Again",
     });
     expect(again.status).toBe(409);
-    expect(await again.json()).toEqual({
+    expect(await again.json()).toMatchObject({
       error: "A recording is already running.",
     });
 
@@ -1125,7 +1125,9 @@ describe("opening a person's own browser", () => {
       call(openbot, "/api/browser/open", { method: "POST", as: "ada" }),
     );
     expect(unavailable.status).toBe(503);
-    expect(await unavailable.json()).toEqual({ error: NOT_SET_UP });
+    expect(await unavailable.json()).toMatchObject({
+      error: NOT_SET_UP,
+    });
     // The computer's sentence is in the server's log, for whoever runs OpenBot.
     expect(
       warned
@@ -1160,7 +1162,7 @@ describe("opening a person's own browser", () => {
       as: "ada",
     });
     expect(failed.status).toBe(502);
-    expect(await failed.json()).toEqual({
+    expect(await failed.json()).toMatchObject({
       error: "The Recorder in your browser does not offer its launcher.",
     });
     // OpenBot calling its computer with the wrong token is not the person signed out.
@@ -1170,7 +1172,7 @@ describe("opening a person's own browser", () => {
       as: "ada",
     });
     expect(wrong.status).toBe(502);
-    expect(await wrong.json()).toEqual({
+    expect(await wrong.json()).toMatchObject({
       error: "Your browser could not be reached. Try again.",
     });
   });
@@ -1236,7 +1238,9 @@ describe("opening a person's own browser", () => {
         }),
       );
       expect(result.status).toBe(503);
-      expect(await result.json()).toEqual({ error: NOT_SET_UP });
+      expect(await result.json()).toMatchObject({
+        error: NOT_SET_UP,
+      });
 
       // The computer's own sentence, for whoever runs OpenBot, in the server's log and in the computer's.
       const failures = warned
@@ -1333,7 +1337,9 @@ describe("opening a person's own browser", () => {
         call(misled, "/api/browser/open", { method: "POST", as: "ada" }),
       );
       expect(result.status).toBe(503);
-      expect(await result.json()).toEqual({ error: NOT_SET_UP });
+      expect(await result.json()).toMatchObject({
+        error: NOT_SET_UP,
+      });
       expect(
         warned
           .map((line) => JSON.parse(line) as Record<string, unknown>)
@@ -1473,7 +1479,7 @@ describe("opening a person's own browser", () => {
         as: "ben",
       });
       expect(refused.status).toBe(429);
-      expect(await refused.json()).toEqual({
+      expect(await refused.json()).toMatchObject({
         error:
           "Too many connection codes were asked for at once. Wait a few minutes and try again.",
       });
@@ -1750,7 +1756,7 @@ describe("narration on the server's clock", () => {
     ]) {
       const refused = await post(body);
       expect([body, refused.status]).toEqual([body, 400]);
-      expect(await refused.json()).toEqual({
+      expect(await refused.json()).toMatchObject({
         error:
           "That phrase's times do not fit the recording, so it was not added.",
       });
@@ -1800,7 +1806,7 @@ describe("a slow page, and a browser that cannot be reached", () => {
       }),
     );
     expect(result.status).toBe(502);
-    expect(await result.json()).toEqual({
+    expect(await result.json()).toMatchObject({
       error: "en.wikipedia.org did not load in time.",
     });
     expect(typesOf(failed)).toEqual([]);
@@ -1825,7 +1831,7 @@ describe("a slow page, and a browser that cannot be reached", () => {
         }),
       );
       expect(result.status).toBe(504);
-      expect(await result.json()).toEqual({
+      expect(await result.json()).toMatchObject({
         error:
           "Your browser is taking too long to answer. The page may still be loading.",
       });
@@ -1903,7 +1909,7 @@ describe("a slow page, and a browser that cannot be reached", () => {
         post("/api/browser/navigate", { url: "https://en.wikipedia.org" }),
       );
       expect(navigated.status).toBe(502);
-      expect(await navigated.json()).toEqual({
+      expect(await navigated.json()).toMatchObject({
         error: "en.wikipedia.org did not load in time.",
       });
     } finally {
@@ -1942,7 +1948,9 @@ describe("a slow page, and a browser that cannot be reached", () => {
         }),
       );
       expect(navigated.status).toBe(504);
-      expect(await navigated.json()).toEqual({ error: SLOW });
+      expect(await navigated.json()).toMatchObject({
+        error: SLOW,
+      });
       expect(Date.now() - asking).toBeLessThan(5_000);
       expect(typesOf(warned)).toContain("browser-computer-slow");
 
@@ -1951,7 +1959,7 @@ describe("a slow page, and a browser that cannot be reached", () => {
         as: "ada",
       });
       expect(opened.status).toBe(504);
-      expect(await opened.json()).toEqual({ error: SLOW });
+      expect(await opened.json()).toMatchObject({ error: SLOW });
     } finally {
       wake();
     }
@@ -1984,7 +1992,7 @@ describe("a slow page, and a browser that cannot be reached", () => {
       }),
     );
     expect(result.status).toBe(502);
-    expect(await result.json()).toEqual({
+    expect(await result.json()).toMatchObject({
       error: "Your browser could not be reached. Try again.",
     });
     expect(typesOf(failed)).toEqual(["browser-computer-unreachable"]);
@@ -2023,7 +2031,9 @@ describe("a browser that is open and not answering", () => {
         json: { action: "start", title: "Pay the invoice" },
       });
       expect(record.status).toBe(504);
-      expect(await record.json()).toEqual({ error: NOT_ANSWERING });
+      expect(await record.json()).toMatchObject({
+        error: NOT_ANSWERING,
+      });
       expect(timesAsked("POST /browser/recording")).toBe(recordsBefore);
     } finally {
       silentState = null;
@@ -2416,7 +2426,9 @@ describe("Record after the OpenBot browser is disconnected", () => {
     refuseNextOpen = null;
     expect(reconnected).toBeNull();
     expect(refused.status).toBe(502);
-    expect(await refused.json()).toEqual({ error: sentence });
+    expect(await refused.json()).toMatchObject({
+      error: sentence,
+    });
     expect(recordings()).toBe(before);
     expect(browsers.get(computerId())?.state.recorder?.phase).toBe("idle");
   });
@@ -2534,7 +2546,9 @@ describe("a person's browser where every Bot shares one computer", () => {
       as: "ben",
     });
     expect(opening.status).toBe(503);
-    expect(await opening.json()).toEqual({ error: SHARED_COMPUTER });
+    expect(await opening.json()).toMatchObject({
+      error: SHARED_COMPUTER,
+    });
     const routes: [string, unknown][] = [
       ["/api/browser/recording", { action: "start", title: "Pay a bill" }],
       ["/api/browser/navigate", { url: "https://example.com" }],
@@ -2548,7 +2562,9 @@ describe("a person's browser where every Bot shares one computer", () => {
         json,
       });
       expect(refused.status).toBe(503);
-      expect(await refused.json()).toEqual({ error: SHARED_COMPUTER });
+      expect(await refused.json()).toMatchObject({
+        error: SHARED_COMPUTER,
+      });
     }
 
     // The computer routes reach a computer through the gateway, whose provider refuses a person's browser outright.
@@ -2721,7 +2737,9 @@ describe("where the browser reaches this OpenBot", () => {
       }),
     );
     expect(refused.status).toBe(503);
-    expect(await refused.json()).toEqual({ error: NOT_SET_UP });
+    expect(await refused.json()).toMatchObject({
+      error: NOT_SET_UP,
+    });
     expect(
       warned
         .map((line) => JSON.parse(line) as Record<string, unknown>)
@@ -2879,7 +2897,9 @@ describe("a single-user OpenBot, where the person is its admin", () => {
       call(single, "/api/browser/open", { method: "POST", headers: WINDOW }),
     );
     expect(refused.status).toBe(503);
-    expect(await refused.json()).toEqual({ error: NOT_SET_UP_SINGLE_USER });
+    expect(await refused.json()).toMatchObject({
+      error: NOT_SET_UP_SINGLE_USER,
+    });
     // The computer's own sentence, the reason, is in the log the person is pointed at.
     expect(
       warned
@@ -2900,7 +2920,9 @@ describe("a single-user OpenBot, where the person is its admin", () => {
       call(openbot, "/api/browser/open", { method: "POST", as: "ada" }),
     );
     expect(multi.status).toBe(503);
-    expect(await multi.json()).toEqual({ error: NOT_SET_UP });
+    expect(await multi.json()).toMatchObject({
+      error: NOT_SET_UP,
+    });
   });
 
   test("a browser that is not answering tells the single person what they can do themselves", async () => {
@@ -2929,7 +2951,9 @@ describe("a single-user OpenBot, where the person is its admin", () => {
       call(desktop(), "/api/browser/open", { method: "POST" }),
     );
     expect(refused.status).toBe(503);
-    expect(await refused.json()).toEqual({ error: NOT_SET_UP_SINGLE_USER });
+    expect(await refused.json()).toMatchObject({
+      error: NOT_SET_UP_SINGLE_USER,
+    });
     expect(typesOf(warned)).toContain("browser-open-no-address");
   });
 });

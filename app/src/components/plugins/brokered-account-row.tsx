@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import { IconArrowUpRight, IconUser } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -321,6 +322,7 @@ export function useBrokeredAccount(input: {
    */
   report: (message: string | null) => void;
 }): BrokeredAccount {
+  useLocale();
   const queryClient = useQueryClient();
   const {
     authScheme,
@@ -799,7 +801,7 @@ export function useBrokeredAccount(input: {
  * keeps receding, and a relative phrase recomputed on every render reads as a fact about now.
  */
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(getLocale());
 }
 
 /**
@@ -850,13 +852,21 @@ function accountSentence(input: {
      * Neither screen's own sentence fits: both are about an account, and there is none to have.
      * Capitalised because this is the one position the name opens a sentence in.
      */
-    return `${title.charAt(0).toUpperCase()}${title.slice(1)} doesn't need an account. Bots that have it can use it as it is.`;
+    return ui(
+      "{{value0}}{{value1}} doesn't need an account. Bots that have it can use it as it is.",
+      {
+        value0: String(title.charAt(0).toUpperCase()),
+        value1: String(title.slice(1)),
+      },
+    );
   }
 
   if (account.kind === "fields") {
     if (account.connected) {
       if (account.verified && account.verifiedAt) {
-        return `Connected with your key. Last checked ${formatDate(account.verifiedAt)}.`;
+        return ui("Connected with your key. Last checked {{value0}}.", {
+          value0: String(formatDate(account.verifiedAt)),
+        });
       }
       /*
        * A CHECK WAS SPENT AND DID NOT COME BACK CLEAN, and the account it was spent in is still
@@ -882,7 +892,10 @@ function accountSentence(input: {
        * is worth a second press rather than a second connection.
        */
       if (account.probe && !account.verified) {
-        return `Your key didn't pass a check with ${title}. That may be the key, or ${title} itself. Your account is still connected. Press Re-check to try again, or disconnect and connect with a new key.`;
+        return ui(
+          "Your key didn't pass a check with {{value0}}. That may be the key, or {{value1}} itself. Your account is still connected. Press Re-check to try again, or disconnect and connect with a new key.",
+          { value0: String(title), value1: String(title) },
+        );
       }
       /*
        * NOTHING WAS SPENT ON IT, WHICH IS A FACT ABOUT THE CHECK AND ABOUT THE APP AT THE TIME. The
@@ -903,7 +916,10 @@ function accountSentence(input: {
        * today.
        */
       if (account.probe === null) {
-        return `Connected with your key. It hasn't been checked with ${title}. At the time, ${title} had no safe way to check a key. That's about the app, not your key.`;
+        return ui(
+          "Connected with your key. It hasn't been checked with {{value0}}. At the time, {{value1}} had no safe way to check a key. That's about the app, not your key.",
+          { value0: String(title), value1: String(title) },
+        );
       }
       /*
        * AND NOTHING HAS SAID WHICH, which is no longer the page load: the connections read carries
@@ -913,7 +929,10 @@ function accountSentence(input: {
        * two things a record can say; this is what stands where there is no record, and it must not
        * borrow either.
        */
-      return `Connected with your key. It hasn't been checked with ${title}.`;
+      return ui(
+        "Connected with your key. It hasn't been checked with {{value0}}.",
+        { value0: String(title) },
+      );
     }
     /*
      * WHAT DISCONNECTING DID NOT DO. The account ends at Composio and the key does not end
@@ -922,7 +941,10 @@ function accountSentence(input: {
      * have live, so the row names the step this deployment cannot take for them.
      */
     if (account.disconnected) {
-      return `Disconnected. Your key still works at ${title}. Change it there to stop all access.`;
+      return ui(
+        "Disconnected. Your key still works at {{value0}}. Change it there to stop all access.",
+        { value0: String(title) },
+      );
     }
     /*
      * NOT THE SCREEN'S OWN SENTENCE, which is written for the kind that leaves: one of the two says
@@ -947,7 +969,11 @@ function accountSentence(input: {
    * mail is an argument, not a branch — see this file's opening comment.
    */
   return account.connected
-    ? `Signed in with ${title}${identity ? ` as ${identity}` : ""}. ${connectedDescription}`
+    ? ui("Signed in with {{value0}}{{value1}}. {{value2}}", {
+        value0: String(title),
+        value1: String(identity ? ` as ${identity}` : ""),
+        value2: String(connectedDescription),
+      })
     : disconnectedDescription;
 }
 
@@ -964,11 +990,14 @@ function KeyGuideNote({
   guide: KeyGuide | null;
   title: string;
 }) {
+  useLocale();
   return (
     <div className="mb-3 flex flex-col gap-1.5 text-sm" data-testid="key-guide">
       <p>
-        {title} doesn't offer a sign-in here, so it connects with a key from
-        your {title} account.
+        {uiNodes(
+          "{{slot0}}doesn't offer a sign-in here, so it connects with a key from your {{slot1}}account.",
+          [title, title],
+        )}
       </p>
       {guide ? <p className="text-muted-foreground">{guide.steps}</p> : null}
       {guide?.url ? (
@@ -978,7 +1007,7 @@ function KeyGuideNote({
           rel="noopener noreferrer"
           target="_blank"
         >
-          Get a key from {title}
+          {ui("Get a key from")} {title}
           <IconArrowUpRight aria-hidden="true" className="size-3.5" />
         </a>
       ) : null}
@@ -993,12 +1022,13 @@ function KeyGuideNote({
  * its title alone. It is what the Bot says about the same app.
  */
 export function NotConnected() {
+  useLocale();
   return (
     <span
       className="text-muted-foreground text-xs"
       data-testid="account-not-connected"
     >
-      Not connected
+      {ui("Not connected")}
     </span>
   );
 }
@@ -1084,6 +1114,7 @@ export function BrokeredAccountRow({
    */
   title: string;
 }) {
+  useLocale();
   /*
    * Whether the form is on screen, which is the whole of what this row holds.
    *
@@ -1165,8 +1196,8 @@ export function BrokeredAccountRow({
               read for both. */}
           <ItemTitle>
             {several && !heading
-              ? "Your accounts"
-              : (heading ?? "Your account")}
+              ? ui("Your accounts")
+              : (heading ?? ui("Your account"))}
           </ItemTitle>
           {/* Unclamped where the key is missing: that sentence is the only place the setting is
               named, so it is the point rather than a hint. */}
@@ -1174,7 +1205,10 @@ export function BrokeredAccountRow({
             className={account.configured ? undefined : "line-clamp-none"}
           >
             {several
-              ? `You connected ${accounts.length} ${title} accounts. Bots use your default account unless you ask for another.`
+              ? ui(
+                  "You connected {{value0}} {{value1}} accounts. Bots use your default account unless you ask for another.",
+                  { value0: String(accounts.length), value1: String(title) },
+                )
               : accountSentence({
                   account,
                   connectedDescription,
@@ -1212,7 +1246,9 @@ export function BrokeredAccountRow({
                * at it twice. A button that cannot work is worse than no button — it invites the
                * second press that files a record of an act that did not happen.
                */
-              <span className="text-muted-foreground text-xs">Key missing</span>
+              <span className="text-muted-foreground text-xs">
+                {ui("Key missing")}
+              </span>
             ) : account.connected ? (
               <>
                 {/* Decorative: the word beside it already says which. */}
@@ -1221,7 +1257,9 @@ export function BrokeredAccountRow({
                   className="size-1.5 rounded-full bg-emerald-500"
                 />
                 {/* The same word for both kinds. The line beneath says what it rests on. */}
-                <span className="text-muted-foreground text-xs">Connected</span>
+                <span className="text-muted-foreground text-xs">
+                  {ui("Connected")}
+                </span>
                 {/*
                  * OFFERED ONLY ON A KEY APP, BECAUSE THAT IS THE ONLY KIND A RE-CHECK IS AN ACT ON.
                  * A consent connection is written verified by the confirm, with no probe behind it,
@@ -1256,7 +1294,7 @@ export function BrokeredAccountRow({
                     type="button"
                     variant="outline"
                   >
-                    {account.rechecking ? "Checking…" : "Re-check"}
+                    {account.rechecking ? ui("Checking…") : ui("Re-check")}
                   </Button>
                 ) : null}
                 {/*
@@ -1273,8 +1311,9 @@ export function BrokeredAccountRow({
                     type="button"
                     variant="outline"
                   >
-                    Reconnect
-                    <IconArrowUpRight />
+                    {uiNodes("Reconnect{{slot0}}", [
+                      <IconArrowUpRight key="slot0" />,
+                    ])}
                   </Button>
                 ) : null}
                 {/*
@@ -1291,8 +1330,11 @@ export function BrokeredAccountRow({
                     type="button"
                     variant="outline"
                   >
-                    Connect another account
-                    {account.kind === "consent" ? <IconArrowUpRight /> : null}
+                    {uiNodes("Connect another account{{slot0}}", [
+                      account.kind === "consent" ? (
+                        <IconArrowUpRight key="slot0" />
+                      ) : null,
+                    ])}
                   </Button>
                 ) : null}
                 {/* With several accounts each has its own Disconnect, in its row below. */}
@@ -1304,7 +1346,7 @@ export function BrokeredAccountRow({
                     type="button"
                     variant="outline"
                   >
-                    Disconnect
+                    {ui("Disconnect")}
                   </Button>
                 )}
               </>
@@ -1332,9 +1374,11 @@ export function BrokeredAccountRow({
                   type="button"
                   variant="outline"
                 >
-                  Connect
-                  {/* A key app opens a form here and leaves for nowhere, so no arrow. */}
-                  {account.kind === "fields" ? null : <IconArrowUpRight />}
+                  {uiNodes("Connect{{slot0}}", [
+                    account.kind === "fields" ? null : (
+                      <IconArrowUpRight key="slot0" />
+                    ),
+                  ])}
                 </Button>
               </>
             )}
@@ -1365,7 +1409,7 @@ export function BrokeredAccountRow({
           <DialogHeader>
             {/* The title the row above cannot have: this exists only while the account is not
                 connected, so it is free to name the act rather than the subject. */}
-            <DialogTitle>Connect your account</DialogTitle>
+            <DialogTitle>{ui("Connect your account")}</DialogTitle>
           </DialogHeader>
           <DialogBody className="mt-4">
             {/*
@@ -1407,7 +1451,7 @@ export function BrokeredAccountRow({
               </>
             ) : account.requestingFields ? (
               <p className="text-muted-foreground text-sm">
-                Checking what the app needs…
+                {ui("Checking what the app needs…")}
               </p>
             ) : (
               /*
@@ -1419,7 +1463,9 @@ export function BrokeredAccountRow({
                * on a second open and not only on a first.
                */
               <p className="text-muted-foreground text-sm">
-                Couldn't find out what this app needs. Close this and try again.
+                {ui(
+                  "Couldn't find out what this app needs. Close this and try again.",
+                )}
               </p>
             )}
             {/*
@@ -1459,6 +1505,7 @@ function AccountListRow({
   onDisconnect: () => void;
   onMakeDefault: () => void;
 }) {
+  useLocale();
   return (
     <>
       <Separator />
@@ -1470,10 +1517,12 @@ function AccountListRow({
           <ItemTitle className="break-all">{label}</ItemTitle>
           <ItemDescription>
             {isDefault
-              ? "Default. Bots use this account unless you ask for another."
+              ? ui("Default. Bots use this account unless you ask for another.")
               : connectedAt
-                ? `Connected ${formatDate(connectedAt)}. Bots use it when you ask for it.`
-                : "Bots use it when you ask for it."}
+                ? ui("Connected {{value0}}. Bots use it when you ask for it.", {
+                    value0: String(formatDate(connectedAt)),
+                  })
+                : ui("Bots use it when you ask for it.")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -1485,7 +1534,7 @@ function AccountListRow({
               type="button"
               variant="outline"
             >
-              Make default
+              {ui("Make default")}
             </Button>
           )}
           <Button
@@ -1495,7 +1544,7 @@ function AccountListRow({
             type="button"
             variant="outline"
           >
-            Disconnect
+            {ui("Disconnect")}
           </Button>
         </ItemActions>
       </Item>

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -60,7 +61,7 @@ export function hostAccessQueryOptions() {
     refetchInterval: 2_000,
     queryFn: (): Promise<HostAccessStatus> =>
       client("/api/host-access", {
-        fallback: "Folder access could not be loaded.",
+        fallback: ui("Folder access could not be loaded."),
       }).then((response) => response.json()),
   });
 }
@@ -73,7 +74,7 @@ export function requestHostFolderGrantMutationOptions(
       client("/api/host-access/grants", {
         method: "POST",
         body: { botId: variables.botId },
-        fallback: "The desktop app could not open the folder chooser.",
+        fallback: ui("The desktop app could not open the folder chooser."),
       }).then((response) => response.json()),
     onSuccess: () => invalidateHostAccess(queryClient),
     onError: () => invalidateHostAccess(queryClient),
@@ -87,7 +88,7 @@ export function revokeHostFolderGrantMutationOptions(queryClient: QueryClient) {
         `/api/host-access/grants/${encodeURIComponent(variables.grantId)}`,
         {
           method: "DELETE",
-          fallback: "Access to that folder could not be revoked.",
+          fallback: ui("Access to that folder could not be revoked."),
         },
       );
     },
@@ -100,7 +101,7 @@ export function stopHostAccessMutationOptions(queryClient: QueryClient) {
     mutationFn: async () => {
       await client("/api/host-access/stop", {
         method: "POST",
-        fallback: "Folder access could not be stopped.",
+        fallback: ui("Folder access could not be stopped."),
       });
     },
     onSuccess: () => invalidateHostAccess(queryClient),

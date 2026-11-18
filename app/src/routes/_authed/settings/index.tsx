@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconMoon } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import React from "react";
@@ -24,12 +25,14 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { formatHotkey, HOTKEYS } from "@/lib/hotkeys/hotkeys";
 import { SkinPicker } from "@/skins/skin-picker";
+import { LanguagePicker } from "@/lib/i18n/provider";
 
 export const Route = createFileRoute("/_authed/settings/")({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  useLocale();
   const { dark, setDark } = useTheme();
 
   /*
@@ -42,14 +45,16 @@ function RouteComponent() {
    */
   return (
     <PageShell
-      description="Set your name, how OpenBot looks, and the instructions every Bot follows."
-      title="General"
+      description={ui(
+        "Set your name, how OpenBot looks, and the instructions every Bot follows.",
+      )}
+      title={ui("General")}
     >
       {/*
        * What OpenBot and every Bot know of the person, first: their name and how they want things done. Both are free
        * text, so both are a summary that opens a dialog.
        */}
-      <PageSection title="About you">
+      <PageSection title={ui("About you")}>
         <PageRows>
           <NameRow />
           <Separator />
@@ -60,21 +65,23 @@ function RouteComponent() {
       <AiModelSection />
       {/* Only in OpenBot Desktop, which sends usage data and keeps this choice. */}
       <UsageDataSection />
-      <PageSection title="Appearance">
+      <PageSection title={ui("Appearance")}>
         <PageRows>
+          <LanguagePicker />
+          <Separator />
           <Item size="sm">
             <ItemMedia variant="icon">
               <IconMoon />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Dark theme</ItemTitle>
+              <ItemTitle>{ui("Dark theme")}</ItemTitle>
               <ItemDescription>
-                Use the dark appearance across OpenBot.
+                {ui("Use the dark appearance across OpenBot.")}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Dark theme"
+                aria-label={ui("Dark theme")}
                 checked={dark}
                 onCheckedChange={setDark}
               />
@@ -90,7 +97,7 @@ function RouteComponent() {
        * actually do rather than what somebody remembered they did. Read-only on purpose: these
        * are not rebindable, and a row with nothing to click says so by having nothing to click.
        */}
-      <PageSection title="Keyboard shortcuts">
+      <PageSection title={ui("Keyboard shortcuts")}>
         <PageRows>
           {HOTKEYS.map((hotkey, index) => (
             <React.Fragment key={hotkey.id}>

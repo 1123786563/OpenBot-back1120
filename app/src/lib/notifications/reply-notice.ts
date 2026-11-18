@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { QueryClient } from "@tanstack/react-query";
 import { type AgentProfile, agentListQueryOptions } from "@/lib/agents/queries";
 import {
@@ -57,7 +58,9 @@ export function replyNotice(
       ? activity.firstLine
       : (activity.lastMessage ?? "");
   return {
-    title: name ? `${name} replied` : "Your Bot replied",
+    title: name
+      ? ui("{{value0}} replied", { value0: String(name) })
+      : ui("Your Bot replied"),
     body,
     tag: conversationTag(activity.channelId),
     path: `/channel/${encodeURIComponent(activity.channelId)}`,

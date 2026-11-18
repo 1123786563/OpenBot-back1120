@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { useWaitingRows } from "@/components/approvals/waiting";
@@ -45,6 +47,7 @@ function rememberView(view: TasksView) {
  * layout around them.
  */
 export function TasksScreen() {
+  useLocale();
   const [view, setView] = useState<TasksView>(rememberedView);
   const show = (next: TasksView) => {
     setView(next);
@@ -78,6 +81,7 @@ function TasksSwitch({
   view: TasksView;
   onView: (view: TasksView) => void;
 }) {
+  useLocale();
   return (
     <div
       className={cn(
@@ -87,15 +91,15 @@ function TasksSwitch({
       )}
     >
       <div
-        aria-label="Tasks"
+        aria-label={ui("Tasks")}
         className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-4"
         role="tablist"
       >
         <SwitchTab id="active" onView={onView} view={view}>
-          Active
+          {ui("Active")}
         </SwitchTab>
         <SwitchTab id="up_next" onView={onView} view={view}>
-          Up next
+          {ui("Up next")}
         </SwitchTab>
       </div>
     </div>
@@ -113,6 +117,7 @@ function SwitchTab({
   onView: (view: TasksView) => void;
   children: ReactNode;
 }) {
+  useLocale();
   const on = id === view;
   return (
     <button
@@ -142,6 +147,7 @@ function SwitchTab({
  * waiting outside any task, decided in OpenBot's own rows. A group with nothing in it is left out.
  */
 function ActiveView() {
+  useLocale();
   const routines = useQuery(routinesQueryOptions());
   const waiting = useWaitingRows(undefined);
   const { tasks, done } = useNeedsYou();
@@ -165,11 +171,11 @@ function ActiveView() {
       })}
       {waiting.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {waiting.error.message}
+          {<ErrorDetails error={waiting.error} />}
         </p>
       ) : null}
       <BotResponsibilities />
-      <Section count={routines.data?.routines.length} label="Routines">
+      <Section count={routines.data?.routines.length} label={ui("Routines")}>
         <RoutinesList embedded />
       </Section>
     </div>
@@ -187,6 +193,7 @@ function Section({
   count: number | undefined;
   children: ReactNode;
 }) {
+  useLocale();
   return (
     <section aria-label={label} className="flex flex-col">
       <h2 className="openduet-type-body flex min-h-11 items-center px-1 font-normal text-openduet-ink-2">

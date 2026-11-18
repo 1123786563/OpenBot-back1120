@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronRight, IconClock } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -22,11 +23,14 @@ function routinesSummary(
   routines: { enabled: boolean }[] | undefined,
 ): string | null {
   if (!routines) return null;
-  if (routines.length === 0) return "No routines yet.";
+  if (routines.length === 0) return ui("No routines yet.");
   const on = routines.filter((routine) => routine.enabled).length;
   const count = `${routines.length} routine${routines.length === 1 ? "" : "s"}`;
   if (routines.length === 1) return `${count}, ${on === 1 ? "on" : "off"}.`;
-  return `${count}, ${on} on.`;
+  return ui("{{value0}}, {{value1}} on.", {
+    value0: String(count),
+    value1: String(on),
+  });
 }
 
 /**
@@ -37,14 +41,20 @@ function routinesSummary(
  * edition, so a person who opens it wants their routines, and this page sends them there.
  */
 export function RoutinesConnectionPage() {
+  useLocale();
   const routines = useQuery(routinesQueryOptions());
   const summary = routinesSummary(routines.data?.routines);
   return (
     <PageShell
       action={<NewRoutineButton />}
-      backButton={{ label: "Connections", linkProps: { to: "/connections" } }}
-      description="Routines are work your Bots do on a schedule. Every Bot can set one up for you."
-      title="Routines"
+      backButton={{
+        label: ui("Connections"),
+        linkProps: { to: "/connections" },
+      }}
+      description={ui(
+        "Routines are work your Bots do on a schedule. Every Bot can set one up for you.",
+      )}
+      title={ui("Routines")}
     >
       {/* One destination, so no heading: it would only repeat the row's own title. */}
       <PageSection>
@@ -54,11 +64,11 @@ export function RoutinesConnectionPage() {
               <IconClock />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Your routines</ItemTitle>
+              <ItemTitle>{ui("Your routines")}</ItemTitle>
               <ItemDescription>
                 {routines.error
-                  ? "Open Routines to see them."
-                  : (summary ?? "Open Routines to see them.")}
+                  ? ui("Open Routines to see them.")
+                  : (summary ?? ui("Open Routines to see them."))}
               </ItemDescription>
             </ItemContent>
             <ItemActions>

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { reviewerGuidanceKeys } from "./queries";
@@ -30,7 +31,7 @@ export const removeReviewerGuidanceMutationOptions = (
     mutationFn: () =>
       client("/api/approvals/team/guidance", {
         method: "DELETE",
-        fallback: "The guidance for auto-review couldn't be removed.",
+        fallback: ui("The guidance for auto-review couldn't be removed."),
       }),
     onSuccess: () => invalidateGuidance(queryClient),
   });

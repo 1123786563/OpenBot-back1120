@@ -300,7 +300,7 @@ describe("POST /api/admin/enterprise/network/translate", () => {
     const response = await translate(app, "Only Salesforce");
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "OpenBot needs a model key to write a list from a description. Add one on the Credentials page, or type the list yourself.",
     });
@@ -330,7 +330,7 @@ describe("POST /api/admin/enterprise/network/translate", () => {
       const { app } = appFor({});
       const response = await translate(app, text);
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
+      expect(await response.json()).toMatchObject({
         error: "Describe where Bots may connect in a sentence first.",
       });
       expect(mock.getRequests()).toHaveLength(0);

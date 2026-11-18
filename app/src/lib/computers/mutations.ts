@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { type AgentProfile, agentListQueryOptions } from "@/lib/agents/queries";
 import { currentUserQueryOptions } from "@/lib/auth/queries";
@@ -84,7 +85,9 @@ export function setComputerStateMutationOptions(queryClient: QueryClient) {
           computer: variables.computer,
           ...(variables.botId ? { botId: variables.botId } : {}),
         },
-        fallback: `The computer could not be ${PAST[variables.action]}.`,
+        fallback: ui("The computer could not be {{value0}}.", {
+          value0: ui(PAST[variables.action]),
+        }),
       });
     },
     /** A reset deletes the profile those commands ran on; a stop keeps it, so only reset forgets. */
@@ -118,7 +121,7 @@ export function saveActionPolicyMutationOptions(queryClient: QueryClient) {
       client("/api/computers/policy", "policy", {
         method: "PUT",
         body: next,
-        fallback: "The boundary could not be saved.",
+        fallback: ui("The boundary could not be saved."),
       }),
     onSuccess: () => invalidateComputers(queryClient),
   });

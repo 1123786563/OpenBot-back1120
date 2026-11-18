@@ -401,7 +401,7 @@ describe("Settings, Learning", () => {
     ];
     for (const refused of refusals) {
       expect(refused.status).toBe(403);
-      expect(await refused.json()).toEqual({
+      expect(await refused.json()).toMatchObject({
         error:
           "An admin hasn't turned on sharing skills with every Bot, so your skills stay with your own Bots.",
       });
@@ -792,7 +792,7 @@ describe("Settings, Learning", () => {
         { method: "PUT", json: { open: true } },
       );
       expect(refused.status).toBe(404);
-      expect(await refused.json()).toEqual({
+      expect(await refused.json()).toMatchObject({
         error: "You have no skill by that name.",
       });
     }
@@ -825,7 +825,7 @@ describe("Settings, Learning", () => {
         { method: "PUT", json: { open: true } },
       );
       expect(off.status).toBe(409);
-      expect(await off.json()).toEqual({
+      expect(await off.json()).toMatchObject({
         error:
           "An admin has turned off automatic learning, so you have no skills to change.",
       });

@@ -1,3 +1,4 @@
+import { useLocale, uiNodes } from "@/lib/i18n";
 /**
  * Visible component refusal, using the same blocked-action semantics as computer policy refusals.
  */
@@ -9,6 +10,7 @@ export function RefusedCard({
   title: string;
   reason: string;
 }) {
+  useLocale();
   return (
     <div
       data-slot="gallery-frame"
@@ -16,7 +18,9 @@ export function RefusedCard({
       data-testid="component-refused"
       role="status"
     >
-      <p className="text-sm font-medium text-destructive">Not shown: {title}</p>
+      <p className="text-sm font-medium text-destructive">
+        {uiNodes("Not shown: {{slot0}}", [title])}
+      </p>
       <p className="mt-1 text-sm text-foreground/80">{reason}</p>
     </div>
   );

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconInbox } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -53,13 +55,14 @@ import { queryClient } from "@/query-client";
  * page would teach an administrator to scroll past the heading.
  */
 export function AccessRequestsSection({ app }: { app?: string }) {
+  useLocale();
   const inbox = useQuery(appAccessInboxQueryOptions(true, app));
   if (inbox.isPending) return null;
   if (inbox.error)
     return (
-      <PageSection title="Requests">
+      <PageSection title={ui("Requests")}>
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load access requests. Reload the page.
+          {ui("Couldn't load access requests. Reload the page.")}
         </p>
       </PageSection>
     );
@@ -69,10 +72,14 @@ export function AccessRequestsSection({ app }: { app?: string }) {
     <PageSection
       description={
         app
-          ? "People asking for this app. Approve does what they asked, right away."
-          : "People asking for an app to be turned on, given to a Bot, or connected. Approve does what they asked, right away."
+          ? ui(
+              "People asking for this app. Approve does what they asked, right away.",
+            )
+          : ui(
+              "People asking for an app to be turned on, given to a Bot, or connected. Approve does what they asked, right away.",
+            )
       }
-      title="Requests"
+      title={ui("Requests")}
     >
       <PageRows>
         {requests.map((request, index) => (
@@ -91,15 +98,24 @@ export function askedFor(request: AppAccessRequest): string {
   const bot = request.botName ?? "a Bot";
   switch (request.kind) {
     case "enable":
-      return `Turn on ${request.appTitle} for ${bot}`;
+      return ui("Turn on {{value0}} for {{value1}}", {
+        value0: String(request.appTitle),
+        value1: String(bot),
+      });
     case "grant":
-      return `Give ${request.appTitle} to ${bot}`;
+      return ui("Give {{value0}} to {{value1}}", {
+        value0: String(request.appTitle),
+        value1: String(bot),
+      });
     case "connect_shared":
-      return `Connect the shared ${request.appTitle} account`;
+      return ui("Connect the shared {{value0}} account", {
+        value0: String(request.appTitle),
+      });
   }
 }
 
 function AccessRequestRow({ request }: { request: AppAccessRequest }) {
+  useLocale();
   // One pair per row, so a refusal is drawn under the request it is about and nowhere else.
   const approve = useMutation(
     approveAppAccessRequestMutationOptions(queryClient),
@@ -118,9 +134,9 @@ function AccessRequestRow({ request }: { request: AppAccessRequest }) {
       <ItemContent>
         <ItemTitle>{askedFor(request)}</ItemTitle>
         <ItemDescription className="line-clamp-none">
-          {who} asked {relativeTime(request.createdAt)}
+          {who} {ui("asked")} {relativeTime(request.createdAt)}
           {request.kind === "connect_shared" && request.botName
-            ? `, for ${request.botName}`
+            ? ui(", for {{value0}}", { value0: String(request.botName) })
             : ""}
           . <GrantNote request={request} />
         </ItemDescription>
@@ -135,7 +151,7 @@ function AccessRequestRow({ request }: { request: AppAccessRequest }) {
           size="sm"
           variant="ghost"
         >
-          {dismiss.isPending ? "Dismissing…" : "Dismiss"}
+          {dismiss.isPending ? ui("Dismissing…") : ui("Dismiss")}
         </Button>
         <Button
           disabled={busy}
@@ -145,13 +161,13 @@ function AccessRequestRow({ request }: { request: AppAccessRequest }) {
           }}
           size="sm"
         >
-          {approve.isPending ? "Approving…" : "Approve"}
+          {approve.isPending ? ui("Approving…") : ui("Approve")}
         </Button>
       </ItemActions>
       {error ? (
         <ItemFooter>
           <p className="text-destructive text-sm" role="alert">
-            {error.message}
+            {<ErrorDetails error={error} />}
           </p>
         </ItemFooter>
       ) : null}
@@ -165,6 +181,7 @@ function AccessRequestRow({ request }: { request: AppAccessRequest }) {
  * and so has that page; an app still to be switched on has none until the press that switches it on.
  */
 function GrantNote({ request }: { request: AppAccessRequest }) {
+  useLocale();
   const paths = useManagePaths();
   if (request.kind === "connect_shared" || !request.agentId) return null;
   const bot = request.botName ?? "the Bot";
@@ -177,8 +194,8 @@ function GrantNote({ request }: { request: AppAccessRequest }) {
     );
   return (
     <>
-      Approving gives {bot} only {request.appTitle}'s read-only actions. Choose
-      any others on {page}.
+      {ui("Approving gives")} {bot} {ui("only")} {request.appTitle}
+      {ui("'s read-only actions. Choose any others on")} {page}.
     </>
   );
 }
@@ -188,6 +205,7 @@ function GrantNote({ request }: { request: AppAccessRequest }) {
  * Null while nothing is waiting or nothing has been read, so a row draws nothing rather than "0".
  */
 export function usePendingRequestCounts() {
+  useLocale();
   const inbox = useQuery(appAccessInboxQueryOptions(true));
   return inbox.data?.counts ?? null;
 }

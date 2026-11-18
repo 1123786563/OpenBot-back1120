@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconHandStop } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -28,6 +29,7 @@ import { queryClient } from "@/query-client";
  * picture's frame, because it is the one real control here.
  */
 export function AskFirstSwitch() {
+  useLocale();
   // Read once: the inbox's own polling is for the approvals page, not for a single switch.
   const inbox = useQuery({ ...approvalInboxOptions(), refetchInterval: false });
   const preferences = useMutation(
@@ -44,14 +46,14 @@ export function AskFirstSwitch() {
           <IconHandStop />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>{ASK_FIRST_TITLE}</ItemTitle>
+          <ItemTitle>{ui(ASK_FIRST_TITLE)}</ItemTitle>
           <ItemDescription className="line-clamp-none">
-            {ASK_FIRST_DESCRIPTION}
+            {ui(ASK_FIRST_DESCRIPTION)}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
           <Switch
-            aria-label={ASK_FIRST_TITLE}
+            aria-label={ui(ASK_FIRST_TITLE)}
             checked={checked}
             disabled={inbox.isPending || preferences.isPending}
             onCheckedChange={(enabled) => preferences.mutate({ enabled })}
@@ -60,11 +62,13 @@ export function AskFirstSwitch() {
       </Item>
       {preferences.error ? (
         <p className="text-sm text-destructive" role="alert">
-          Couldn't change it. Try again, or change it later in Settings.
+          {ui("Couldn't change it. Try again, or change it later in Settings.")}
         </p>
       ) : inbox.error ? (
         <p className="text-sm text-muted-foreground" role="status">
-          Couldn't load this setting. You can change it later in Settings.
+          {ui(
+            "Couldn't load this setting. You can change it later in Settings.",
+          )}
         </p>
       ) : null}
     </div>

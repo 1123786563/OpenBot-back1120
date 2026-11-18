@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -58,7 +60,7 @@ function nextLine({ task, status }: ListedTask): string | null {
   if (status === "failed") return couldNotFinish(task.failure);
   const said = task.next?.trim();
   if (said) return said;
-  return status === "working" ? "Just started." : null;
+  return status === "working" ? ui("Just started.") : null;
 }
 
 /**
@@ -76,6 +78,7 @@ export function TaskRow({
   listed: ListedTask;
   botName: string;
 }) {
+  useLocale();
   const { task, status } = listed;
   const resolve = useMutation(resolveTaskMutationOptions(queryClient));
   const again = useMutation(tryTaskAgainMutationOptions(queryClient));
@@ -116,7 +119,7 @@ export function TaskRow({
               onClick={() => again.mutate(task.id)}
               size="sm"
             >
-              {again.isPending ? "Starting…" : "Try again"}
+              {again.isPending ? ui("Starting…") : ui("Try again")}
             </Button>
           ) : null}
           <Button
@@ -129,7 +132,7 @@ export function TaskRow({
             size="sm"
             variant={openFirst ? "default" : "outline"}
           >
-            Open
+            {ui("Open")}
           </Button>
           {status === "resolved" ? (
             <Button
@@ -138,7 +141,7 @@ export function TaskRow({
               size="sm"
               variant="outline"
             >
-              {resolve.isPending ? "Reopening…" : "Reopen"}
+              {resolve.isPending ? ui("Reopening…") : ui("Reopen")}
             </Button>
           ) : (
             <Button
@@ -147,13 +150,13 @@ export function TaskRow({
               size="sm"
               variant="ghost"
             >
-              {resolve.isPending ? "Saving…" : "Mark done"}
+              {resolve.isPending ? ui("Saving…") : ui("Mark done")}
             </Button>
           )}
         </ItemFooter>
         {error ? (
           <p className="mt-1 text-destructive text-sm" role="alert">
-            {error.message}
+            {<ErrorDetails error={error} />}
           </p>
         ) : null}
       </ItemContent>
@@ -166,6 +169,7 @@ export function TaskRow({
  * the right. Open leads while there is something to read or answer.
  */
 export function TaskBoardRow({ listed }: { listed: ListedTask }) {
+  useLocale();
   const { task, status } = listed;
   const resolve = useMutation(resolveTaskMutationOptions(queryClient));
   const again = useMutation(tryTaskAgainMutationOptions(queryClient));
@@ -183,7 +187,7 @@ export function TaskBoardRow({ listed }: { listed: ListedTask }) {
               onClick={() => again.mutate(task.id)}
               size="sm"
             >
-              {again.isPending ? "Starting…" : "Try again"}
+              {again.isPending ? ui("Starting…") : ui("Try again")}
             </Button>
           ) : null}
           <Button
@@ -192,7 +196,7 @@ export function TaskBoardRow({ listed }: { listed: ListedTask }) {
             size="sm"
             variant="ghost"
           >
-            {resolve.isPending ? "Saving…" : "Mark done"}
+            {resolve.isPending ? ui("Saving…") : ui("Mark done")}
           </Button>
           <Button
             render={
@@ -204,7 +208,7 @@ export function TaskBoardRow({ listed }: { listed: ListedTask }) {
             size="sm"
             variant={openFirst ? "default" : "outline"}
           >
-            Open
+            {ui("Open")}
           </Button>
         </>
       }
@@ -215,7 +219,7 @@ export function TaskBoardRow({ listed }: { listed: ListedTask }) {
         <span key="when">{relativeTime(task.updatedAt)}</span>,
         error ? (
           <span className="text-destructive" key="error" role="alert">
-            {error.message}
+            {<ErrorDetails error={error} />}
           </span>
         ) : null,
       ]}

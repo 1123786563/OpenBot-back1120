@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { BotPausedBanner } from "@/components/bot-profile/pause-banner";
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/_authed/_app/group/$channelId")({
 });
 
 function RouteComponent() {
+  useLocale();
   const { channelId } = Route.useParams();
   const channel = useQuery(channelQueryOptions(channelId));
   useMarkOpenChannelRead(channelId);
@@ -29,7 +31,7 @@ function RouteComponent() {
           size={22}
         />
         <span className="min-w-0 truncate text-sm tracking-tight">
-          {channel.data?.name ?? "Group"}
+          {channel.data?.name ?? ui("Group")}
         </span>
         <GroupPeopleButton channelId={channelId} />
       </div>

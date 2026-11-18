@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -1308,7 +1309,7 @@ test("a clear the server refuses says why in the confirmation, and wipes nothing
     await view.findByRole("dialog", { name: "Clear this browser?" }),
   );
   await user.click(confirm.getByRole("button", { name: "Clear" }));
-  expect((await confirm.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await confirm.findByRole("alert"))).toBe(
     "Take control of the Bot's browser first.",
   );
   // Nothing was wiped: the question closes on Cancel, over the browser as it was.

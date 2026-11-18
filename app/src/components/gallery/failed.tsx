@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { GalleryFrame } from "./frame";
 
 /** Why: what the Bot sent is not something the component can draw. */
@@ -23,11 +24,12 @@ export function FailedCard({
   title: string;
   reason: string;
 }) {
+  useLocale();
   return (
     <GalleryFrame>
       <div data-testid="component-failed" role="status">
         <p className="text-sm font-medium">
-          Couldn't show the {title.toLowerCase()}.
+          {ui("Couldn't show the")} {title.toLowerCase()}.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">{reason}</p>
       </div>

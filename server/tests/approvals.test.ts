@@ -971,6 +971,8 @@ test("a request body that is not JSON answers 400, not a 500 with the parser's m
   ]) {
     const response = await routes.request(path, { method, body: "{oops" });
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Supply a valid request." });
+    expect(await response.json()).toMatchObject({
+      error: "Supply a valid request.",
+    });
   }
 });

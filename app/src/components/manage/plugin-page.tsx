@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconArrowUpRight,
   IconChevronRight,
@@ -116,9 +117,12 @@ function toggled(
  * score, and the two answers worth recognising without reading are none of it and all of it.
  */
 function heldSummary(held: number, total: number): string {
-  if (held === 0) return "No tools";
-  if (held === total) return total === 1 ? "1 tool" : "Every tool";
-  return `${held} of ${total} tools`;
+  if (held === 0) return ui("No tools");
+  if (held === total) return total === 1 ? ui("1 tool") : ui("Every tool");
+  return ui("{{value0}} of {{value1}} tools", {
+    value0: String(held),
+    value1: String(total),
+  });
 }
 
 /**
@@ -137,12 +141,13 @@ function BotApprovalText({
   botId: string;
   serverId: string;
 }) {
+  useLocale();
   const exposure = useQuery(botSharedAppsQueryOptions(botId));
   const app = exposure.data?.apps.find((one) => one.serverId === serverId);
   if (!app) return null;
   return (
     <span className="text-muted-foreground text-xs">
-      {app.approval ? describeApproval(app.approval) : "Not approved"}
+      {app.approval ? describeApproval(app.approval) : ui("Not approved")}
     </span>
   );
 }
@@ -158,6 +163,7 @@ function ToolInWords({
   serverId: string;
   tool: { name: string; description: string };
 }) {
+  useLocale();
   const { label, summary } = toolInWords(serverId, tool);
   return (
     <>
@@ -228,14 +234,17 @@ export function connectionKindFor(
  * not left to notice their absence.
  */
 function ConnectionStateUnreadable() {
+  useLocale();
   const paths = useManagePaths();
   return (
     <Item size="sm">
       <ItemContent>
-        <ItemTitle>Your account</ItemTitle>
+        <ItemTitle>{ui("Your account")}</ItemTitle>
         <ItemDescription role="alert">
-          Couldn't load whether you've connected an account here. Reload the
-          page, or check {paths.deploymentName}'s logs if it keeps happening.
+          {uiNodes(
+            "Couldn't load whether you've connected an account here. Reload the page, or check {{slot0}}'s logs if it keeps happening.",
+            [paths.deploymentName],
+          )}
         </ItemDescription>
       </ItemContent>
     </Item>
@@ -250,6 +259,7 @@ export function PluginPage({
   /** Open the key form on arrival, for an app Browse apps just added that takes a key. */
   startConnect?: boolean;
 }) {
+  useLocale();
   const paths = useManagePaths();
   // One person: adding and connecting are one step, and nothing here is about other people.
   const personal =
@@ -593,7 +603,7 @@ export function PluginPage({
    * connected this". The personal screen had the identical gap; see its own note.
    */
   if (plugins.isPending || connections.isPending) {
-    return <PageShell title="Plugin">{null}</PageShell>;
+    return <PageShell title={ui("Plugin")}>{null}</PageShell>;
   }
   /*
    * Gated on the plugin list having ARRIVED, the guard the per-Bot grant screen already keeps
@@ -611,8 +621,8 @@ export function PluginPage({
       >
         <p className="mt-12 text-destructive text-sm" role="alert">
           {personal
-            ? "Couldn't load your apps. Reload the page."
-            : "Couldn't load plugins. Reload the page."}
+            ? ui("Couldn't load your apps. Reload the page.")
+            : ui("Couldn't load plugins. Reload the page.")}
         </p>
       </PageShell>
     );
@@ -623,16 +633,16 @@ export function PluginPage({
         backButton={{ label: paths.pluginsLabel, linkProps: paths.plugins() }}
         description={
           personal
-            ? "There is no app with that name."
-            : "There is no plugin with that name, here or in the catalogue."
+            ? ui("There is no app with that name.")
+            : ui("There is no plugin with that name, here or in the catalogue.")
         }
-        title={personal ? "Not an app" : "Not a plugin"}
+        title={personal ? ui("Not an app") : ui("Not a plugin")}
       >
         <PageEmpty
           icon={IconPuzzle}
-          title={personal ? "App not found" : "Plugin not found"}
+          title={personal ? ui("App not found") : ui("Plugin not found")}
         >
-          Nothing to configure.
+          {ui("Nothing to configure.")}
         </PageEmpty>
       </PageShell>
     );
@@ -680,30 +690,33 @@ export function PluginPage({
           {alwaysOn ? (
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Always on</ItemTitle>
+                <ItemTitle>{ui("Always on")}</ItemTitle>
                 <ItemDescription>
-                  Every Bot can use it to schedule its own work.
+                  {ui("Every Bot can use it to schedule its own work.")}
                 </ItemDescription>
               </ItemContent>
             </Item>
           ) : personal && !server ? (
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Add {title}</ItemTitle>
+                <ItemTitle>{uiNodes("Add {{slot0}}", [title])}</ItemTitle>
                 <ItemDescription>
-                  Connect it to give your Bots its tools. Bots can read with it
-                  right away, and ask you before they change anything.
+                  {ui(
+                    "Connect it to give your Bots its tools. Bots can read with it right away, and ask you before they change anything.",
+                  )}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Button
-                  aria-label={`Connect ${title}`}
+                  aria-label={ui("Connect {{value0}}", {
+                    value0: String(title),
+                  })}
                   disabled={addCurated.isPending || connectSelf.isPending}
                   onClick={() => void connectNew()}
                   size="sm"
                   type="button"
                 >
-                  Connect
+                  {ui("Connect")}
                 </Button>
               </ItemActions>
             </Item>
@@ -711,22 +724,34 @@ export function PluginPage({
             <Item size="sm">
               <ItemContent>
                 <ItemTitle>
-                  {personal ? "Turned on" : "Enable for this deployment"}
+                  {personal
+                    ? ui("Turned on")
+                    : ui("Enable for this deployment")}
                 </ItemTitle>
                 <ItemDescription>
                   {personal
-                    ? "Your Bots can use its tools. Turning this off removes it and every Bot's access to its tools."
+                    ? ui(
+                        "Your Bots can use its tools. Turning this off removes it and every Bot's access to its tools.",
+                      )
                     : server
-                      ? "Bots can be given its tools. Turning this off removes it and every Bot's access to its tools."
-                      : "No Bot can reach this vendor. Turn it on to set it up and give Bots its tools."}
+                      ? ui(
+                          "Bots can be given its tools. Turning this off removes it and every Bot's access to its tools.",
+                        )
+                      : ui(
+                          "No Bot can reach this vendor. Turn it on to set it up and give Bots its tools.",
+                        )}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Switch
                   aria-label={
                     personal
-                      ? `Turn ${title} on or off`
-                      : `Enable ${title} for this deployment`
+                      ? ui("Turn {{value0}} on or off", {
+                          value0: String(title),
+                        })
+                      : ui("Enable {{value0}} for this deployment", {
+                          value0: String(title),
+                        })
                   }
                   checked={server !== undefined}
                   onCheckedChange={(next) => {
@@ -753,15 +778,19 @@ export function PluginPage({
               <Separator />
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>Whose account</ItemTitle>
+                  <ItemTitle>{ui("Whose account")}</ItemTitle>
                   <ItemDescription>
                     {server.accountMode === "shared"
                       ? server.sharedOnly
-                        ? "One shared account for everyone. It signs in with this deployment's own client, so it can't be made personal."
-                        : "One shared account for everyone."
+                        ? ui(
+                            "One shared account for everyone. It signs in with this deployment's own client, so it can't be made personal.",
+                          )
+                        : ui("One shared account for everyone.")
                       : server.sharedOnly
-                        ? "It signs in with this deployment's own client, so only a shared account can connect it."
-                        : "Each person connects their own."}
+                        ? ui(
+                            "It signs in with this deployment's own client, so only a shared account can connect it.",
+                          )
+                        : ui("Each person connects their own.")}
                   </ItemDescription>
                 </ItemContent>
                 {/*
@@ -784,8 +813,8 @@ export function PluginPage({
                       variant="outline"
                     >
                       {server.accountMode === "shared"
-                        ? "Make personal"
-                        : "Make shared"}
+                        ? ui("Make personal")
+                        : ui("Make shared")}
                     </Button>
                   </ItemActions>
                 )}
@@ -806,18 +835,27 @@ export function PluginPage({
               <Separator />
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>Bot owners can give it to their Bots</ItemTitle>
+                  <ItemTitle>
+                    {ui("Bot owners can give it to their Bots")}
+                  </ItemTitle>
                   <ItemDescription>
                     {server.ownerGrants !== "any"
-                      ? "Only an admin can give it to a Bot."
+                      ? ui("Only an admin can give it to a Bot.")
                       : shared
-                        ? "Bot owners who give it to their Bots let those Bots use the team account."
-                        : "People can let Bots they own use it, on the account of whoever is asking."}
+                        ? ui(
+                            "Bot owners who give it to their Bots let those Bots use the team account.",
+                          )
+                        : ui(
+                            "People can let Bots they own use it, on the account of whoever is asking.",
+                          )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <Switch
-                    aria-label={`Let Bot owners give ${title} to their Bots`}
+                    aria-label={ui(
+                      "Let Bot owners give {{value0}} to their Bots",
+                      { value0: String(title) },
+                    )}
                     checked={server.ownerGrants === "any"}
                     disabled={ownerGrants.isPending}
                     onCheckedChange={(next) => {
@@ -857,20 +895,43 @@ export function PluginPage({
             /* The personal edition has one person, so each sentence speaks to them and names nobody else. */
             auth === "user-oauth"
               ? personal
-                ? `Connect your ${title} account through OpenBot. OpenBot registers an OAuth client, and your Bots see only what you can see.`
-                : "This vendor answers as whoever is asking. The deployment registers an OAuth client, and each person connects their own account. A Bot only sees what that person can see."
+                ? ui(
+                    "Connect your {{value0}} account through OpenBot. OpenBot registers an OAuth client, and your Bots see only what you can see.",
+                    { value0: String(title) },
+                  )
+                : ui(
+                    "This vendor answers as whoever is asking. The deployment registers an OAuth client, and each person connects their own account. A Bot only sees what that person can see.",
+                  )
               : auth === "builtin"
-                ? `Built into ${paths.deploymentName}. There is no vendor to reach and no credential to keep. ${personal ? "A call runs as you." : "A call runs as whoever asked."}`
+                ? ui(
+                    "Built into {{value0}}. There is no vendor to reach and no credential to keep. {{value1}}",
+                    {
+                      value0: String(paths.deploymentName),
+                      value1: String(
+                        personal
+                          ? "A call runs as you."
+                          : "A call runs as whoever asked.",
+                      ),
+                    },
+                  )
                 : auth === "brokered"
                   ? /* The row below says how, at length. This says whose account it is, which is the part that decides what an admin has to do here — which is nothing. */
                     brokeredConnectionDescription(provider, brokeredApp)
                   : auth === "person-entra"
-                    ? "This server answers as whoever is asking. Each call carries a token Microsoft Entra issues for that person, so a Bot only sees what they can see."
+                    ? ui(
+                        "This server answers as whoever is asking. Each call carries a token Microsoft Entra issues for that person, so a Bot only sees what they can see.",
+                      )
                     : personal
-                      ? `What OpenBot sends to ${title}. Your Bots all use it.`
-                      : `What ${paths.deploymentName} sends to the vendor. One credential for everybody.`
+                      ? ui(
+                          "What OpenBot sends to {{value0}}. Your Bots all use it.",
+                          { value0: String(title) },
+                        )
+                      : ui(
+                          "What {{value0}} sends to the vendor. One credential for everybody.",
+                          { value0: String(paths.deploymentName) },
+                        )
           }
-          title="Connection"
+          title={ui("Connection")}
         >
           {/*
            * Rows that DO something, and nothing else — with two admitted exceptions. The layout
@@ -903,15 +964,17 @@ export function PluginPage({
                */
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>Connection</ItemTitle>
+                  <ItemTitle>{ui("Connection")}</ItemTitle>
                   <ItemDescription>
-                    Nothing to set up. These tools run inside{" "}
-                    {paths.deploymentName}, on its own data.
+                    {uiNodes(
+                      "Nothing to set up. These tools run inside {{slot0}}, on its own data.",
+                      [paths.deploymentName],
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <span className="text-muted-foreground text-xs">
-                    Built in
+                    {ui("Built in")}
                   </span>
                 </ItemActions>
               </Item>
@@ -925,7 +988,7 @@ export function PluginPage({
                */
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>How this is reached</ItemTitle>
+                  <ItemTitle>{ui("How this is reached")}</ItemTitle>
                   <ItemDescription>
                     {
                       brokeredReach(
@@ -953,10 +1016,11 @@ export function PluginPage({
                */
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>How this is reached</ItemTitle>
+                  <ItemTitle>{ui("How this is reached")}</ItemTitle>
                   <ItemDescription>
-                    As the person asking, through their Microsoft sign-in. There
-                    is no token to paste.
+                    {ui(
+                      "As the person asking, through their Microsoft sign-in. There is no token to paste.",
+                    )}
                   </ItemDescription>
                   <code className="mt-1 block break-all font-mono text-muted-foreground text-xs">
                     {server?.entraScope}
@@ -964,7 +1028,7 @@ export function PluginPage({
                 </ItemContent>
                 <ItemActions>
                   <span className="text-muted-foreground text-xs">
-                    Microsoft Entra
+                    {ui("Microsoft Entra")}
                   </span>
                 </ItemActions>
               </Item>
@@ -978,14 +1042,14 @@ export function PluginPage({
                 size="sm"
               >
                 <ItemContent>
-                  <ItemTitle>Access token</ItemTitle>
+                  <ItemTitle>{ui("Access token")}</ItemTitle>
                   <ItemDescription>
-                    Sent with every call to this vendor.
+                    {ui("Sent with every call to this vendor.")}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <span className="text-muted-foreground text-xs">
-                    {server?.hasCredential ? "Saved" : "Not set"}
+                    {server?.hasCredential ? ui("Saved") : ui("Not set")}
                   </span>
                   <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </ItemActions>
@@ -1000,15 +1064,17 @@ export function PluginPage({
                */
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>OAuth client</ItemTitle>
+                  <ItemTitle>{ui("OAuth client")}</ItemTitle>
                   <ItemDescription>
-                    {atStart(paths.deploymentName)} registers itself with the
-                    vendor on first connect. There is nothing to paste.
+                    {uiNodes(
+                      "{{slot0}}registers itself with the vendor on first connect. There is nothing to paste.",
+                      [atStart(paths.deploymentName)],
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <span className="text-muted-foreground text-xs">
-                    Self-registered
+                    {ui("Self-registered")}
                   </span>
                 </ItemActions>
               </Item>
@@ -1022,15 +1088,19 @@ export function PluginPage({
                 size="sm"
               >
                 <ItemContent>
-                  <ItemTitle>OAuth client</ItemTitle>
+                  <ItemTitle>{ui("OAuth client")}</ItemTitle>
                   <ItemDescription>
-                    Identifies {paths.deploymentName} to the vendor. On its own,
-                    it can't reach anyone's documents.
+                    {uiNodes(
+                      "Identifies {{slot0}}to the vendor. On its own, it can't reach anyone's documents.",
+                      [paths.deploymentName],
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <span className="text-muted-foreground text-xs">
-                    {server?.hasCredential ? "Registered" : "Not registered"}
+                    {server?.hasCredential
+                      ? ui("Registered")
+                      : ui("Not registered")}
                   </span>
                   <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </ItemActions>
@@ -1079,9 +1149,12 @@ export function PluginPage({
                    */
                   <Item size="sm">
                     <ItemContent>
-                      <ItemTitle>Team account</ItemTitle>
+                      <ItemTitle>{ui("Team account")}</ItemTitle>
                       <ItemDescription>
-                        {`${title} connects only as one shared account. Make it shared above, then connect the team account here and give it to Bots.`}
+                        {ui(
+                          "{{value0}} connects only as one shared account. Make it shared above, then connect the team account here and give it to Bots.",
+                          { value0: String(title) },
+                        )}
                       </ItemDescription>
                     </ItemContent>
                   </Item>
@@ -1090,9 +1163,11 @@ export function PluginPage({
                     account={brokeredAccount}
                     edition={paths.edition}
                     connectedDescription={`Connected${sharedConnection?.displayName ? ` as ${sharedConnection.displayName}` : ""}${sharedConnection?.connectedBy ? ` by ${sharedConnection.connectedBy}` : ""}. Every Bot with these tools acts as this account.`}
-                    disconnectedDescription="No team account is connected. Bots with these tools are refused."
-                    heading="Team account"
-                    notice="Sign in as the team account, not your own."
+                    disconnectedDescription={ui(
+                      "No team account is connected. Bots with these tools are refused.",
+                    )}
+                    heading={ui("Team account")}
+                    notice={ui("Sign in as the team account, not your own.")}
                     provider={provider}
                     title={title}
                   />
@@ -1139,15 +1214,27 @@ export function PluginPage({
                 ) : (
                   <Item size="sm">
                     <ItemContent>
-                      <ItemTitle>Your account</ItemTitle>
+                      <ItemTitle>{ui("Your account")}</ItemTitle>
                       <ItemDescription>
                         {personal
                           ? youConnected
-                            ? `Connected. Your Bots use your ${title} as you.`
-                            : `Connect your ${title} account so your Bots can use it.`
+                            ? ui(
+                                "Connected. Your Bots use your {{value0}} as you.",
+                                { value0: String(title) },
+                              )
+                            : ui(
+                                "Connect your {{value0}} account so your Bots can use it.",
+                                { value0: String(title) },
+                              )
                           : youConnected
-                            ? `Connected. A Bot with these tools uses your ${title} as you. Everybody else connects their own.`
-                            : `Connect your own account to try this connector. ${reassurance}`}
+                            ? ui(
+                                "Connected. A Bot with these tools uses your {{value0}} as you. Everybody else connects their own.",
+                                { value0: String(title) },
+                              )
+                            : ui(
+                                "Connect your own account to try this connector. {{value0}}",
+                                { value0: String(reassurance) },
+                              )}
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
@@ -1159,7 +1246,7 @@ export function PluginPage({
                             className="size-1.5 rounded-full bg-emerald-500"
                           />
                           <span className="text-muted-foreground text-xs">
-                            Connected
+                            {ui("Connected")}
                           </span>
                         </>
                       ) : (
@@ -1176,8 +1263,9 @@ export function PluginPage({
                             type="button"
                             variant="outline"
                           >
-                            Connect
-                            <IconArrowUpRight />
+                            {uiNodes("Connect{{slot0}}", [
+                              <IconArrowUpRight key="slot0" />,
+                            ])}
                           </Button>
                         </>
                       )}
@@ -1200,15 +1288,16 @@ export function PluginPage({
                   size="sm"
                 >
                   <ItemContent>
-                    <ItemTitle>Instance host</ItemTitle>
+                    <ItemTitle>{ui("Instance host")}</ItemTitle>
                     <ItemDescription>
-                      This vendor gives every customer their own hostname. It is
-                      checked against the vendor's pattern before it is saved.
+                      {ui(
+                        "This vendor gives every customer their own hostname. It is checked against the vendor's pattern before it is saved.",
+                      )}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <span className="text-muted-foreground text-xs">
-                      {server?.url ?? "Not set"}
+                      {server?.url ?? ui("Not set")}
                     </span>
                     <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </ItemActions>
@@ -1228,13 +1317,17 @@ export function PluginPage({
                   <ItemContent>
                     <ItemTitle>
                       {auth === "builtin"
-                        ? "Documentation"
-                        : "Vendor documentation"}
+                        ? ui("Documentation")
+                        : ui("Vendor documentation")}
                     </ItemTitle>
                     <ItemDescription>
                       {auth === "builtin"
-                        ? "What these tools offer, from the people who maintain them."
-                        : "What this server offers, from the people who maintain it."}
+                        ? ui(
+                            "What these tools offer, from the people who maintain them.",
+                          )
+                        : ui(
+                            "What this server offers, from the people who maintain it.",
+                          )}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -1249,21 +1342,27 @@ export function PluginPage({
             <div className="mt-3 p-3">
               {server?.dynamicClient ? (
                 <p className="text-muted-foreground text-sm">
-                  {personal ? "OpenBot" : "The deployment"} registers its
-                  redirect URI itself. There is nothing to add at the vendor.
+                  {uiNodes(
+                    "{{slot0}}registers its redirect URI itself. There is nothing to add at the vendor.",
+                    [personal ? "OpenBot" : ui("The deployment")],
+                  )}
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  Add this to the client's authorised redirect URIs at the
-                  vendor, exactly as written. One wrong character fails there,
-                  with an error that doesn't mention OpenBot.
+                  {ui(
+                    "Add this to the client's authorised redirect URIs at the vendor, exactly as written. One wrong character fails there, with an error that doesn't mention OpenBot.",
+                  )}
                 </p>
               )}
               {!plugins.data?.redirectUri ? (
                 <p className="mt-3 text-destructive text-sm" role="alert">
-                  {atStart(paths.deploymentName)} has no public URL, so{" "}
-                  {personal ? "you can't" : "nobody can"} finish connecting. Set
-                  OPENBOT_PUBLIC_URL.
+                  {uiNodes(
+                    "{{slot0}}has no public URL, so {{slot1}}finish connecting. Set OPENBOT_PUBLIC_URL.",
+                    [
+                      atStart(paths.deploymentName),
+                      personal ? ui("you can't") : ui("nobody can"),
+                    ],
+                  )}
                 </p>
               ) : server?.dynamicClient ? null : (
                 /* Selectable and monospaced: it is copied by hand into somebody else's console. */
@@ -1292,7 +1391,7 @@ export function PluginPage({
                 type="button"
                 variant="ghost"
               >
-                Refresh tools
+                {ui("Refresh tools")}
               </Button>
               {/*
                * Outline where refresh is ghost: granting is the thing an administrator came to
@@ -1311,7 +1410,7 @@ export function PluginPage({
                   type="button"
                   variant="outline"
                 >
-                  Grant tools…
+                  {ui("Grant tools…")}
                 </Button>
               ) : null}
             </div>
@@ -1319,19 +1418,24 @@ export function PluginPage({
           description={
             personal
               ? // The setting by the name Settings > Approvals gives it, so a person can find it there.
-                `Every Bot can use these. While ${ASK_FIRST_TITLE} is on, a Bot asks you before it uses one that makes changes.`
-              : "A Bot only sees the tools it has been given. Each call is checked when it happens, so removing access applies from the next call."
+                ui(
+                  "Every Bot can use these. While {{value0}} is on, a Bot asks you before it uses one that makes changes.",
+                  { value0: String(ASK_FIRST_TITLE) },
+                )
+              : ui(
+                  "A Bot only sees the tools it has been given. Each call is checked when it happens, so removing access applies from the next call.",
+                )
           }
-          title="Tools"
+          title={ui("Tools")}
         >
           <SkippedToolsNotice
             names={server.skippedTools ?? []}
             serverId={personal ? key : undefined}
           />
           {server.tools.length === 0 ? (
-            <PageEmpty icon={IconTool} title="No tools listed">
+            <PageEmpty icon={IconTool} title={ui("No tools listed")}>
               {toolsListError(server.lastError, { title, personal }) ??
-                "Refresh tools to check again."}
+                ui("Refresh tools to check again.")}
             </PageEmpty>
           ) : (
             <PageRows>
@@ -1384,7 +1488,9 @@ export function PluginPage({
                             : "text-muted-foreground text-xs"
                         }
                       >
-                        {tool.effect === "write" ? "changes things" : "reads"}
+                        {tool.effect === "write"
+                          ? ui("changes things")
+                          : ui("reads")}
                       </span>
                       {personal ? null : (
                         <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -1408,7 +1514,7 @@ export function PluginPage({
            */}
           {!personal && server.tools.length > 0 && bots.length > 0 ? (
             <>
-              <p className="mt-8 font-medium text-sm">By Bot</p>
+              <p className="mt-8 font-medium text-sm">{ui("By Bot")}</p>
               <PageRows>
                 {bots.map((bot, index) => (
                   <React.Fragment key={bot.id}>
@@ -1421,8 +1527,12 @@ export function PluginPage({
                         <ItemTitle>{bot.name}</ItemTitle>
                         <ItemDescription>
                           {bot.hidden
-                            ? "Hidden from your roster. Turn this app's actions on or off one at a time."
-                            : "Turn this app's actions on or off one at a time."}
+                            ? ui(
+                                "Hidden from your roster. Turn this app's actions on or off one at a time.",
+                              )
+                            : ui(
+                                "Turn this app's actions on or off one at a time.",
+                              )}
                         </ItemDescription>
                       </ItemContent>
                       <ItemActions>
@@ -1463,8 +1573,10 @@ export function PluginPage({
        */}
       {!personal && server && server.withdrawn.length > 0 ? (
         <PageSection
-          description="This vendor no longer lists these. No Bot sees them, and none can call them. The access is still saved, and comes back if the vendor lists the tool again. To remove it, use the Bot's own page."
-          title="Given but no longer listed"
+          description={ui(
+            "This vendor no longer lists these. No Bot sees them, and none can call them. The access is still saved, and comes back if the vendor lists the tool again. To remove it, use the Bot's own page.",
+          )}
+          title={ui("Given but no longer listed")}
         >
           <PageRows>
             {server.withdrawn.map((held, index) => (
@@ -1475,8 +1587,10 @@ export function PluginPage({
                       {held.name}
                     </ItemTitle>
                     <ItemDescription>
-                      Not listed by {title}
-                      {server.toolsRefreshedAt ? ` as of the last refresh` : ""}
+                      {ui("Not listed by")} {title}
+                      {server.toolsRefreshedAt
+                        ? ui(" as of the last refresh")
+                        : ""}
                       .
                     </ItemDescription>
                   </ItemContent>
@@ -1501,17 +1615,28 @@ export function PluginPage({
           <DialogHeader>
             <DialogTitle>
               {dialog === "client"
-                ? `OAuth client for ${title}`
+                ? ui("OAuth client for {{value0}}", { value0: String(title) })
                 : dialog === "instance"
-                  ? `Instance host for ${title}`
-                  : `Access token for ${title}`}
+                  ? ui("Instance host for {{value0}}", {
+                      value0: String(title),
+                    })
+                  : ui("Access token for {{value0}}", {
+                      value0: String(title),
+                    })}
             </DialogTitle>
             <DialogDescription>
               {dialog === "client"
-                ? `From the vendor's console. The secret is saved in ${paths.deploymentName}'s vault and never shown again.`
+                ? ui(
+                    "From the vendor's console. The secret is saved in {{value0}}'s vault and never shown again.",
+                    { value0: String(paths.deploymentName) },
+                  )
                 : dialog === "instance"
-                  ? "Your own hostname with this vendor. It is checked against the vendor's pattern before it is saved."
-                  : `Saved in ${paths.deploymentName}'s vault and never shown again.`}
+                  ? ui(
+                      "Your own hostname with this vendor. It is checked against the vendor's pattern before it is saved.",
+                    )
+                  : ui("Saved in {{value0}}'s vault and never shown again.", {
+                      value0: String(paths.deploymentName),
+                    })}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4">
@@ -1519,7 +1644,9 @@ export function PluginPage({
               {dialog === "client" ? (
                 <>
                   <Field>
-                    <FieldLabel htmlFor="client-id">Client ID</FieldLabel>
+                    <FieldLabel htmlFor="client-id">
+                      {ui("Client ID")}
+                    </FieldLabel>
                     <Input
                       id="client-id"
                       onChange={(event) =>
@@ -1533,7 +1660,7 @@ export function PluginPage({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="client-secret">
-                      Client secret
+                      {ui("Client secret")}
                     </FieldLabel>
                     <Input
                       id="client-secret"
@@ -1550,7 +1677,9 @@ export function PluginPage({
                 </>
               ) : dialog === "instance" ? (
                 <Field>
-                  <FieldLabel htmlFor="instance-host">Instance host</FieldLabel>
+                  <FieldLabel htmlFor="instance-host">
+                    {ui("Instance host")}
+                  </FieldLabel>
                   <Input
                     id="instance-host"
                     onChange={(event) => setInstanceHost(event.target.value)}
@@ -1560,7 +1689,9 @@ export function PluginPage({
                 </Field>
               ) : (
                 <Field>
-                  <FieldLabel htmlFor="access-token">Access token</FieldLabel>
+                  <FieldLabel htmlFor="access-token">
+                    {ui("Access token")}
+                  </FieldLabel>
                   <Input
                     id="access-token"
                     onChange={(event) => setToken(event.target.value)}
@@ -1573,7 +1704,7 @@ export function PluginPage({
           </DialogBody>
           <DialogFooter className="mt-4">
             <Button onClick={() => setDialog(null)} size="sm" variant="ghost">
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -1588,7 +1719,7 @@ export function PluginPage({
               }}
               size="sm"
             >
-              Save
+              {ui("Save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1606,11 +1737,12 @@ export function PluginPage({
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Grant tools</DialogTitle>
+              <DialogTitle>{ui("Grant tools")}</DialogTitle>
               <DialogDescription>
-                Each grant is its own row in {paths.auditLabel}. Tools that
-                change things are still checked against the boundaries on every
-                call.
+                {uiNodes(
+                  "Each grant is its own row in {{slot0}}. Tools that change things are still checked against the boundaries on every call.",
+                  [paths.auditLabel],
+                )}
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="mt-4 space-y-5">
@@ -1627,7 +1759,7 @@ export function PluginPage({
                */}
               <fieldset aria-labelledby="grant-to-heading" className="min-w-0">
                 <p className="mb-2 font-medium text-sm" id="grant-to-heading">
-                  To
+                  {ui("To")}
                 </p>
                 <div className="space-y-2">
                   {bots.map((bot) => (
@@ -1662,7 +1794,7 @@ export function PluginPage({
                         className="font-medium text-sm"
                         id="grant-reads-heading"
                       >
-                        Reads
+                        {ui("Reads")}
                       </p>
                       <Button
                         onClick={() =>
@@ -1676,7 +1808,7 @@ export function PluginPage({
                         type="button"
                         variant="ghost"
                       >
-                        Select all
+                        {ui("Select all")}
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -1712,7 +1844,7 @@ export function PluginPage({
                         className="font-medium text-amber-600 text-sm dark:text-amber-500"
                         id="grant-writes-heading"
                       >
-                        Changes things
+                        {ui("Changes things")}
                       </p>
                       <Button
                         onClick={() =>
@@ -1726,7 +1858,7 @@ export function PluginPage({
                         type="button"
                         variant="ghost"
                       >
-                        Select all
+                        {ui("Select all")}
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -1758,19 +1890,24 @@ export function PluginPage({
               {/* What is about to happen, in one sentence, before it does. */}
               {selectedRefs.size > 0 && chosenNames.length > 0 ? (
                 <p className="flex-1 text-muted-foreground text-xs">
-                  {`Grant ${selectedRefs.size} ${
-                    selectedRefs.size === 1 ? "tool" : "tools"
-                  } to ${chosenNames.join(", ")}.${
-                    chosenWrites > 0
-                      ? ` ${chosenWrites} ${
-                          chosenWrites === 1 ? "changes" : "change"
-                        } things.`
-                      : ""
-                  }`}
+                  {ui("Grant {{value0}} {{value1}} to {{value2}}.{{value3}}", {
+                    value0: String(selectedRefs.size),
+                    value1: String(
+                      selectedRefs.size === 1 ? ui("tool") : ui("tools"),
+                    ),
+                    value2: String(chosenNames.join(", ")),
+                    value3: String(
+                      chosenWrites > 0
+                        ? ` ${chosenWrites} ${
+                            chosenWrites === 1 ? "changes" : "change"
+                          } things.`
+                        : "",
+                    ),
+                  })}
                 </p>
               ) : null}
               <Button onClick={() => setDialog(null)} size="sm" variant="ghost">
-                Cancel
+                {ui("Cancel")}
               </Button>
               <Button
                 disabled={
@@ -1783,8 +1920,13 @@ export function PluginPage({
               >
                 {/* The one in flight, not the ones finished: a count that starts at zero of twelve reads as nothing happening. */}
                 {granting
-                  ? `Granting ${Math.min(granting.done + 1, granting.total)} of ${granting.total}…`
-                  : "Grant"}
+                  ? ui("Granting {{value0}} of {{value1}}…", {
+                      value0: String(
+                        Math.min(granting.done + 1, granting.total),
+                      ),
+                      value1: String(granting.total),
+                    })
+                  : ui("Grant")}
               </Button>
             </DialogFooter>
           </DialogContent>

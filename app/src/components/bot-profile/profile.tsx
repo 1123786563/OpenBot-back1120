@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBell,
   IconChevronRight,
@@ -49,9 +50,15 @@ import { BotActivityGlance, BotActivityRow } from "./activity";
 import { BotPausedBanner } from "./pause-banner";
 
 const NOTIFY_LABEL: Record<BotNotify, string> = {
-  all: "Everything",
-  needs_input: "Only when it needs me",
-  none: "Nothing (badges only)",
+  get all() {
+    return ui("Everything");
+  },
+  get needs_input() {
+    return ui("Only when it needs me");
+  },
+  get none() {
+    return ui("Nothing (badges only)");
+  },
 };
 
 /**
@@ -69,6 +76,7 @@ export function BotProfile({
   /** Pin, hide, duplicate, reset, delete. */
   manage?: React.ReactNode;
 }) {
+  useLocale();
   const lifecycle = useQuery(botLifecycleQueryOptions(agent.id));
   const { done } = useNeedsYou(agent.id);
   const pause = useMutation(setBotPausedMutationOptions(queryClient));
@@ -99,7 +107,7 @@ export function BotProfile({
       {/* Its questions and approvals, its tasks, and what its check-ins found, in one card. */}
       <BotNeedsYou agentId={agent.id} />
 
-      <PageSection title="For you">
+      <PageSection title={ui("For you")}>
         {/* Whether this Bot's Shared-app calls are being refused right now, with the button that
             asks an administrator. About its present reach, so it lives here, not only where
             publishing happens. */}
@@ -108,7 +116,7 @@ export function BotProfile({
         ) : null}
         {lifecycle.isPending ? null : lifecycle.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load this Bot's settings. Reload the page.
+            {ui("Couldn't load this Bot's settings. Reload the page.")}
           </p>
         ) : (
           <PageRows>
@@ -119,16 +127,20 @@ export function BotProfile({
               <ItemContent>
                 {/* On means working, the way a responsibility's Active switch reads: titled "Paused",
                     the row showed the word "Paused" beside a switch that was off for a running Bot. */}
-                <ItemTitle>Active</ItemTitle>
+                <ItemTitle>{ui("Active")}</ItemTitle>
                 <ItemDescription>
                   {lifecycle.data.paused
-                    ? "Paused. Nothing runs for you until you turn it back on."
-                    : "Works on its goals, routines, hand-offs and follow-ups for you."}
+                    ? ui(
+                        "Paused. Nothing runs for you until you turn it back on.",
+                      )
+                    : ui(
+                        "Works on its goals, routines, hand-offs and follow-ups for you.",
+                      )}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Switch
-                  aria-label="Active"
+                  aria-label={ui("Active")}
                   checked={!lifecycle.data.paused}
                   disabled={pause.isPending}
                   onCheckedChange={(active) =>
@@ -143,10 +155,11 @@ export function BotProfile({
                 <IconBell />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Notifications</ItemTitle>
+                <ItemTitle>{ui("Notifications")}</ItemTitle>
                 <ItemDescription>
-                  {NOTIFY_LABEL[lifecycle.data.notify]}. Sidebar badges always
-                  show.
+                  {uiNodes("{{slot0}}. Sidebar badges always show.", [
+                    NOTIFY_LABEL[lifecycle.data.notify],
+                  ])}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -163,7 +176,7 @@ export function BotProfile({
                   }}
                   value={lifecycle.data.notify}
                 >
-                  <SelectTrigger aria-label="Notifications">
+                  <SelectTrigger aria-label={ui("Notifications")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -184,10 +197,11 @@ export function BotProfile({
                     <IconBell />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>Browser notifications</ItemTitle>
+                    <ItemTitle>{ui("Browser notifications")}</ItemTitle>
                     <ItemDescription>
-                      Off in this browser. Turn them on to hear when a Bot needs
-                      you.
+                      {ui(
+                        "Off in this browser. Turn them on to hear when a Bot needs you.",
+                      )}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -196,7 +210,7 @@ export function BotProfile({
                       size="sm"
                       variant="outline"
                     >
-                      Turn on
+                      {ui("Turn on")}
                     </Button>
                   </ItemActions>
                 </Item>
@@ -211,8 +225,10 @@ export function BotProfile({
                 <IconMessage />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Message {agent.name}</ItemTitle>
-                <ItemDescription>Start a conversation.</ItemDescription>
+                <ItemTitle>
+                  {uiNodes("Message {{slot0}}", [agent.name])}
+                </ItemTitle>
+                <ItemDescription>{ui("Start a conversation.")}</ItemDescription>
               </ItemContent>
               <ItemActions>
                 <IconChevronRight className="size-4 text-muted-foreground" />

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 /*
  * DICTATION THAT TYPES AS YOU SPEAK, WHEN OPENBOT HAS NO TRANSCRIPTION PROVIDER.
  *
@@ -99,24 +100,38 @@ export function liveProblem(
       return null;
     case "not-allowed":
       return platform === "mac"
-        ? "OpenBot can't use the microphone or speech recognition. Turn both on for OpenBot in System Settings, under Privacy & Security, then try again."
+        ? ui(
+            "OpenBot can't use the microphone or speech recognition. Turn both on for OpenBot in System Settings, under Privacy & Security, then try again.",
+          )
         : platform === "windows"
-          ? "OpenBot can't use the microphone. Turn on microphone access for apps in Windows Settings, under Privacy & security, then try again."
-          : "Microphone access is blocked. Allow it for this site in your browser, then try again.";
+          ? ui(
+              "OpenBot can't use the microphone. Turn on microphone access for apps in Windows Settings, under Privacy & security, then try again.",
+            )
+          : ui(
+              "Microphone access is blocked. Allow it for this site in your browser, then try again.",
+            );
     case "audio-capture":
-      return "OpenBot couldn't find a microphone. Connect one, then try again.";
+      return ui(
+        "OpenBot couldn't find a microphone. Connect one, then try again.",
+      );
     case "network":
-      return "Dictation in this browser needs an internet connection. Check your connection, then try again.";
+      return ui(
+        "Dictation in this browser needs an internet connection. Check your connection, then try again.",
+      );
     case "language-not-supported":
       return platform === "browser"
-        ? "This browser can't take dictation in your language."
-        : "This computer can't take dictation in your language.";
+        ? ui("This browser can't take dictation in your language.")
+        : ui("This computer can't take dictation in your language.");
     case "service-not-allowed":
       return platform === "browser"
-        ? "This browser won't run speech recognition for OpenBot. Try Chrome or Edge."
-        : "Speech recognition isn't available on this computer right now. Try again in a moment.";
+        ? ui(
+            "This browser won't run speech recognition for OpenBot. Try Chrome or Edge.",
+          )
+        : ui(
+            "Speech recognition isn't available on this computer right now. Try again in a moment.",
+          );
     default:
-      return "Dictation stopped unexpectedly. Try again.";
+      return ui("Dictation stopped unexpectedly. Try again.");
   }
 }
 

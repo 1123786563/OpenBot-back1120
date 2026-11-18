@@ -1021,7 +1021,7 @@ describe("where a task stands", () => {
     ] as const) {
       const response = await call(stranger.id, path, method);
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({
+      expect(await response.json()).toMatchObject({
         error: "Couldn't find that task.",
       });
     }

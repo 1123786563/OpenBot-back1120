@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type {
   BrowserApiState,
   LauncherState,
@@ -46,6 +47,7 @@ export function narrationLanguage(): string {
 
 /** Seconds since `startedAt`, ticking once a second while there is one. */
 export function useSecondsSince(startedAt: number | undefined) {
+  useLocale();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (startedAt === undefined) return;
@@ -97,6 +99,7 @@ export function useRecording(
   hooks: RecordingHooks = {},
   { opens = false }: { opens?: boolean } = {},
 ) {
+  useLocale();
   return useRecordingWith({
     recorder: state.recorder,
     /*
@@ -105,7 +108,7 @@ export function useRecording(
      */
     waiting:
       !opens && !state.open
-        ? "Your browser is closed. Open it to record."
+        ? ui("Your browser is closed. Open it to record.")
         : null,
     start: opens
       ? openAndStartBrowserRecordingMutationOptions(queryClient)
@@ -150,6 +153,7 @@ export function useRecordingWith<Started, Stopped>({
   stop: UseMutationOptions<Stopped, Error, void>;
   choice: NarrationChoice;
 } & RecordingHooks) {
+  useLocale();
   const [title, setTitle] = useState("");
   const [finishing, setFinishing] = useState(false);
   /** The narration question is on screen, for the task named when Record was pressed. */
@@ -266,7 +270,10 @@ const WHAT_IT_RECORDS =
 /** What a saved recording held: its actions, and its narrated phrases when there were any. */
 function heldIn(stopped: Stopped): string {
   return stopped.phrases > 0
-    ? `${actionCount(stopped.actions)} and ${phraseCount(stopped.phrases)}`
+    ? ui("{{value0}} and {{value1}}", {
+        value0: String(actionCount(stopped.actions)),
+        value1: String(phraseCount(stopped.phrases)),
+      })
     : actionCount(stopped.actions);
 }
 
@@ -283,16 +290,32 @@ const NOT_SAVED: Record<NonNullable<Stopped["kept"]>, string> = {
 
 /** What the page says once Stop ended a recording, naming it. The sidebar's Browser button says the same. */
 export function stoppedSentence(stopped: Stopped): string {
-  if (stopped.discarded) return `Discarded “${stopped.title}”.`;
+  if (stopped.discarded)
+    return ui("Discarded “{{value0}}”.", { value0: String(stopped.title) });
   if (stopped.empty)
-    return `Nothing was recorded in “${stopped.title}”. ${WHAT_IT_RECORDS}`;
+    return ui("Nothing was recorded in “{{value0}}”. {{value1}}", {
+      value0: String(stopped.title),
+      value1: String(WHAT_IT_RECORDS),
+    });
   if (stopped.kept)
-    return `“${stopped.title}” wasn't saved to your Learning space. ${NOT_SAVED[stopped.kept]}`;
+    return ui("“{{value0}}” wasn't saved to your Learning space. {{value1}}", {
+      value0: String(stopped.title),
+      value1: String(NOT_SAVED[stopped.kept]),
+    });
   if (stopped.sending && stopped.retrying)
-    return `“${stopped.title}” wasn't saved to your Learning space yet. ${stopped.retrying}`;
+    return ui(
+      "“{{value0}}” wasn't saved to your Learning space yet. {{value1}}",
+      { value0: String(stopped.title), value1: String(stopped.retrying) },
+    );
   if (stopped.sending)
-    return `Saving “${stopped.title}” to your Learning space: ${heldIn(stopped)}.`;
-  return `Saved “${stopped.title}” to your Learning space: ${heldIn(stopped)}.`;
+    return ui("Saving “{{value0}}” to your Learning space: {{value1}}.", {
+      value0: String(stopped.title),
+      value1: String(heldIn(stopped)),
+    });
+  return ui("Saved “{{value0}}” to your Learning space: {{value1}}.", {
+    value0: String(stopped.title),
+    value1: String(heldIn(stopped)),
+  });
 }
 
 export function StoppedIcon({
@@ -302,6 +325,7 @@ export function StoppedIcon({
   stopped: Stopped;
   className?: string;
 }) {
+  useLocale();
   if (stopped.discarded)
     return (
       <IconTrash
@@ -341,6 +365,7 @@ export function StoppedRow({
   stopped: Stopped;
   ended?: string;
 }) {
+  useLocale();
   const held = stopped.discarded
     ? "Discarded. You chose not to save it."
     : stopped.empty
@@ -369,6 +394,7 @@ export function StoppedRow({
 
 /** The same, as a line under the bar above a browser shown in the page (hosted OpenBot). */
 export function StoppedNotice({ stopped }: { stopped: Stopped }) {
+  useLocale();
   return (
     <p
       className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm"
@@ -383,6 +409,7 @@ export function StoppedNotice({ stopped }: { stopped: Stopped }) {
 /** The red dot a recording carries, as a recording mark rather than a warning, in an icon's box so it lines up with
  * the icons of the rows around it. The sidebar's Browser button carries the same one. */
 export function RecordingMark({ live }: { live: boolean }) {
+  useLocale();
   return (
     <span
       aria-hidden="true"
@@ -425,6 +452,7 @@ export function RecordingRow({
   /** More actions beside Stop while a recording runs. */
   whileRecording?: ReactNode;
 }) {
+  useLocale();
   if (recording.phase !== "idle") {
     return (
       <Item size="sm">
@@ -444,7 +472,7 @@ export function RecordingRow({
             disabled={recording.stopping || recording.phase !== "recording"}
             onClick={() => void recording.stop()}
           >
-            Stop
+            {ui("Stop")}
           </Button>
         </ItemActions>
       </Item>
@@ -455,7 +483,7 @@ export function RecordingRow({
       size="sm"
       render={
         <form
-          aria-label="Record a task"
+          aria-label={ui("Record a task")}
           onSubmit={(event) => {
             event.preventDefault();
             void recording.record();
@@ -468,7 +496,7 @@ export function RecordingRow({
       </ItemMedia>
       <ItemContent>
         <Input
-          aria-label="Task name"
+          aria-label={ui("Task name")}
           maxLength={200}
           onChange={(event) => recording.setTitle(event.target.value)}
           placeholder={placeholder}
@@ -481,7 +509,7 @@ export function RecordingRow({
       <ItemActions>
         {/* Base UI's Button defaults to type="button", which never submits the form. */}
         <Button disabled={!recording.canRecord} size="sm" type="submit">
-          {recording.starting ? "Starting…" : recordLabel}
+          {recording.starting ? ui("Starting…") : recordLabel}
         </Button>
       </ItemActions>
     </Item>
@@ -501,6 +529,7 @@ export function RecordingBar({
   recording: Recording;
   children?: ReactNode;
 }) {
+  useLocale();
   const [naming, setNaming] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   if (recording.phase !== "idle") {
@@ -524,7 +553,7 @@ export function RecordingBar({
           disabled={recording.stopping || recording.phase !== "recording"}
           onClick={() => void recording.stop()}
         >
-          Stop
+          {ui("Stop")}
         </Button>
       </div>
     );
@@ -539,7 +568,7 @@ export function RecordingBar({
           className="text-red-500"
           data-icon="inline-start"
         />
-        {recording.starting ? "Starting…" : "Record"}
+        {recording.starting ? ui("Starting…") : ui("Record")}
       </PopoverTrigger>
       <PopoverContent
         align="end"
@@ -547,14 +576,14 @@ export function RecordingBar({
         initialFocus={field}
       >
         <PopoverHeader>
-          <PopoverTitle>Record a task</PopoverTitle>
+          <PopoverTitle>{ui("Record a task")}</PopoverTitle>
           <PopoverDescription>
             {recording.waiting ??
-              "Do it once in this browser, and your Bots learn to do it."}
+              ui("Do it once in this browser, and your Bots learn to do it.")}
           </PopoverDescription>
         </PopoverHeader>
         <form
-          aria-label="Record a task"
+          aria-label={ui("Record a task")}
           className="flex flex-col gap-3 [&>[data-slot=narration-switch]]:w-full"
           onSubmit={(event) => {
             event.preventDefault();
@@ -565,16 +594,16 @@ export function RecordingBar({
           }}
         >
           <Input
-            aria-label="Task name"
+            aria-label={ui("Task name")}
             maxLength={200}
             onChange={(event) => recording.setTitle(event.target.value)}
-            placeholder="Name the task, like Submit an expense report"
+            placeholder={ui("Name the task, like Submit an expense report")}
             ref={field}
             value={recording.title}
           />
           {children}
           <Button disabled={!recording.canRecord} size="sm" type="submit">
-            Start recording
+            {ui("Start recording")}
           </Button>
         </form>
       </PopoverContent>

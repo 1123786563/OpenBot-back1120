@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { TriggerConfig, TriggerSuggestion } from "prompt-area/helpers";
 import { commandTrigger, mentionTrigger } from "prompt-area/helpers";
 import { AbstractAvatar } from "@/components/agents/abstract-avatar";
@@ -68,7 +69,7 @@ export function agentTrigger(agents: readonly AgentOption[]): TriggerConfig {
     char: AGENT_TRIGGER,
     accessibilityLabel: "Bot",
     reopenOnChipClick: true,
-    emptyMessage: "No Bots in this conversation",
+    emptyMessage: ui("No Bots in this conversation"),
     onSearch: (query): TriggerSuggestion[] =>
       agents
         .filter((agent) => matches(query, agent.name, agent.description))
@@ -107,7 +108,7 @@ export function slashCommandTrigger(
     char: COMMAND_TRIGGER,
     position: "start",
     accessibilityLabel: "skill",
-    emptyMessage: "No matching skills",
+    emptyMessage: ui("No matching skills"),
     onSearch: (query): TriggerSuggestion[] =>
       commands
         .filter((command) =>

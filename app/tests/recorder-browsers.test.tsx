@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import {
   afterAll,
   afterEach,
@@ -489,7 +490,7 @@ test("Cancel disconnects nothing, and a refused Disconnect says why in the dialo
   );
   dialog = await view.findByRole("dialog");
   fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" }));
-  expect((await within(dialog).findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await within(dialog).findByRole("alert"))).toBe(
     "That browser is already disconnected.",
   );
   expect(view.getByText("Chrome on Mac")).toBeTruthy();

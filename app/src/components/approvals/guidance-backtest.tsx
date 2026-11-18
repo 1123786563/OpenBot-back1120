@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { AuditEvent } from "@/components/audit/audit-cells";
 import {
@@ -19,13 +21,22 @@ const plural = (count: number, one: string, many = `${one}s`) =>
 /** "Agreed with your people on 18 of 22." */
 export function agreementHeadline(report: GuidanceBacktest): string {
   if (report.reviewed === 0)
-    return "The reviewer couldn't answer for any of them.";
-  return `Agreed with your people on ${report.agreed} of ${report.reviewed}.`;
+    return ui("The reviewer couldn't answer for any of them.");
+  return ui("Agreed with your people on {{value0}} of {{value1}}.", {
+    value0: String(report.agreed),
+    value1: String(report.reviewed),
+  });
 }
 
 /** The two ways it disagreed, kept apart: letting through what was denied costs more than asking. */
 export function disagreementLine(report: GuidanceBacktest): string {
-  return `Would have let through ${report.letThroughDenied} your people denied, and asked about ${report.askedAllowed} they allowed.`;
+  return ui(
+    "Would have let through {{value0}} your people denied, and asked about {{value1}} they allowed.",
+    {
+      value0: String(report.letThroughDenied),
+      value1: String(report.askedAllowed),
+    },
+  );
 }
 
 /** What was replayed and what the reviewer had to go on. */
@@ -114,6 +125,7 @@ export function GuidanceBacktestField({
   /** The guidance as it stands now. A replay of other words is not shown as this one's. */
   text: string;
 }) {
+  useLocale();
   if (!preview) return null;
   const current = run.data && run.variables === text ? run.data : null;
   const stale = run.data && run.variables !== text;
@@ -124,18 +136,23 @@ export function GuidanceBacktestField({
   return (
     <div aria-live="polite" className="flex flex-col gap-3">
       <Field aria-labelledby="guidance-backtest">
-        <FieldLabel id="guidance-backtest">On recent decisions</FieldLabel>
+        <FieldLabel id="guidance-backtest">
+          {ui("On recent decisions")}
+        </FieldLabel>
         {preview.calls === 0 ? (
           <FieldDescription>
-            No requests your people decided yet. You can test guidance once
-            they've answered some.
+            {ui(
+              "No requests your people decided yet. You can test guidance once they've answered some.",
+            )}
           </FieldDescription>
         ) : (
           <>
             <FieldDescription>
-              Replays the reviewer with this guidance over the last{" "}
-              {plural(preview.calls, "request")} your people decided. That's{" "}
-              {plural(preview.calls, "model call")}, one for each.
+              {ui("Replays the reviewer with this guidance over the last")}{" "}
+              {plural(preview.calls, "request")}{" "}
+              {ui("your people decided. That's")}{" "}
+              {plural(preview.calls, "model call")}
+              {ui(", one for each.")}
             </FieldDescription>
             <div>
               <Button
@@ -146,21 +163,24 @@ export function GuidanceBacktestField({
                 variant="outline"
               >
                 {run.isPending
-                  ? "Testing…"
-                  : `Test on ${plural(preview.calls, "request")}`}
+                  ? ui("Testing…")
+                  : ui("Test on {{value0}}", {
+                      value0: String(plural(preview.calls, "request")),
+                    })}
               </Button>
             </div>
           </>
         )}
         {run.error && run.variables === text ? (
           <p className="text-destructive text-sm" role="alert">
-            {run.error.message}
+            {<ErrorDetails error={run.error} />}
           </p>
         ) : null}
         {stale && !run.isPending ? (
           <p className="text-amber-600 text-sm dark:text-amber-500">
-            You've changed the guidance since it was tested. Test it again to
-            see what your edit changes.
+            {ui(
+              "You've changed the guidance since it was tested. Test it again to see what your edit changes.",
+            )}
           </p>
         ) : null}
       </Field>

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { approvalPhrase } from "@openbot/shared/tool-name";
 import { IconCircleCheck } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -12,13 +14,27 @@ import { queryClient } from "@/query-client";
 
 /** A kind of action, as the start of a sentence about where it is allowed. */
 const KIND_WORDS: Record<ActionKind, string> = {
-  deleting: "Deleting",
-  sending: "Sending to other people",
-  sharing: "Sharing",
-  publishing: "Posting",
-  payments: "Paying",
-  credentials: "Changing sign-in details",
-  security_settings: "Changing security settings",
+  get deleting() {
+    return ui("Deleting");
+  },
+  get sending() {
+    return ui("Sending to other people");
+  },
+  get sharing() {
+    return ui("Sharing");
+  },
+  get publishing() {
+    return ui("Posting");
+  },
+  get payments() {
+    return ui("Paying");
+  },
+  get credentials() {
+    return ui("Changing sign-in details");
+  },
+  get security_settings() {
+    return ui("Changing security settings");
+  },
 };
 
 /**
@@ -29,8 +45,11 @@ const KIND_WORDS: Record<ActionKind, string> = {
  */
 function allowedWords(grant: ConversationGrant): string {
   if (grant.toolRef.startsWith("computer_") && grant.kind)
-    return `${KIND_WORDS[grant.kind]} on ${grant.scope}`;
-  const phrase = approvalPhrase(grant);
+    return ui("{{value0}} on {{value1}}", {
+      value0: String(KIND_WORDS[grant.kind]),
+      value1: String(grant.scope),
+    });
+  const phrase = approvalPhrase(grant, ui);
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);
 }
 
@@ -43,6 +62,7 @@ function allowedWords(grant: ConversationGrant): string {
  * allowed here.
  */
 export function ConversationAllowances({ threadId }: { threadId: string }) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const revoke = useMutation(
     revokeConversationGrantMutationOptions(queryClient),
@@ -53,7 +73,7 @@ export function ConversationAllowances({ threadId }: { threadId: string }) {
   if (grants.length === 0) return null;
   return (
     <section
-      aria-label="Allowed in this conversation"
+      aria-label={ui("Allowed in this conversation")}
       className="flex flex-col gap-1 pb-2"
     >
       {grants.map((grant) => {
@@ -68,25 +88,30 @@ export function ConversationAllowances({ threadId }: { threadId: string }) {
               className="size-4 shrink-0 text-muted-foreground"
             />
             <p className="min-w-0 flex-1 truncate text-muted-foreground">
-              <span className="font-medium text-foreground">{action}</span> is
-              allowed in this conversation.
+              {uiNodes("{{slot0}}is allowed in this conversation.", [
+                <span key="slot0" className="font-medium text-foreground">
+                  {action}
+                </span>,
+              ])}
             </p>
             <Button
-              aria-label={`Turn off: ${action}`}
+              aria-label={ui("Turn off: {{value0}}", {
+                value0: String(action),
+              })}
               className="shrink-0"
               disabled={revoke.isPending}
               onClick={() => revoke.mutate(grant.id)}
               size="xs"
               variant="ghost"
             >
-              Turn off
+              {ui("Turn off")}
             </Button>
           </div>
         );
       })}
       {revoke.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {revoke.error.message}
+          {<ErrorDetails error={revoke.error} />}
         </p>
       ) : null}
     </section>

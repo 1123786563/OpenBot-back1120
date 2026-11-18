@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -9,6 +10,7 @@ import { agentQueryOptions } from "@/lib/agents/queries";
 import { shownSubtitle } from "@/lib/agents/subtitle";
 
 function Tag({ children }: { children: ReactNode }) {
+  useLocale();
   return (
     <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
       {children}
@@ -17,6 +19,7 @@ function Tag({ children }: { children: ReactNode }) {
 }
 
 function ProfileSkeleton() {
+  useLocale();
   return (
     <div className="flex w-full flex-col gap-6 p-8">
       <header className="flex flex-col items-center gap-3">
@@ -56,6 +59,7 @@ export function AgentProfile({
   /** What the panel offers about the conversation rather than the Bot, below a separator. */
   footer?: ReactNode;
 }) {
+  useLocale();
   /** The full dialog, opened over the chat rather than navigating away from it. */
   const navigate = useNavigate();
   const agent = useQuery(agentQueryOptions(agentId));
@@ -66,7 +70,7 @@ export function AgentProfile({
   if (agent.error || !agent.data) {
     return (
       <p className="p-8 text-sm text-destructive" role="alert">
-        Couldn't load this Bot.
+        {ui("Couldn't load this Bot.")}
       </p>
     );
   }
@@ -93,14 +97,16 @@ export function AgentProfile({
         </div>
 
         <div className="flex flex-wrap justify-center gap-1.5">
-          <Tag>{profile.visibility === "private" ? "Private" : "Public"}</Tag>
-          {profile.systemOwned ? <Tag>System owned</Tag> : null}
+          <Tag>
+            {profile.visibility === "private" ? ui("Private") : ui("Public")}
+          </Tag>
+          {profile.systemOwned ? <Tag>{ui("System owned")}</Tag> : null}
         </div>
       </header>
 
       <section className="grid gap-2">
         <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          What it does
+          {ui("What it does")}
         </h2>
         <p className="text-sm whitespace-pre-wrap text-pretty">
           {profile.roleDescription}
@@ -114,7 +120,7 @@ export function AgentProfile({
             void navigate({ search: { agent: agentId }, to: "/channel/new" })
           }
         >
-          New conversation
+          {ui("New conversation")}
         </Button>
         <Button
           className="w-full text-sm!"
@@ -123,7 +129,7 @@ export function AgentProfile({
           )}
           variant="outline"
         >
-          Open {profile.name}
+          {uiNodes("Open {{slot0}}", [profile.name])}
         </Button>
       </div>
       {footer ? (

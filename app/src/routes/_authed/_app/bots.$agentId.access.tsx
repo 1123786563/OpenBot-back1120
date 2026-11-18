@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { BotApprovalRules } from "@/components/approvals/bot-rules";
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/_authed/_app/bots/$agentId/access")({
  * personal edition has no memory (see `offersMemory`), so they are here.
  */
 function AccessPage() {
+  useLocale();
   const { agentId } = Route.useParams();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -26,10 +28,12 @@ function AccessPage() {
       agentId={agentId}
       description={
         personal
-          ? "Manage what this Bot can use, what it asks you before doing, what it works on, and its check-ins."
-          : "Manage the skills, apps, and other Bots this Bot can use."
+          ? ui(
+              "Manage what this Bot can use, what it asks you before doing, what it works on, and its check-ins.",
+            )
+          : ui("Manage the skills, apps, and other Bots this Bot can use.")
       }
-      title={personal ? "What it can do" : "Skills and access"}
+      title={personal ? ui("What it can do") : ui("Skills and access")}
     >
       {(agent) => (
         <>

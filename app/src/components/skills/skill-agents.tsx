@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { agentListQueryOptions } from "@/lib/agents/queries";
@@ -23,6 +25,7 @@ export function SkillAgents({
   slug: string;
   grantedTo: string[];
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const { data: agents } = useQuery(agentListQueryOptions());
   const mine = (agents ?? []).filter((agent) => agent.mine);
@@ -36,10 +39,10 @@ export function SkillAgents({
 
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-medium">Bots</h2>
+      <h2 className="text-sm font-medium">{ui("Bots")}</h2>
       {mine.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          You don't have a Bot of your own yet.
+          {ui("You don't have a Bot of your own yet.")}
         </p>
       ) : (
         <>
@@ -66,14 +69,14 @@ export function SkillAgents({
             })}
           </div>
           <p className="text-muted-foreground text-xs">
-            Bots you pick here offer <code>/{slug}</code> when you type{" "}
-            <code>/</code>.
+            {ui("Bots you pick here offer")} <code>/{slug}</code>{" "}
+            {ui("when you type")} <code>/</code>.
           </p>
         </>
       )}
       {grant.error ? (
         <p className="text-destructive text-xs" role="alert">
-          {grant.error.message}
+          {<ErrorDetails error={grant.error} />}
         </p>
       ) : null}
     </div>

@@ -219,7 +219,7 @@ describe("connecting", () => {
     }
     const refused = await mint();
     expect(refused.status).toBe(429);
-    expect(await refused.json()).toEqual({
+    expect(await refused.json()).toMatchObject({
       error:
         "Too many connection codes were asked for at once. Wait a few minutes and try again.",
     });
@@ -277,7 +277,7 @@ describe("connecting", () => {
       json: { code, label: "Chrome on macOS", installId: "9".repeat(32) },
     });
     expect(failed.status).toBe(500);
-    expect(await failed.json()).toEqual({
+    expect(await failed.json()).toMatchObject({
       error: "This browser could not be connected. Try again.",
     });
     const listed = (await (
@@ -420,7 +420,7 @@ describe("using the bearer", () => {
       { method: "DELETE", headers: COOKIE },
     );
     expect(fromSettings.status).toBe(500);
-    expect(await fromSettings.json()).toEqual({
+    expect(await fromSettings.json()).toMatchObject({
       error: "That browser could not be disconnected. Try again.",
     });
     const fromTheRecorder = await call(
@@ -429,7 +429,7 @@ describe("using the bearer", () => {
       { method: "DELETE", headers: bearer(made.token) },
     );
     expect(fromTheRecorder.status).toBe(500);
-    expect(await fromTheRecorder.json()).toEqual({
+    expect(await fromTheRecorder.json()).toMatchObject({
       error: "This browser could not be disconnected. Try again.",
     });
     // Still connected: neither disconnect happened without its row.
@@ -612,7 +612,9 @@ describe("using the bearer", () => {
       },
     );
     expect(answer.status).toBe(401);
-    expect(await answer.json()).toEqual({ error: "Authentication required." });
+    expect(await answer.json()).toMatchObject({
+      error: "Authentication required.",
+    });
     expect(transcribed).toBe(0);
   });
 

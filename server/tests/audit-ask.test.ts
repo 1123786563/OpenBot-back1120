@@ -301,7 +301,7 @@ describe("POST /api/admin/audit-events/ask", () => {
     const response = await ask(app, recorded.fixedOnRetry.text);
 
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "Couldn't turn that question into filters. Ask it another way, or set the filters yourself.",
     });
@@ -319,7 +319,7 @@ describe("POST /api/admin/audit-events/ask", () => {
     const response = await ask(app, "What did Bots do in Gmail today?");
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "OpenBot needs a model key to answer a question. Add one on the Credentials page, or set the filters yourself.",
     });
@@ -369,7 +369,9 @@ describe("POST /api/admin/audit-events/ask", () => {
       const { app } = appFor({});
       const response = await ask(app, text);
       expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "Ask a question first." });
+      expect(await response.json()).toMatchObject({
+        error: "Ask a question first.",
+      });
       expect(mock.getRequests()).toHaveLength(0);
     },
   );

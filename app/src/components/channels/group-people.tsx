@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconUser, IconUsers } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
@@ -33,6 +35,7 @@ import {
  * here. Everyone added sees the whole conversation.
  */
 export function GroupPeopleButton({ channelId }: { channelId: string }) {
+  useLocale();
   const queryClient = useQueryClient();
   const group = useQuery(groupQueryOptions(channelId));
   const me = useQuery(currentUserQueryOptions()).data;
@@ -65,10 +68,11 @@ export function GroupPeopleButton({ channelId }: { channelId: string }) {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>People in this group</DialogTitle>
+            <DialogTitle>{ui("People in this group")}</DialogTitle>
             <DialogDescription>
-              Everyone here sees the whole conversation. Every Bot in it answers
-              them.
+              {ui(
+                "Everyone here sees the whole conversation. Every Bot in it answers them.",
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 grid gap-4 overflow-y-auto">
@@ -85,10 +89,12 @@ export function GroupPeopleButton({ channelId }: { channelId: string }) {
                       </ItemMedia>
                       <ItemContent>
                         <ItemTitle>
-                          {self ? "You" : (person.name ?? person.email)}
+                          {self ? ui("You") : (person.name ?? person.email)}
                         </ItemTitle>
                         <ItemDescription>
-                          {person.creator ? "Started this group" : person.email}
+                          {person.creator
+                            ? ui("Started this group")
+                            : person.email}
                         </ItemDescription>
                       </ItemContent>
                       {removable ? (
@@ -96,15 +102,17 @@ export function GroupPeopleButton({ channelId }: { channelId: string }) {
                           <Button
                             aria-label={
                               self
-                                ? "Leave this group"
-                                : `Remove ${person.email}`
+                                ? ui("Leave this group")
+                                : ui("Remove {{value0}}", {
+                                    value0: String(person.email),
+                                  })
                             }
                             disabled={remove.isPending}
                             onClick={() => remove.mutate(person.userId)}
                             size="sm"
                             variant="outline"
                           >
-                            {self ? "Leave" : "Remove"}
+                            {self ? ui("Leave") : ui("Remove")}
                           </Button>
                         </ItemActions>
                       ) : null}
@@ -121,9 +129,9 @@ export function GroupPeopleButton({ channelId }: { channelId: string }) {
               }}
             >
               <Input
-                aria-label="Their email"
+                aria-label={ui("Their email")}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="Add someone by email"
+                placeholder={ui("Add someone by email")}
                 type="email"
                 value={email}
               />
@@ -132,12 +140,12 @@ export function GroupPeopleButton({ channelId }: { channelId: string }) {
                 size="sm"
                 type="submit"
               >
-                Add
+                {ui("Add")}
               </Button>
             </form>
             {add.error || remove.error ? (
               <p className="text-destructive text-sm" role="alert">
-                {(add.error ?? remove.error)?.message}
+                {<ErrorDetails error={add.error ?? remove.error} />}
               </p>
             ) : null}
           </DialogBody>

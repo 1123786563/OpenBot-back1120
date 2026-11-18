@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 /**
  * What a command printed.
  *
@@ -22,13 +23,14 @@ export function CommandOutput({
   /** The command ran too long and was stopped, so what is here is not the whole story. */
   timedOut?: boolean;
 }) {
+  useLocale();
   const failed = typeof exitCode === "number" && exitCode !== 0;
 
   return (
     <div className="space-y-1.5">
       {truncated ? (
         <p className="text-muted-foreground text-xs">
-          The output was too long. This is the end of it.
+          {ui("The output was too long. This is the end of it.")}
         </p>
       ) : null}
       {output ? (
@@ -37,17 +39,17 @@ export function CommandOutput({
         </pre>
       ) : (
         <p className="text-muted-foreground text-xs italic">
-          It printed nothing.
+          {ui("It printed nothing.")}
         </p>
       )}
       {timedOut ? (
         <p className="text-destructive text-xs">
-          It ran too long and was stopped.
+          {ui("It ran too long and was stopped.")}
         </p>
       ) : null}
       {failed ? (
         <p className="text-amber-600 text-xs dark:text-amber-500">
-          Exit code {exitCode}.
+          {ui("Exit code")} {exitCode}.
         </p>
       ) : null}
     </div>

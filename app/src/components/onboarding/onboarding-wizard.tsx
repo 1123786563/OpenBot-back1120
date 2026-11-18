@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { OnboardingFrame, StepTitle } from "./onboarding-frame";
@@ -252,7 +253,7 @@ export function OnboardingWizard({
             step?.primaryHidden
               ? undefined
               : {
-                  label: step?.primaryLabel ?? "Continue",
+                  label: step?.primaryLabel ?? ui("Continue"),
                   disabled:
                     step?.primaryDisabled === true ||
                     step?.primaryPending === true,

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectAccountMutationOptions } from "@/lib/plugins/mutations";
@@ -200,7 +201,7 @@ export function useConnectInNewTab() {
     error: connect.isError
       ? connect.error instanceof Error
         ? connect.error.message
-        : "Couldn't connect that account."
+        : ui("Couldn't connect that account.")
       : null,
   };
 }

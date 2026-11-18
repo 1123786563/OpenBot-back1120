@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { PageSection } from "@/components/layout/page-shell";
@@ -44,6 +45,7 @@ export function ControlsSection({
   description?: ReactNode | ((data: EnterpriseOverview) => ReactNode);
   children: (controls: Controls) => ReactNode;
 }) {
+  useLocale();
   const overview = useQuery(enterpriseOverviewQueryOptions());
   const setCapability = useMutation(setCapabilityMutationOptions(queryClient));
   const setSetting = useMutation(
@@ -59,7 +61,7 @@ export function ControlsSection({
     return (
       <PageSection title={title}>
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load these settings. Reload the page.
+          {ui("Couldn't load these settings. Reload the page.")}
         </p>
       </PageSection>
     );

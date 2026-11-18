@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconPin, IconPinnedOff, IconTrash } from "@tabler/icons-react";
 import {
   useInfiniteQuery,
@@ -30,6 +32,7 @@ export function ConversationActions({
   leave: () => Promise<unknown>;
   name: string;
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const pinned = useInfiniteQuery({
     ...channelListQueryOptions(),
@@ -47,34 +50,35 @@ export function ConversationActions({
     <section className="grid gap-2">
       {/* Headed like the profile's own sections, so it reads as about the conversation, not the Bot. */}
       <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        This conversation
+        {ui("This conversation")}
       </h2>
       <div className="flex flex-col gap-2">
         {/* The heading names the conversation, so the labels drop it; screen readers still hear it. */}
         <Button
-          aria-label={pinned ? "Unpin conversation" : "Pin conversation"}
+          aria-label={
+            pinned ? ui("Unpin conversation") : ui("Pin conversation")
+          }
           className="w-full text-sm!"
           disabled={pinned === undefined || setPinned.isPending}
           onClick={() => setPinned.mutate({ channelId, pinned: !pinned })}
           variant="outline"
         >
           {pinned ? <IconPinnedOff /> : <IconPin />}
-          {pinned ? "Unpin" : "Pin"}
+          {pinned ? ui("Unpin") : ui("Pin")}
         </Button>
         <Button
-          aria-label="Delete conversation…"
+          aria-label={ui("Delete conversation…")}
           className="w-full text-sm!"
           onClick={() => setConfirming(true)}
           variant="destructive"
         >
-          <IconTrash />
-          Delete…
+          {uiNodes("{{slot0}}Delete…", [<IconTrash key="slot0" />])}
         </Button>
       </div>
       {/* No toast in this app: why a pin did not take is said where it was asked for. */}
       {setPinned.error ? (
         <p className="text-destructive text-xs" role="alert">
-          {setPinned.error.message}
+          {<ErrorDetails error={setPinned.error} />}
         </p>
       ) : null}
       <DeleteConversationDialog

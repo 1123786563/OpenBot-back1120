@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { RESEARCH_ROLES } from "@openbot/shared/research";
 import { IconChevronRight, IconPlugOff, IconWorld } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -84,10 +85,19 @@ function firstSentence(text: string): string {
 }
 
 function summary(held: number, total: number, unavailable?: boolean): string {
-  if (unavailable) return held === 1 ? "1 tool" : `${held} tools`;
+  if (unavailable)
+    return held === 1
+      ? ui("1 tool")
+      : ui("{{value0}} tools", { value0: String(held) });
   if (held === 0) return "None";
-  if (held === total) return total === 1 ? "1 tool" : `All ${total} tools`;
-  return `${held} of ${total} tools`;
+  if (held === total)
+    return total === 1
+      ? ui("1 tool")
+      : ui("All {{value0}} tools", { value0: String(total) });
+  return ui("{{value0}} of {{value1}} tools", {
+    value0: String(held),
+    value1: String(total),
+  });
 }
 
 export function SkillTools({
@@ -97,6 +107,7 @@ export function SkillTools({
   selected: string[];
   onChange: (refs: string[]) => void;
 }) {
+  useLocale();
   const plugins = useQuery(pluginsPageQueryOptions());
   const [open, setOpen] = useState<string | null>(null);
   const held = new Set(selected);
@@ -117,7 +128,7 @@ export function SkillTools({
   if (!plugins.data) {
     return (
       <p className="mt-4 text-destructive text-sm" role="alert">
-        Couldn't load the tools. Reload the page.
+        {ui("Couldn't load the tools. Reload the page.")}
       </p>
     );
   }
@@ -151,12 +162,12 @@ export function SkillTools({
     })),
     {
       key: "research",
-      title: "Web research",
+      title: ui("Web research"),
       media: <IconWorld />,
       tools: RESEARCH_ROLES.map((role) => ({
         ref: role.ref,
         title: role.label,
-        description: "Uses whichever research app the Bot has.",
+        description: ui("Uses whichever research app the Bot has."),
         writes: false,
       })),
     },
@@ -164,13 +175,13 @@ export function SkillTools({
       ? [
           {
             key: "elsewhere",
-            title: "Not available here",
+            title: ui("Not available here"),
             media: <IconPlugOff />,
             unavailable: true,
             tools: elsewhere.map((ref) => ({
               ref,
               title: ref,
-              description: "No app here offers this.",
+              description: ui("No app here offers this."),
               writes: false,
             })),
           },
@@ -198,15 +209,19 @@ export function SkillTools({
                   <ItemTitle>{group.title}</ItemTitle>
                   <ItemDescription>
                     {group.unavailable
-                      ? "This skill asks for these, but no app here offers them."
+                      ? ui(
+                          "This skill asks for these, but no app here offers them.",
+                        )
                       : count > 0
                         ? group.tools
                             .filter((tool) => held.has(tool.ref))
                             .map((tool) => tool.title)
                             .join(", ")
                         : group.tools.length === 1
-                          ? "1 tool"
-                          : `${group.tools.length} tools`}
+                          ? ui("1 tool")
+                          : ui("{{value0}} tools", {
+                              value0: String(group.tools.length),
+                            })}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -234,8 +249,12 @@ export function SkillTools({
               <DialogTitle>{current.title}</DialogTitle>
               <DialogDescription>
                 {current.unavailable
-                  ? "These do nothing until an admin adds the app. Untick one to remove it from the skill."
-                  : "Using this skill loads the tools you tick for that reply."}
+                  ? ui(
+                      "These do nothing until an admin adds the app. Untick one to remove it from the skill.",
+                    )
+                  : ui(
+                      "Using this skill loads the tools you tick for that reply.",
+                    )}
               </DialogDescription>
             </DialogHeader>
             <DialogBody className="mt-4 overflow-y-auto">
@@ -258,11 +277,13 @@ export function SkillTools({
                        */}
                       {tool.writes ? (
                         <span className="text-amber-600 text-xs dark:text-amber-500">
-                          changes things
+                          {ui("changes things")}
                         </span>
                       ) : null}
                       <Checkbox
-                        aria-label={`Use ${tool.title}`}
+                        aria-label={ui("Use {{value0}}", {
+                          value0: String(tool.title),
+                        })}
                         checked={held.has(tool.ref)}
                         onCheckedChange={(checked) =>
                           toggle(tool.ref, checked === true)
@@ -295,12 +316,12 @@ export function SkillTools({
                   variant="ghost"
                 >
                   {current.tools.every((tool) => held.has(tool.ref))
-                    ? "Clear all"
-                    : "Select all"}
+                    ? ui("Clear all")
+                    : ui("Select all")}
                 </Button>
               )}
               <Button onClick={() => setOpen(null)} size="sm" type="button">
-                Done
+                {ui("Done")}
               </Button>
             </DialogFooter>
           </DialogContent>

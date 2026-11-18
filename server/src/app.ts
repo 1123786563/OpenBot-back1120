@@ -191,6 +191,7 @@ import {
   type UserInstructionsStore,
 } from "./user-instructions";
 import type { UserPreferencesStore } from "./user-preferences";
+import { interfaceErrors } from "./interface-errors";
 import { userPreferencesRoutes } from "./user-preferences-routes";
 import { createVoiceProvider } from "./voice/provider";
 import { createVoiceRoutes } from "./voice/routes";
@@ -570,6 +571,7 @@ export function createApp(
   profileStore?: ProfileStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
+  app.use("/api/*", interfaceErrors);
   // First, in every auth mode: a page from another website changes nothing here and opens no socket.
   // See request-trust.ts for what passes and why.
   app.use("/api/*", createOriginGuard(config));

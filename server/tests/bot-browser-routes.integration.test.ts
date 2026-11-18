@@ -610,7 +610,9 @@ describe("who reaches a Bot's browser", () => {
     ] as const) {
       const answer = await post("cy", rest, json);
       expect([rest, answer.status]).toEqual([rest, 404]);
-      expect(await answer.json()).toEqual({ error: "There is no such Bot." });
+      expect(await answer.json()).toMatchObject({
+        error: "There is no such Bot.",
+      });
     }
     expect(asked.slice(before)).toEqual([]);
     expect((await call(browser())).status).toBe(401);
@@ -660,7 +662,7 @@ describe("the bar", () => {
       url: "https://example.com/",
     });
     expect(refused.status).toBe(409);
-    expect(await refused.json()).toEqual({
+    expect(await refused.json()).toMatchObject({
       error: "Take control of the Bot's browser first.",
     });
     expect(botOf(BOT).history).not.toContain(botBrowserComputerPaths.navigate);
@@ -708,7 +710,7 @@ describe("the bar", () => {
     ] as const) {
       const answer = await post("ada", rest, json);
       expect(answer.status).toBe(400);
-      expect(await answer.json()).toEqual({
+      expect(await answer.json()).toMatchObject({
         error: "Only web addresses open here.",
       });
     }
@@ -833,7 +835,7 @@ describe("through OpenBot's own HTTP server", () => {
       const asking = Date.now();
       const stuck = await http("");
       expect(stuck.status).toBe(504);
-      expect(await stuck.json()).toEqual({
+      expect(await stuck.json()).toMatchObject({
         error:
           "The Bot's browser is taking too long to answer. The page may still be loading.",
       });
@@ -861,7 +863,7 @@ describe("recording in a Bot's browser", () => {
     const requestId = await takeWheel("ada");
     const notBen = await record("ben");
     expect(notBen.status).toBe(409);
-    expect(await notBen.json()).toEqual({
+    expect(await notBen.json()).toMatchObject({
       error: "Take control of the Bot's browser first.",
     });
     expect(await held()).toEqual([]);
@@ -1118,7 +1120,7 @@ describe("recording in a Bot's browser", () => {
     try {
       const refused = await record("ada", "Unaudited");
       expect(refused.status).toBe(500);
-      expect(await refused.json()).toEqual({
+      expect(await refused.json()).toMatchObject({
         error: "The Recorder could not be connected. Try again.",
       });
     } finally {
@@ -1217,7 +1219,9 @@ describe("recording in a Bot's browser", () => {
       },
     );
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toEqual({ error: SHARED_COMPUTER_RECORD });
+    expect(await refused.json()).toMatchObject({
+      error: SHARED_COMPUTER_RECORD,
+    });
     expect(await held()).toEqual([]);
     expect(
       asked.filter((line) => line.includes(botBrowserComputerPaths.recording)),
@@ -1243,7 +1247,7 @@ describe("recording in a Bot's browser", () => {
     };
     const refused = await record("ada", "Will not start");
     expect(refused.status).toBe(502);
-    expect(await refused.json()).toEqual({
+    expect(await refused.json()).toMatchObject({
       error: "The Recorder could not be connected. Try again.",
     });
     expect(await held()).toEqual([]);
@@ -1338,7 +1342,7 @@ describe("clearing a Bot's browser", () => {
     expect((await clear("cy")).status).toBe(404);
     const underTheBot = await clear("ada");
     expect(underTheBot.status).toBe(409);
-    expect(await underTheBot.json()).toEqual({
+    expect(await underTheBot.json()).toMatchObject({
       error: "Take control of the Bot's browser first.",
     });
     const requestId = await takeWheel("ada");
@@ -1382,7 +1386,7 @@ describe("clearing a Bot's browser", () => {
     try {
       const cleared = await clear("ada");
       expect(cleared.status).toBe(500);
-      expect(await cleared.json()).toEqual({
+      expect(await cleared.json()).toMatchObject({
         error:
           "The Bot's browser was cleared, but OpenBot couldn't finish. Clear it again.",
       });

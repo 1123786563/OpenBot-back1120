@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type BotBrowserApiState,
   botBrowserApiPaths,
@@ -52,7 +53,7 @@ export function startBotBrowserRecordingMutationOptions(
             title: variables.title,
             ...(variables.language ? { language: variables.language } : {}),
           },
-          fallback: "Couldn't start recording. Try again.",
+          fallback: ui("Couldn't start recording. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBotBrowser(queryClient, botId),
@@ -74,7 +75,7 @@ export function stopBotBrowserRecordingMutationOptions(
         await client(botBrowserApiPaths.recording(botId), {
           method: "POST",
           body: { action: "stop" },
-          fallback: "Couldn't stop recording. Try again.",
+          fallback: ui("Couldn't stop recording. Try again."),
         })
       ).json(),
     onSettled: () => invalidateBotBrowser(queryClient, botId),
@@ -94,7 +95,7 @@ export function botBrowserTabsMutationOptions(
         await client(botBrowserApiPaths.tabs(botId), {
           method: "POST",
           body: request,
-          fallback: "Couldn't change the tabs. Try again.",
+          fallback: ui("Couldn't change the tabs. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBotBrowser(queryClient, botId),
@@ -114,7 +115,7 @@ export function navigateBotBrowserMutationOptions(
         await client(botBrowserApiPaths.navigate(botId), {
           method: "POST",
           body: request,
-          fallback: "Couldn't open that page. Try again.",
+          fallback: ui("Couldn't open that page. Try again."),
         })
       ).json(),
     onSuccess: () => invalidateBotBrowser(queryClient, botId),
@@ -134,7 +135,7 @@ export function clearBotBrowserMutationOptions(
       (
         await client(botBrowserApiPaths.clear(botId), {
           method: "POST",
-          fallback: "Couldn't clear the browser. Try again.",
+          fallback: ui("Couldn't clear the browser. Try again."),
         })
       ).json(),
     onSettled: () => invalidateBotBrowser(queryClient, botId),

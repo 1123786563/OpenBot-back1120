@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconChecklist,
   IconEyeCheck,
@@ -48,6 +50,7 @@ import { HOST_LABELS, LabelSelect, RuleForm, RuleRow } from "./rules";
  * administrators change them in Admin → Approvals. Rules for a single Bot are on that Bot's page.
  */
 export function ApprovalSettings() {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const me = useQuery(currentUserQueryOptions()).data;
   // The personal edition has no Admin to point at, and no team for team settings to govern.
@@ -90,14 +93,14 @@ export function ApprovalSettings() {
     <>
       {error ? (
         <p className="mt-6 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {me?.role === "admin" && !personal ? (
         <p className="mt-6 text-muted-foreground text-sm">
-          Team settings and shared account requests are in{" "}
+          {ui("Team settings and shared account requests are in")}{" "}
           <Link className="underline underline-offset-4" to="/admin/approvals">
-            Admin → Approvals
+            {ui("Admin → Approvals")}
           </Link>
           .
         </p>
@@ -111,13 +114,17 @@ export function ApprovalSettings() {
            * says.
            */
           <>
-            {ALWAYS_ASKS} They also ask before every edit or command in a folder
-            on your own computer. {HANDED_TO_YOU} Bots can create, edit, and
-            delete files in their own workspace without asking, unless your
-            settings or rules say so.
+            {ui(ALWAYS_ASKS)}{" "}
+            {ui(
+              "They also ask before every edit or command in a folder on your own computer.",
+            )}{" "}
+            {ui(HANDED_TO_YOU)}{" "}
+            {ui(
+              "Bots can create, edit, and delete files in their own workspace without asking, unless your settings or rules say so.",
+            )}
           </>
         }
-        title="Before a Bot acts"
+        title={ui("Before a Bot acts")}
       >
         <PageRows>
           <Item size="sm">
@@ -125,14 +132,14 @@ export function ApprovalSettings() {
               <IconHandStop />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>{ASK_FIRST_TITLE}</ItemTitle>
+              <ItemTitle>{ui(ASK_FIRST_TITLE)}</ItemTitle>
               <ItemDescription className="line-clamp-none">
-                {ASK_FIRST_DESCRIPTION}
+                {ui(ASK_FIRST_DESCRIPTION)}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label={ASK_FIRST_TITLE}
+                aria-label={ui(ASK_FIRST_TITLE)}
                 checked={inbox.data?.enabled ?? false}
                 disabled={inbox.isLoading || preferences.isPending}
                 onCheckedChange={(enabled) => preferences.mutate({ enabled })}
@@ -147,15 +154,17 @@ export function ApprovalSettings() {
                   <IconEyeCheck />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle id="auto-review-title">Auto-review</ItemTitle>
+                  <ItemTitle id="auto-review-title">
+                    {ui("Auto-review")}
+                  </ItemTitle>
                   <ItemDescription
                     className="line-clamp-none"
                     id="auto-review-description"
                   >
-                    {enforced ? "An admin requires this. " : ""}
-                    Before a Bot does something that could affect your accounts
-                    or share information, OpenBot checks it against your request
-                    and your rules. If it can't tell, it asks you.
+                    {uiNodes(
+                      "{{slot0}}Before a Bot does something that could affect your accounts or share information, OpenBot checks it against your request and your rules. If it can't tell, it asks you.",
+                      [enforced ? ui("An admin requires this. ") : ""],
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -178,21 +187,24 @@ export function ApprovalSettings() {
                   <IconTerminal2 />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Commands on your computer</ItemTitle>
+                  <ItemTitle>{ui("Commands on your computer")}</ItemTitle>
                   <ItemDescription className="line-clamp-none">
-                    {inbox.data.hostCommands &&
-                    inbox.data.hostCommands !==
-                      inbox.data.preferences.hostCommands
-                      ? `An admin limits this to "${HOST_LABELS[inbox.data.hostCommands]}". `
-                      : ""}
-                    The OpenBot desktop app still shows you each command before
-                    it runs.
+                    {uiNodes(
+                      "{{slot0}}The OpenBot desktop app still shows you each command before it runs.",
+                      [
+                        inbox.data.hostCommands &&
+                        inbox.data.hostCommands !==
+                          inbox.data.preferences.hostCommands
+                          ? `An admin limits this to "${HOST_LABELS[inbox.data.hostCommands]}". `
+                          : "",
+                      ],
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <LabelSelect
                     disabled={preferences.isPending}
-                    label="Commands on your computer"
+                    label={ui("Commands on your computer")}
                     labels={HOST_LABELS}
                     onChange={(hostCommands) =>
                       preferences.mutate({ hostCommands })
@@ -208,22 +220,26 @@ export function ApprovalSettings() {
       <PageSection
         description={
           <>
-            The strictest matching rule wins. An "ask" rule beats an "allow"
-            rule.{personal ? " " : " Team rules are locked. "}Rules for one Bot
-            are on{" "}
+            {ui(
+              'The strictest matching rule wins. An "ask" rule beats an "allow" rule.',
+            )}
+            {personal ? " " : ui(" Team rules are locked. ")}
+            {ui("Rules for one Bot are on")}{" "}
             <Link className="underline underline-offset-4" to="/bots">
-              that Bot's page
+              {ui("that Bot's page")}
             </Link>
             .
             {rulesOff
-              ? " An admin has turned off personal rules. Yours are kept but don't apply."
+              ? ui(
+                  " An admin has turned off personal rules. Yours are kept but don't apply.",
+                )
               : ""}
           </>
         }
-        title="Rules for every Bot"
+        title={ui("Rules for every Bot")}
       >
         {saved === 0 ? (
-          <PageEmpty icon={IconChecklist} title="No rules yet" />
+          <PageEmpty icon={IconChecklist} title={ui("No rules yet")} />
         ) : null}
         {saved > 0 || canAdd ? (
           <PageRows>
@@ -257,7 +273,11 @@ export function ApprovalSettings() {
             {canAdd ? (
               <>
                 {saved > 0 ? <Separator /> : null}
-                <RuleForm botField={false} label="Add a rule" save={addRule} />
+                <RuleForm
+                  botField={false}
+                  label={ui("Add a rule")}
+                  save={addRule}
+                />
               </>
             ) : null}
           </PageRows>
@@ -265,8 +285,10 @@ export function ApprovalSettings() {
       </PageSection>
       {agents.data !== undefined && otherBots.length > 0 ? (
         <PageSection
-          description="These don't match a Bot you can open. They still apply to any Bot they match. Remove the ones you don't want."
-          title="Rules for other Bots"
+          description={ui(
+            "These don't match a Bot you can open. They still apply to any Bot they match. Remove the ones you don't want.",
+          )}
+          title={ui("Rules for other Bots")}
         >
           <PageRows>
             {otherBots.map((rule, index) => (

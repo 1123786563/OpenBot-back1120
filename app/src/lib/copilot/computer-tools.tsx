@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { outcomeForPerson } from "@openbot/shared/approval-outcomes";
 import { z } from "zod";
 import { ToolLine } from "@/components/channels/tool-line";
@@ -150,6 +151,7 @@ function ActionLine({
   /** It was handed to the person, who did it themselves. See `ToolLine`. */
   byYou?: boolean;
 }) {
+  useLocale();
   return (
     <ToolLine
       attempted={attempted}
@@ -173,7 +175,7 @@ const STILL_STARTING_DETAIL = "The computer is still starting.";
  * alone hid which file or field it was.
  */
 function refusedDetail(target: string | undefined, outcome: ComputerOutcome) {
-  const reason = outcomeForPerson(String(outcome.reason ?? ""));
+  const reason = outcomeForPerson(String(outcome.reason ?? ""), ui);
   return [target, reason].filter(Boolean).join(" · ");
 }
 
@@ -236,6 +238,7 @@ function NavigationStep({
   status: string;
   toolCallId: string | undefined;
 }) {
+  useLocale();
   /*
    * A RESULT IS WHAT MAKES A TURN OVER, not the status.
    *
@@ -266,8 +269,8 @@ function NavigationStep({
     if (!said) return null;
     return (
       <ActionLine
-        label="Opened"
-        attempted="Open"
+        label={ui("Opened")}
+        attempted={ui("Open")}
         /*
          * The site alone, even for a refusal. The Bot's answer right after says why it could not go,
          * and a boundary's reason is the sentence written for the model, rule and all.
@@ -323,6 +326,7 @@ const OFFERED: Readonly<Record<string, OfferRule>> = {
 };
 
 export function ComputerTools() {
+  useLocale();
   /*
    * WHOSE COMPUTER, ASKED TWO WAYS. A handler acts for the Bot that made the call, which a turn the
    * person walked away from keeps making while another screen, or another Bot, is in front of them;
@@ -396,10 +400,15 @@ export function ComputerTools() {
       return (
         <ActionLine
           running={status !== "complete"}
-          label="Read the page"
+          label={ui("Read the page")}
           detail={
             elements.length
-              ? `${elements.length} thing${elements.length === 1 ? "" : "s"} it can act on`
+              ? ui(
+                  elements.length === 1
+                    ? "{{count}} thing it can act on"
+                    : "{{count}} things it can act on",
+                  { count: elements.length },
+                )
               : undefined
           }
         />
@@ -445,8 +454,8 @@ export function ComputerTools() {
     render: ({ args, result, status }) => (
       <ActionLine
         running={status !== "complete"}
-        label="Filled in"
-        attempted="Fill in"
+        label={ui("Filled in")}
+        attempted={ui("Fill in")}
         detail={(() => {
           // Never show typed values; identify only the target field.
           const field =
@@ -495,8 +504,8 @@ export function ComputerTools() {
       return (
         <ActionLine
           running={status !== "complete"}
-          label="Clicked"
-          attempted="Click"
+          label={ui("Clicked")}
+          attempted={ui("Click")}
           detail={
             // A refusal names the element only by the label the server resolved, never its ref.
             outcome.refused === true
@@ -546,8 +555,8 @@ export function ComputerTools() {
     render: ({ args, result, status }) => (
       <ActionLine
         running={status !== "complete"}
-        label="Pressed"
-        attempted="Press"
+        label={ui("Pressed")}
+        attempted={ui("Press")}
         detail={
           outcomeOf(result).refused === true
             ? refusedDetail(
@@ -721,16 +730,21 @@ export function ComputerTools() {
       return (
         <ActionLine
           running={status !== "complete"}
-          label="Listed files"
-          attempted="List files"
+          label={ui("Listed files")}
+          attempted={ui("List files")}
           detail={
             outcome.refused === true || didNotWork(outcome)
-              ? outcomeForPerson(String(outcome.reason ?? ""))
+              ? outcomeForPerson(String(outcome.reason ?? ""), ui)
               : byPerson(outcome)
                 ? undefined
                 : entries.length
-                  ? `${entries.length} item${entries.length === 1 ? "" : "s"} in the workspace`
-                  : "nothing saved yet"
+                  ? ui(
+                      entries.length === 1
+                        ? "{{count}} item in the workspace"
+                        : "{{count}} items in the workspace",
+                      { count: entries.length },
+                    )
+                  : ui("nothing saved yet")
           }
           refused={outcome.refused === true}
           failed={didNotWork(outcome)}
@@ -762,8 +776,8 @@ export function ComputerTools() {
       return (
         <ActionLine
           running={status !== "complete"}
-          label="Read file"
-          attempted="Read file"
+          label={ui("Read file")}
+          attempted={ui("Read file")}
           detail={
             outcome.refused === true
               ? refusedDetail(
@@ -837,7 +851,7 @@ export function ComputerTools() {
           computerId={bot.current}
           output={
             refused
-              ? outcomeForPerson(String(outcome.reason ?? ""))
+              ? outcomeForPerson(String(outcome.reason ?? ""), ui)
               : stillStarting(outcome)
                 ? STILL_STARTING_DETAIL
                 : outputOf(outcome as ToolOutcome)
@@ -896,8 +910,12 @@ export function ComputerTools() {
         <ActionLine
           running={status !== "complete"}
           // The words the approval card and Activity use for the same action.
-          label={args?.append === true ? "Added to a file" : "Saved a file"}
-          attempted={args?.append === true ? "Add to a file" : "Save a file"}
+          label={
+            args?.append === true ? ui("Added to a file") : ui("Saved a file")
+          }
+          attempted={
+            args?.append === true ? ui("Add to a file") : ui("Save a file")
+          }
           // Show the path, never file contents.
           detail={
             outcome.refused === true
@@ -944,8 +962,8 @@ export function ComputerTools() {
     render: ({ result, status }) => (
       <ActionLine
         running={status !== "complete"}
-        label="Scrolled"
-        attempted="Scroll"
+        label={ui("Scrolled")}
+        attempted={ui("Scroll")}
         refused={outcomeOf(result).refused === true}
         failed={didNotWork(outcomeOf(result))}
         notYet={stillStarting(outcomeOf(result))}

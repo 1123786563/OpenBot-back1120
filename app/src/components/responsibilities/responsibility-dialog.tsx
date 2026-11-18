@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconCircleCheck,
@@ -58,22 +60,57 @@ export const STATUS: Record<
   Status,
   { label: string; icon: typeof IconTarget }
 > = {
-  active: { label: "Active", icon: IconTarget },
-  paused: { label: "Paused", icon: IconPlayerPause },
-  completed: { label: "Completed", icon: IconCircleCheck },
+  active: {
+    get label() {
+      return ui("Active");
+    },
+    icon: IconTarget,
+  },
+  paused: {
+    get label() {
+      return ui("Paused");
+    },
+    icon: IconPlayerPause,
+  },
+  completed: {
+    get label() {
+      return ui("Completed");
+    },
+    icon: IconCircleCheck,
+  },
 };
 
 const SOURCE_LABEL: Record<Source, string> = {
-  manual: "Manual",
-  slack: "Slack",
-  github: "GitHub",
-  schedule: "Schedule",
-  connector: "Connected app",
-  webhook: "Webhook",
-  linear: "Linear",
-  sentry: "Sentry",
-  pagerduty: "PagerDuty",
-  email: "Email",
+  get manual() {
+    return ui("Manual");
+  },
+  get slack() {
+    return ui("Slack");
+  },
+  get github() {
+    return ui("GitHub");
+  },
+  get schedule() {
+    return ui("Schedule");
+  },
+  get connector() {
+    return ui("Connected app");
+  },
+  get webhook() {
+    return ui("Webhook");
+  },
+  get linear() {
+    return ui("Linear");
+  },
+  get sentry() {
+    return ui("Sentry");
+  },
+  get pagerduty() {
+    return ui("PagerDuty");
+  },
+  get email() {
+    return ui("Email");
+  },
 };
 
 /**
@@ -90,7 +127,9 @@ export function summaryFor(
   const status = STATUS[goal.status].label;
   if (goal.status === "completed") return status;
   if (goal.status === "paused")
-    return `${status} · Nothing starts it until you resume it`;
+    return ui("{{value0}} · Nothing starts it until you resume it", {
+      value0: String(status),
+    });
   const starts = [
     ...goal.subscriptions.map(
       (subscription) =>
@@ -100,8 +139,14 @@ export function summaryFor(
       .filter((trigger) => trigger.enabled)
       .map((trigger) => `${KIND_LABEL[trigger.kind]} trigger`),
   ];
-  if (starts.length) return `${status} · Starts on ${starts.join(", ")}`;
-  return triggers ? `${status} · Runs when asked` : status;
+  if (starts.length)
+    return ui("{{value0}} · Starts on {{value1}}", {
+      value0: String(status),
+      value1: String(starts.join(", ")),
+    });
+  return triggers
+    ? ui("{{value0}} · Runs when asked", { value0: String(status) })
+    : status;
 }
 
 /**
@@ -116,6 +161,7 @@ export function ResponsibilityDialog({
   goal: ResponsibilityRecord;
   onClose: () => void;
 }) {
+  useLocale();
   const formId = useId();
   const [showRuns, setShowRuns] = useState(false);
   const [title, setTitle] = useState(goal.title);
@@ -128,7 +174,7 @@ export function ResponsibilityDialog({
     goal.progress
       ? {
           key: "progress",
-          label: "Progress",
+          label: ui("Progress"),
           icon: IconProgress,
           text: goal.progress,
         }
@@ -136,7 +182,7 @@ export function ResponsibilityDialog({
     goal.lastResult
       ? {
           key: "result",
-          label: "Last result",
+          label: ui("Last result"),
           icon: IconFlag,
           text: goal.lastResult,
         }
@@ -161,16 +207,16 @@ export function ResponsibilityDialog({
                     <IconTarget />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>Active</ItemTitle>
+                    <ItemTitle>{ui("Active")}</ItemTitle>
                     <ItemDescription>
                       {goal.status === "active"
-                        ? "Its events and triggers start it."
-                        : "Paused. Its triggers won't start it."}
+                        ? ui("Its events and triggers start it.")
+                        : ui("Paused. Its triggers won't start it.")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <Switch
-                      aria-label="Active"
+                      aria-label={ui("Active")}
                       checked={goal.status === "active"}
                       disabled={action.isPending}
                       onCheckedChange={(active) =>
@@ -205,10 +251,11 @@ export function ResponsibilityDialog({
                     <IconPlayerPlay />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>Run now</ItemTitle>
+                    <ItemTitle>{ui("Run now")}</ItemTitle>
                     <ItemDescription>
-                      Runs it now, for real. The Bot does the work and can post
-                      and take actions.
+                      {ui(
+                        "Runs it now, for real. The Bot does the work and can post and take actions.",
+                      )}
                     </ItemDescription>
                   </ItemContent>
                 </Item>
@@ -234,9 +281,9 @@ export function ResponsibilityDialog({
                     <IconCircleCheck />
                   </ItemMedia>
                   <ItemContent>
-                    <ItemTitle>Complete</ItemTitle>
+                    <ItemTitle>{ui("Complete")}</ItemTitle>
                     <ItemDescription>
-                      Mark it done. Nothing starts it after this.
+                      {ui("Mark it done. Nothing starts it after this.")}
                     </ItemDescription>
                   </ItemContent>
                 </Item>
@@ -257,7 +304,7 @@ export function ResponsibilityDialog({
                 <IconMessage />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Open conversation</ItemTitle>
+                <ItemTitle>{ui("Open conversation")}</ItemTitle>
               </ItemContent>
               <ItemActions>
                 <IconChevronRight className="size-4 text-muted-foreground" />
@@ -287,7 +334,9 @@ export function ResponsibilityDialog({
           >
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor={`${formId}-title`}>Title</FieldLabel>
+                <FieldLabel htmlFor={`${formId}-title`}>
+                  {ui("Title")}
+                </FieldLabel>
                 <Input
                   id={`${formId}-title`}
                   value={title}
@@ -298,7 +347,7 @@ export function ResponsibilityDialog({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${formId}-instruction`}>
-                  Instruction
+                  {ui("Instruction")}
                 </FieldLabel>
                 <Textarea
                   id={`${formId}-instruction`}
@@ -310,7 +359,7 @@ export function ResponsibilityDialog({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${formId}-criteria`}>
-                  Success criteria
+                  {ui("Success criteria")}
                 </FieldLabel>
                 <Textarea
                   id={`${formId}-criteria`}
@@ -347,7 +396,7 @@ export function ResponsibilityDialog({
                       <IconWebhook />
                     </ItemMedia>
                     <ItemContent>
-                      <ItemTitle>Events</ItemTitle>
+                      <ItemTitle>{ui("Events")}</ItemTitle>
                       <ItemDescription className="line-clamp-none">
                         {goal.subscriptions
                           .map(
@@ -373,7 +422,7 @@ export function ResponsibilityDialog({
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={edit.isPending}
@@ -381,7 +430,7 @@ export function ResponsibilityDialog({
             size="sm"
             type="submit"
           >
-            {edit.isPending ? "Saving…" : "Save"}
+            {edit.isPending ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -390,12 +439,24 @@ export function ResponsibilityDialog({
 }
 
 const RUN_LABEL: Record<string, string> = {
-  queued: "Queued",
-  running: "Running",
-  waiting: "Waiting for you",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  skipped: "Skipped",
+  get queued() {
+    return ui("Queued");
+  },
+  get running() {
+    return ui("Running");
+  },
+  get waiting() {
+    return ui("Waiting for you");
+  },
+  get succeeded() {
+    return ui("Succeeded");
+  },
+  get failed() {
+    return ui("Failed");
+  },
+  get skipped() {
+    return ui("Skipped");
+  },
 };
 function runStatusClass(status: string) {
   return status === "failed"
@@ -420,6 +481,7 @@ function Runs({
   shown: boolean;
   onToggle: () => void;
 }) {
+  useLocale();
   const runs = useQuery({
     ...responsibilityRunsQueryOptions(goalId),
     enabled: shown,
@@ -427,14 +489,14 @@ function Runs({
   return (
     <section className="grid gap-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-medium text-sm">Runs</h3>
+        <h3 className="font-medium text-sm">{ui("Runs")}</h3>
         <Button onClick={onToggle} size="sm" type="button" variant="ghost">
-          {shown ? "Hide runs" : "View runs"}
+          {shown ? ui("Hide runs") : ui("View runs")}
         </Button>
       </div>
       {!shown ? null : runs.isPending ? null : runs.error ? (
         <p role="alert" className="text-destructive text-sm">
-          {runs.error.message}
+          {<ErrorDetails error={runs.error} />}
         </p>
       ) : runs.data.length ? (
         <div className="overflow-hidden rounded-lg">
@@ -450,7 +512,7 @@ function Runs({
                     {RUN_LABEL[run.status]}
                   </ItemTitle>
                   <ItemDescription>
-                    {new Date(run.createdAt).toLocaleString()}
+                    {new Date(run.createdAt).toLocaleString(getLocale())}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -459,15 +521,17 @@ function Runs({
                     params={{ channelId }}
                     className="text-sm underline"
                   >
-                    Open conversation
+                    {ui("Open conversation")}
                   </Link>
                 </ItemActions>
                 {run.waiting || run.error || run.replyText ? (
                   <ItemFooter className="min-w-0 flex-col items-stretch">
                     {run.waiting && (
                       <p>
-                        Waiting for {run.waiting.kind}. Answer at the top of
-                        this Bot's page or in the conversation.
+                        {uiNodes(
+                          "Waiting for {{slot0}}. Answer at the top of this Bot's page or in the conversation.",
+                          [run.waiting.kind],
+                        )}
                       </p>
                     )}
                     {run.error && (
@@ -483,7 +547,7 @@ function Runs({
           ))}
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">No runs yet.</p>
+        <p className="text-muted-foreground text-sm">{ui("No runs yet.")}</p>
       )}
     </section>
   );
@@ -497,6 +561,7 @@ function Runs({
  * to the row's size: no heading scale, tight paragraph and list spacing.
  */
 function RunMarkdown({ children }: { children: string }) {
+  useLocale();
   return (
     <Streamdown
       className="min-w-0 text-sm [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-sm [&_li]:my-0 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"

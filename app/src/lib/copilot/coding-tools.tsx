@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useRenderTool } from "@copilotkit/react-core/v2";
 import { useContext } from "react";
 import { z } from "zod";
@@ -81,10 +82,12 @@ const taskUpdate = z.object({
 
 /** Running only while its turn is: a call left without a result by a stopped turn has stopped. */
 function useOutcome(result: string | undefined) {
+  useLocale();
   return codingOutcome(result, useContext(ArgumentsArrivingContext));
 }
 
 function Command({ command, result }: { command?: string; result?: string }) {
+  useLocale();
   return <CommandCard command={command} outcome={useOutcome(result)} />;
 }
 
@@ -101,6 +104,7 @@ function Diff({
   replaceAll?: boolean;
   result?: string;
 }) {
+  useLocale();
   return (
     <DiffCard
       changes={changes}
@@ -113,6 +117,7 @@ function Diff({
 }
 
 function Read({ path, result }: { path?: string; result?: string }) {
+  useLocale();
   return <ReadLine outcome={useOutcome(result)} path={path} />;
 }
 
@@ -123,6 +128,7 @@ function Grep({
   args: z.infer<typeof grep> | undefined;
   result?: string;
 }) {
+  useLocale();
   return (
     <GrepLine
       mode={args?.output_mode}
@@ -134,6 +140,7 @@ function Grep({
 }
 
 function Glob({ pattern, result }: { pattern?: string; result?: string }) {
+  useLocale();
   return <GlobLine outcome={useOutcome(result)} pattern={pattern} />;
 }
 
@@ -148,6 +155,7 @@ function Task({
   subject?: string;
   result?: string;
 }) {
+  useLocale();
   return (
     <TaskLine
       doing={doing}
@@ -172,6 +180,7 @@ function taskUpdateLabel(
 }
 
 export function CodingTools() {
+  useLocale();
   useRenderTool({
     name: "Bash",
     parameters: command,
@@ -261,7 +270,7 @@ export function CodingTools() {
     render: ({ parameters: given, result }) => (
       <Task
         doing="Adding a task"
-        label="Added a task"
+        label={ui("Added a task")}
         result={result}
         subject={given?.subject}
       />

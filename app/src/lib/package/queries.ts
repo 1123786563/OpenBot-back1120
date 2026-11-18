@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -8,7 +9,7 @@ export function activePackageQueryOptions() {
     queryKey: packageKeys.active,
     queryFn: async () => {
       const response = await client("/api/admin/package", {
-        fallback: "Could not load the active package",
+        fallback: ui("Could not load the active package"),
       });
       return response.json();
     },

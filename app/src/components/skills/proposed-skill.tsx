@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Badge, GalleryFrame } from "@/components/gallery/frame";
@@ -53,6 +54,7 @@ export function ProposedSkillCard({
   save,
   personal = false,
 }: ProposedSkillCardProps) {
+  useLocale();
   const [sending, setSending] = useState<"save" | "decline" | null>(null);
   /**
    * A refusal from the server, kept on the card rather than answered with.
@@ -66,7 +68,7 @@ export function ProposedSkillCard({
   if (result !== undefined) {
     return (
       <GalleryFrame
-        action={<Badge tone="neutral">Done</Badge>}
+        action={<Badge tone="neutral">{ui("Done")}</Badge>}
         title={titleFor(args.slug, replaces)}
       >
         <p className="text-sm">{result}</p>
@@ -80,7 +82,9 @@ export function ProposedSkillCard({
   if (!respond) {
     return (
       <GalleryFrame title={titleFor(args.slug, replaces)}>
-        <p className="text-sm text-muted-foreground">Writing the skill…</p>
+        <p className="text-sm text-muted-foreground">
+          {ui("Writing the skill…")}
+        </p>
       </GalleryFrame>
     );
   }
@@ -114,28 +118,33 @@ export function ProposedSkillCard({
 
   return (
     <GalleryFrame
-      action={<Badge tone="caution">Waiting on you</Badge>}
+      action={<Badge tone="caution">{ui("Waiting on you")}</Badge>}
       caption={
         replaces
-          ? `This replaces ${replaces.title}, which is ${replaces.ownership}.`
-          : "Nothing is saved until you say so."
+          ? ui("This replaces {{value0}}, which is {{value1}}.", {
+              value0: String(replaces.title),
+              value1: ui(replaces.ownership),
+            })
+          : ui("Nothing is saved until you say so.")
       }
       title={titleFor(values.slug, replaces)}
     >
       <dl className="grid grid-cols-[minmax(0,7rem)_1fr] gap-x-4 gap-y-1.5 text-sm">
-        <dt className="truncate text-muted-foreground">Command</dt>
+        <dt className="truncate text-muted-foreground">{ui("Command")}</dt>
         <dd className="min-w-0 break-words font-mono">/{values.slug}</dd>
-        <dt className="truncate text-muted-foreground">Title</dt>
+        <dt className="truncate text-muted-foreground">{ui("Title")}</dt>
         <dd className="min-w-0 break-words">{values.title}</dd>
         {values.summary ? (
           <>
-            <dt className="truncate text-muted-foreground">One-liner</dt>
+            <dt className="truncate text-muted-foreground">
+              {ui("One-liner")}
+            </dt>
             <dd className="min-w-0 break-words">{values.summary}</dd>
           </>
         ) : null}
         {values.tools.length > 0 ? (
           <>
-            <dt className="truncate text-muted-foreground">Needs</dt>
+            <dt className="truncate text-muted-foreground">{ui("Needs")}</dt>
             <dd className="min-w-0 break-words font-mono text-xs">
               {values.tools.join(", ")}
             </dd>
@@ -143,7 +152,7 @@ export function ProposedSkillCard({
         ) : null}
       </dl>
 
-      <p className="mt-3 text-muted-foreground text-xs">Instructions</p>
+      <p className="mt-3 text-muted-foreground text-xs">{ui("Instructions")}</p>
       {/* Scrolled rather than clamped: this is the part worth reading before agreeing to it. */}
       <p className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
         {values.instructions}
@@ -151,8 +160,9 @@ export function ProposedSkillCard({
 
       {values.tools.length > 0 ? (
         <p className="mt-2 text-muted-foreground text-xs">
-          Naming a tool doesn't give access. A Bot can only use these if it
-          already has them.
+          {ui(
+            "Naming a tool doesn't give access. A Bot can only use these if it already has them.",
+          )}
         </p>
       ) : null}
 
@@ -169,7 +179,7 @@ export function ProposedSkillCard({
           size="sm"
           variant="outline"
         >
-          {sending === "decline" ? "…" : "Don't save"}
+          {sending === "decline" ? "…" : ui("Don't save")}
         </Button>
         <Button
           disabled={Boolean(sending)}
@@ -177,10 +187,10 @@ export function ProposedSkillCard({
           size="sm"
         >
           {sending === "save"
-            ? "Saving…"
+            ? ui("Saving…")
             : replaces
-              ? "Replace it"
-              : "Create it"}
+              ? ui("Replace it")
+              : ui("Create it")}
         </Button>
       </div>
     </GalleryFrame>
@@ -192,18 +202,21 @@ function titleFor(
   replaces: { title: string } | undefined,
 ): string {
   const name = slug ? `/${slug}` : "a new skill";
-  return replaces ? `Replace ${name}` : `Create ${name}`;
+  return replaces
+    ? ui("Replace {{value0}}", { value0: String(name) })
+    : ui("Create {{value0}}", { value0: String(name) });
 }
 
 /** Where the remaining step happens. A skill on no Bot is inert, and saying so beats implying done. */
 function PutItOnABot({ slug }: { slug: string }) {
+  useLocale();
   return (
     <Link
       className="mt-2 inline-block text-sm underline underline-offset-4"
       search={{ edit: slug }}
       to="/capabilities/skills"
     >
-      Put it on a Bot
+      {ui("Put it on a Bot")}
     </Link>
   );
 }
@@ -222,6 +235,7 @@ function Unwritable({
   problems: string[];
   respond: (result: unknown) => Promise<void>;
 }) {
+  useLocale();
   /**
    * Answered once, guarded by a ref rather than by the dependency list.
    *
@@ -238,12 +252,13 @@ function Unwritable({
 
   return (
     <GalleryFrame
-      action={<Badge tone="negative">Not saved</Badge>}
-      title="Skill"
+      action={<Badge tone="negative">{ui("Not saved")}</Badge>}
+      title={ui("Skill")}
     >
       <p className="text-sm">
-        The Bot's draft wasn't a valid skill. Nothing was saved, and the Bot
-        knows what to fix.
+        {ui(
+          "The Bot's draft wasn't a valid skill. Nothing was saved, and the Bot knows what to fix.",
+        )}
       </p>
     </GalleryFrame>
   );

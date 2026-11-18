@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { client } from "@/lib/client";
 
 /** What is wrong with one action the model named. */
@@ -43,8 +44,9 @@ export async function translateAppGrants(variables: {
     {
       method: "POST",
       body: { text: variables.text },
-      fallback:
+      fallback: ui(
         "Couldn't choose the actions. Try again, or turn them on by hand.",
+      ),
     },
   );
   return (await response.json()) as AppGrantTranslation;

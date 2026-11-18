@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -91,7 +92,7 @@ export function modelCatalogueQueryOptions() {
     queryKey: modelKeys.catalogue,
     queryFn: async (): Promise<ModelCatalogue> =>
       (
-        await client("/api/models", { fallback: "Couldn't load models" })
+        await client("/api/models", { fallback: ui("Couldn't load models") })
       ).json(),
     // The server keeps the provider's listing for ten minutes; asking more often learns nothing.
     staleTime: 5 * 60_000,
@@ -105,7 +106,7 @@ export function availableModelsQueryOptions() {
     queryFn: async (): Promise<AvailableModels> =>
       (
         await client("/api/models/available", {
-          fallback: "Couldn't load the models",
+          fallback: ui("Couldn't load the models"),
         })
       ).json(),
     staleTime: 5 * 60_000,
@@ -123,7 +124,7 @@ export function conversationModelQueryOptions(channelId: string) {
     queryFn: async (): Promise<ConversationModel> =>
       (
         await client(`/api/channels/${encodeURIComponent(channelId)}/model`, {
-          fallback: "Couldn't load this conversation's model",
+          fallback: ui("Couldn't load this conversation's model"),
         })
       ).json(),
   });

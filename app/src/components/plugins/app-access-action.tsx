@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
@@ -66,32 +68,56 @@ export function appAccessSentence(
       (access.state === "disabled" &&
         (access.unavailable === null || access.unavailable === "absent")))
   )
-    return `${name} isn't connected yet.`;
+    return ui("{{value0}} isn't connected yet.", { value0: String(name) });
   switch (access.state) {
     case "ready":
       if (owners)
-        return `Ready to use. This Bot uses its owner's ${name} account.`;
+        return ui(
+          "Ready to use. This Bot uses its owner's {{value0}} account.",
+          { value0: String(name) },
+        );
       if (access.asksFirst)
-        return `Ready to use with your own ${name} account. You'll be asked to allow it the first time.`;
-      return "Ready to use.";
+        return ui(
+          "Ready to use with your own {{value0}} account. You'll be asked to allow it the first time.",
+          { value0: String(name) },
+        );
+      return ui("Ready to use.");
     case "not_connected":
-      return `You haven't connected your ${name} account yet.`;
+      return ui("You haven't connected your {{value0}} account yet.", {
+        value0: String(name),
+      });
     case "reconnect":
       return owners
-        ? `This Bot uses its owner's ${name} account, which needs reconnecting. Only the Bot's owner can reconnect it.`
-        : `Your ${name} connection needs reconnecting.`;
+        ? ui(
+            "This Bot uses its owner's {{value0}} account, which needs reconnecting. Only the Bot's owner can reconnect it.",
+            { value0: String(name) },
+          )
+        : ui("Your {{value0}} connection needs reconnecting.", {
+            value0: String(name),
+          });
     case "shared_not_connected":
-      return `Your organisation's ${name} account isn't connected yet. Only an admin can connect it.`;
+      return ui(
+        "Your organisation's {{value0}} account isn't connected yet. Only an admin can connect it.",
+        { value0: String(name) },
+      );
     case "shared_not_approved":
-      return `This Bot reaches more people than an admin approved for your organisation's ${name} account. Only an admin can approve it.`;
+      return ui(
+        "This Bot reaches more people than an admin approved for your organisation's {{value0}} account. Only an admin can approve it.",
+        { value0: String(name) },
+      );
     case "disabled":
       return disabledSentence(access, edition);
     case "not_granted":
-      return `This Bot hasn't been given ${name}. Only an admin can give it.`;
+      return ui(
+        "This Bot hasn't been given {{value0}}. Only an admin can give it.",
+        { value0: String(name) },
+      );
     case "owner_grantable": {
       const yours = access.account === "personal" ? `your ${name}` : name;
       const ask = `Let ${bot ?? "this Bot"} use ${yours}?`;
-      return access.needsConnect ? `${ask} Connect it first.` : ask;
+      return access.needsConnect
+        ? ui("{{value0}} Connect it first.", { value0: String(ask) })
+        : ask;
     }
   }
 }
@@ -111,17 +137,29 @@ function disabledSentence(
   // beside the sentence goes to where it is fixed.
   if (edition === "personal")
     return access.unavailable === "composio_unconfigured"
-      ? `${name} isn't set up yet. Set it up to connect it.`
-      : `${name} isn't fully set up yet. Set it up to finish.`;
+      ? ui("{{value0}} isn't set up yet. Set it up to connect it.", {
+          value0: String(name),
+        })
+      : ui("{{value0}} isn't fully set up yet. Set it up to finish.", {
+          value0: String(name),
+        });
   switch (access.unavailable) {
     case "composio_unconfigured":
-      return `${name} isn't set up yet. An admin has to turn it on.`;
+      return ui("{{value0}} isn't set up yet. An admin has to turn it on.", {
+        value0: String(name),
+      });
     case "scheme_unreadable":
     case "oauth_client_missing":
     case "token_missing":
-      return `${name} isn't fully set up yet. Only an admin can finish setting it up.`;
+      return ui(
+        "{{value0}} isn't fully set up yet. Only an admin can finish setting it up.",
+        { value0: String(name) },
+      );
     default:
-      return `${name} isn't turned on yet. Only an admin can turn it on.`;
+      return ui(
+        "{{value0}} isn't turned on yet. Only an admin can turn it on.",
+        { value0: String(name) },
+      );
   }
 }
 
@@ -148,6 +186,7 @@ export function AppAccessAction({
   agentId: string;
   access: AppAccess;
 }) {
+  useLocale();
   /*
    * WHO IS LOOKING decides only which button is drawn, never what is allowed: the server answers
    * the one press 403 for anybody else, and `SharedAppNotice` already reads the role the same way.
@@ -205,6 +244,7 @@ function AdminAction({
   agentId: string;
   access: AppAccess;
 }) {
+  useLocale();
   const paths = useManagePaths();
   const bot = useQuery(agentQueryOptions(agentId)).data?.name ?? "this Bot";
   const approve = useMutation(approveBotAppMutationOptions(queryClient));
@@ -217,8 +257,8 @@ function AdminAction({
   if (oneClick) {
     const disabled = access.state === "disabled";
     const label = disabled
-      ? `Turn on and give it to ${bot}`
-      : `Give it to ${bot}`;
+      ? ui("Turn on and give it to {{value0}}", { value0: String(bot) })
+      : ui("Give it to {{value0}}", { value0: String(bot) });
     // The card names the app beside the button; on its own, the button has to.
     const spoken = disabled
       ? `Turn on ${name} and give it to ${bot}`
@@ -227,7 +267,7 @@ function AdminAction({
       <div className="flex flex-wrap items-center justify-end gap-2">
         {approve.error ? (
           <p className="text-destructive text-xs" role="alert">
-            {approve.error.message}
+            {<ErrorDetails error={approve.error} />}
           </p>
         ) : null}
         <Button
@@ -245,7 +285,11 @@ function AdminAction({
           }
           size="sm"
         >
-          {approve.isPending ? (disabled ? "Turning on…" : "Giving…") : label}
+          {approve.isPending
+            ? disabled
+              ? ui("Turning on…")
+              : ui("Giving…")
+            : label}
         </Button>
       </div>
     );
@@ -309,6 +353,7 @@ function OwnerGiveAction({
   access: AppAccess;
   tab: ConnectInNewTab;
 }) {
+  useLocale();
   const bot = useQuery(agentQueryOptions(agentId)).data?.name ?? "this Bot";
   const give = useMutation(giveBotAppMutationOptions(queryClient));
   const { waiting, stopWaiting } = tab;
@@ -345,11 +390,11 @@ function OwnerGiveAction({
     return (
       <Button
         render={<Link params={{ key: access.key }} to="/connections/$key" />}
-        aria-label={`Connect ${name}`}
+        aria-label={ui("Connect {{value0}}", { value0: String(name) })}
         size="sm"
         variant="outline"
       >
-        Connect
+        {ui("Connect")}
       </Button>
     );
 
@@ -363,27 +408,34 @@ function OwnerGiveAction({
       ) : null}
       {tab.blockedUrl ? (
         <p className="text-xs" role="status">
-          This browser blocked the tab.{" "}
+          {ui("This browser blocked the tab.")}{" "}
           <a
             className="underline underline-offset-2"
             href={tab.blockedUrl}
             rel="noreferrer"
             target="_blank"
           >
-            Open {name}'s sign-in
+            {ui("Open")} {name}
+            {ui("'s sign-in")}
           </a>
           .
         </p>
       ) : waiting ? (
         <p className="text-muted-foreground text-xs" role="status">
-          Finish in the tab that opened.
+          {ui("Finish in the tab that opened.")}
         </p>
       ) : null}
       <Button
         aria-label={
           give.isPending || waiting || tab.pending
             ? undefined
-            : `Let ${bot} use ${name}${access.needsConnect ? " after you connect it" : ""}`
+            : ui("Let {{value0}} use {{value1}}{{value2}}", {
+                value0: String(bot),
+                value1: String(name),
+                value2: String(
+                  access.needsConnect ? " after you connect it" : "",
+                ),
+              })
         }
         disabled={give.isPending || tab.pending}
         onClick={() => {
@@ -399,14 +451,14 @@ function OwnerGiveAction({
         size="sm"
       >
         {give.isPending
-          ? "Allowing…"
+          ? ui("Allowing…")
           : waiting
-            ? `Waiting for ${name}…`
+            ? ui("Waiting for {{value0}}…", { value0: String(name) })
             : tab.pending
-              ? "Opening sign-in…"
+              ? ui("Opening sign-in…")
               : access.needsConnect
-                ? "Connect and allow"
-                : "Allow"}
+                ? ui("Connect and allow")
+                : ui("Allow")}
       </Button>
     </div>
   );
@@ -428,6 +480,7 @@ function PersonalConnectAction({
   access: AppAccess;
   tab: ConnectInNewTab;
 }) {
+  useLocale();
   const approve = useMutation(approveBotAppMutationOptions(queryClient));
   const { waiting } = tab;
   const name = access.displayName;
@@ -472,10 +525,10 @@ function PersonalConnectAction({
     return (
       <Button
         render={<Link params={{ key: access.key }} to="/connections/$key" />}
-        aria-label={`Set up ${name}`}
+        aria-label={ui("Set up {{value0}}", { value0: String(name) })}
         size="sm"
       >
-        Set up
+        {ui("Set up")}
       </Button>
     );
 
@@ -489,27 +542,28 @@ function PersonalConnectAction({
       ) : null}
       {tab.blockedUrl ? (
         <p className="text-xs" role="status">
-          This browser blocked the tab.{" "}
+          {ui("This browser blocked the tab.")}{" "}
           <a
             className="underline underline-offset-2"
             href={tab.blockedUrl}
             rel="noreferrer"
             target="_blank"
           >
-            Open {name}'s sign-in
+            {ui("Open")} {name}
+            {ui("'s sign-in")}
           </a>
           .
         </p>
       ) : waiting ? (
         <p className="text-muted-foreground text-xs" role="status">
-          Finish in the tab that opened.
+          {ui("Finish in the tab that opened.")}
         </p>
       ) : null}
       <Button
         aria-label={
           waiting || approve.isPending || tab.pending
             ? undefined
-            : `${signsIn ? "Connect" : "Turn on"} ${name}`
+            : `${signsIn ? "Connect" : ui("Turn on")} ${name}`
         }
         disabled={approve.isPending || tab.pending}
         onClick={() => {
@@ -525,14 +579,14 @@ function PersonalConnectAction({
         size="sm"
       >
         {waiting
-          ? `Waiting for ${name}…`
+          ? ui("Waiting for {{value0}}…", { value0: String(name) })
           : approve.isPending
-            ? "Turning on…"
+            ? ui("Turning on…")
             : tab.pending
-              ? "Opening sign-in…"
+              ? ui("Opening sign-in…")
               : signsIn
-                ? "Connect"
-                : "Turn on"}
+                ? ui("Connect")
+                : ui("Turn on")}
       </Button>
     </div>
   );
@@ -546,6 +600,7 @@ function ConnectAction({
   access: AppAccess;
   tab: ConnectInNewTab;
 }) {
+  useLocale();
   const label = access.state === "reconnect" ? "Reconnect" : "Connect";
   const { waiting, stopWaiting } = tab;
 
@@ -603,20 +658,21 @@ function ConnectAction({
       ) : null}
       {tab.blockedUrl ? (
         <p className="text-xs" role="status">
-          This browser blocked the tab.{" "}
+          {ui("This browser blocked the tab.")}{" "}
           <a
             className="underline underline-offset-2"
             href={tab.blockedUrl}
             rel="noreferrer"
             target="_blank"
           >
-            Open {access.displayName}'s sign-in
+            {ui("Open")} {access.displayName}
+            {ui("'s sign-in")}
           </a>
           .
         </p>
       ) : waiting ? (
         <p className="text-muted-foreground text-xs" role="status">
-          Finish in the tab that opened.
+          {ui("Finish in the tab that opened.")}
         </p>
       ) : null}
       <Button
@@ -633,9 +689,11 @@ function ConnectAction({
         variant="outline"
       >
         {waiting
-          ? `Waiting for ${access.displayName}…`
+          ? ui("Waiting for {{value0}}…", {
+              value0: String(access.displayName),
+            })
           : tab.pending
-            ? "Opening sign-in…"
+            ? ui("Opening sign-in…")
             : label}
       </Button>
     </div>
@@ -650,6 +708,7 @@ function RequestAction({
   agentId: string;
   access: AppAccess;
 }) {
+  useLocale();
   const request = useMutation(requestAppAccessMutationOptions(queryClient));
   const cancel = useMutation(
     cancelAppAccessRequestMutationOptions(queryClient),
@@ -690,19 +749,21 @@ function RequestAction({
     <div className="flex flex-wrap items-center justify-end gap-2">
       {error ? (
         <p className="text-destructive text-xs" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {access.request ? (
         <>
           <span className="text-muted-foreground text-xs" role="status">
-            Requested
+            {ui("Requested")}
           </span>
           <Button
             aria-label={
               cancel.isPending
                 ? undefined
-                : `Withdraw request for ${access.displayName}`
+                : ui("Withdraw request for {{value0}}", {
+                    value0: String(access.displayName),
+                  })
             }
             disabled={cancel.isPending}
             onClick={() => {
@@ -714,7 +775,7 @@ function RequestAction({
             size="sm"
             variant="ghost"
           >
-            {cancel.isPending ? "Withdrawing…" : "Withdraw"}
+            {cancel.isPending ? ui("Withdrawing…") : ui("Withdraw")}
           </Button>
         </>
       ) : (
@@ -722,7 +783,9 @@ function RequestAction({
           aria-label={
             request.isPending
               ? undefined
-              : `Request access to ${access.displayName}`
+              : ui("Request access to {{value0}}", {
+                  value0: String(access.displayName),
+                })
           }
           disabled={request.isPending}
           onClick={() => {
@@ -734,7 +797,7 @@ function RequestAction({
           size="sm"
           variant="outline"
         >
-          {request.isPending ? "Requesting…" : "Request access"}
+          {request.isPending ? ui("Requesting…") : ui("Request access")}
         </Button>
       )}
     </div>

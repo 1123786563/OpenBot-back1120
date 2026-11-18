@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -24,7 +26,9 @@ export const Route = createFileRoute("/_authed/admin/approvals_/describe")({
 });
 
 const BACK = {
-  label: "Approvals",
+  get label() {
+    return ui("Approvals");
+  },
   linkProps: { to: "/admin/approvals" as const },
 };
 
@@ -48,6 +52,7 @@ const same = (
  * asks they would add. Only Save adds them, with the sentence they were written from.
  */
 function DescribeTeamRulesPage() {
+  useLocale();
   const navigate = Route.useNavigate();
   const save = useMutation(saveTeamRulesMutationOptions(queryClient));
   const [written, setWritten] = useState<WrittenRules | null>(null);
@@ -90,8 +95,10 @@ function DescribeTeamRulesPage() {
   return (
     <PageShell
       backButton={BACK}
-      description="Say what Bots should do before an action, and your model writes the team rules. Nothing changes until you save them."
-      title="Describe team rules"
+      description={ui(
+        "Say what Bots should do before an action, and your model writes the team rules. Nothing changes until you save them.",
+      )}
+      title={ui("Describe team rules")}
     >
       <form
         noValidate
@@ -107,21 +114,23 @@ function DescribeTeamRulesPage() {
                 render={(props) => <Link {...props} to="/admin/approvals" />}
                 variant="outline"
               >
-                Cancel
+                {ui("Cancel")}
               </Button>
               <Button disabled={!ready || save.isPending} type="submit">
-                {save.isPending ? "Saving…" : "Save rules"}
+                {save.isPending ? ui("Saving…") : ui("Save rules")}
               </Button>
             </>
           }
         >
           <FieldGroup>
             <DescribeField
-              action="Write rules"
-              description="Say in a sentence what Bots should do, and your model writes rules from this OpenBot's apps and Bots. A second reading that never sees your words says what the rules do."
+              action={ui("Write rules")}
+              description={ui(
+                "Say in a sentence what Bots should do, and your model writes rules from this OpenBot's apps and Bots. A second reading that never sees your words says what the rules do.",
+              )}
               id="team-rules-english"
-              label="Describe the rules"
-              placeholder="Ask before any Bot sends email from Gmail"
+              label={ui("Describe the rules")}
+              placeholder={ui("Ask before any Bot sends email from Gmail")}
               write={async (described) => {
                 const translation = await translateApprovalRules(described);
                 save.reset();
@@ -135,7 +144,9 @@ function DescribeTeamRulesPage() {
                 check={written.check}
                 edited={
                   edited
-                    ? "You've changed the rules since they were written. The check and the reading above are for the written rules, not your edit."
+                    ? ui(
+                        "You've changed the rules since they were written. The check and the reading above are for the written rules, not your edit.",
+                      )
                     : null
                 }
                 explanation={written.explanation}
@@ -143,10 +154,12 @@ function DescribeTeamRulesPage() {
                   // No rules says so itself, with the model's reason.
                   written.rules.length === 0
                     ? ""
-                    : "These rules don't check, so OpenBot won't save them."
+                    : ui("These rules don't check, so OpenBot won't save them.")
                 }
-                heading="What these rules do"
-                passed="Checks. Every rule matches tools and Bots this OpenBot has."
+                heading={ui("What these rules do")}
+                passed={ui(
+                  "Checks. Every rule matches tools and Bots this OpenBot has.",
+                )}
                 warning={written.warning}
               />
             ) : null}
@@ -173,7 +186,7 @@ function DescribeTeamRulesPage() {
           </FieldGroup>
           {save.error ? (
             <p className="mt-5 text-destructive text-sm" role="alert">
-              {save.error.message}
+              {<ErrorDetails error={save.error} />}
             </p>
           ) : null}
         </PageCard>

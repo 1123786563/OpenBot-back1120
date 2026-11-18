@@ -215,7 +215,7 @@ describe("adding a curated server", () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "That is not a credential this server can use. Add the server's own token instead.",
     });
@@ -249,7 +249,9 @@ describe("adding a curated server", () => {
     const response = await request({ key: "notion" });
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: sentence });
+    expect(await response.json()).toMatchObject({
+      error: sentence,
+    });
   });
 
   test("a failure that is not a refusal is not dressed up as one", async () => {
@@ -332,7 +334,9 @@ describe("refreshing a server that cannot be resolved", () => {
     expect(response.status).toBe(409);
     // A body at all is the fix. Unmapped, this was a 500 carrying no JSON, and the page said
     // "That did not work" because that is what it says when it finds no message.
-    expect(await response.json()).toEqual({ error: sentence });
+    expect(await response.json()).toMatchObject({
+      error: sentence,
+    });
   });
 
   test("a failed query comes back as the reason, never as the statement", async () => {
@@ -623,7 +627,7 @@ describe("granting one Bot to another", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "Only an admin can choose which Bots hand work to another Bot.",
     });
     expect(calls).toEqual([]);
@@ -3501,7 +3505,9 @@ describe("removing a server that could not be fully withdrawn", () => {
     })();
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: sentence });
+    expect(await response.json()).toMatchObject({
+      error: sentence,
+    });
   });
 
   test("an unreadable auth-config listing reaches the administrator too", async () => {
@@ -3543,7 +3549,7 @@ describe("removing a server that could not be fully withdrawn", () => {
      * key that is fine, over a row only they can correct. Nothing else on this route pins that
      * sequence.
      */
-    expect(await response.json()).toEqual({ error: sentence });
+    expect(await response.json()).toMatchObject({ error: sentence });
   });
 
   test("a failure nobody explained says what to press, and is logged", async () => {

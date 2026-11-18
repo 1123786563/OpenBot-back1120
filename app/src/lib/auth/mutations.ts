@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { clearSkin } from "@/skins/store";
@@ -7,7 +8,7 @@ async function signOut() {
   await client("/api/auth/sign-out", {
     method: "POST",
     // What a refused sign-out means whoever answers it (Better Auth puts its sentence where `client` does not read).
-    fallback: "Signing out did not finish. Try again.",
+    fallback: ui("Signing out did not finish. Try again."),
   });
 }
 
@@ -35,7 +36,7 @@ export function updateProfileNameMutationOptions(queryClient: QueryClient) {
       client("/api/me/profile", "profile", {
         method: "PATCH",
         body: { name },
-        fallback: "Your name could not be saved",
+        fallback: ui("Your name could not be saved"),
       }),
     onSuccess: () =>
       queryClient.invalidateQueries({

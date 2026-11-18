@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBuilding,
   IconChecklist,
@@ -48,7 +50,7 @@ function scopeWords(change: CapabilityChange): string {
   if (change.scopeKind === "organization") return "Everybody";
   if (change.scopeKind === "role")
     return change.scopeId === "admin" ? "Admins" : "Members";
-  return `Group: ${change.scopeId}`;
+  return ui("Group: {{value0}}", { value0: String(change.scopeId) });
 }
 
 const SCOPE_ICONS = {
@@ -87,11 +89,14 @@ export function ChangeRows({
   problems: CapabilityChangeProblem[];
   onRemove: (index: number) => void;
 }) {
+  useLocale();
   return (
     <Field>
-      <FieldLabel>Changes</FieldLabel>
+      <FieldLabel>{ui("Changes")}</FieldLabel>
       <FieldDescription>
-        Each change sets one switch. Remove any you don't want before you save.
+        {ui(
+          "Each change sets one switch. Remove any you don't want before you save.",
+        )}
       </FieldDescription>
       <PageRows>
         {changes.map((change, index) => {
@@ -124,7 +129,9 @@ export function ChangeRows({
                     {setting.text}
                   </span>
                   <Button
-                    aria-label={`Remove change ${row}`}
+                    aria-label={ui("Remove change {{value0}}", {
+                      value0: String(row),
+                    })}
                     onClick={() => onRemove(index)}
                     size="icon-sm"
                     type="button"
@@ -148,13 +155,16 @@ function answerWords(answer: CapabilityAnswer): string {
   const state = answer.allowed ? "on" : "off";
   switch (answer.decidedBy) {
     case "default":
-      return `${state} by default`;
+      return ui("{{value0}} by default", { value0: String(state) });
     case "organization":
-      return `${state} for everybody`;
+      return ui("{{value0}} for everybody", { value0: String(state) });
     case "role":
-      return `${state} for ${answer.scopeId === "admin" ? "admins" : "members"}`;
+      return ui("{{value0}} for {{value1}}", {
+        value0: String(state),
+        value1: String(answer.scopeId === "admin" ? "admins" : "members"),
+      });
     case "group":
-      return `on through ${answer.scopeId}`;
+      return ui("on through {{value0}}", { value0: String(answer.scopeId) });
   }
 }
 
@@ -165,13 +175,13 @@ const gains = (capability: PreviewCapability) =>
 
 function verdictOf(person: PreviewPerson): { text: string; className: string } {
   if (person.capabilities.some(loses))
-    return { text: "Loses access", className: "text-destructive" };
+    return { text: ui("Loses access"), className: "text-destructive" };
   if (person.capabilities.some(gains))
     return {
-      text: "Gains access",
+      text: ui("Gains access"),
       className: "text-emerald-600 dark:text-emerald-400",
     };
-  return { text: "Keeps access", className: "text-muted-foreground" };
+  return { text: ui("Keeps access"), className: "text-muted-foreground" };
 }
 
 const plural = (count: number, one: string, many: string) =>
@@ -190,7 +200,7 @@ export function previewHeadline(counts: CapabilityPreview["counts"]): string {
       ? `${plural(counts.keeping, "person keeps", "people keep")} it through a different switch`
       : null,
   ].filter((part): part is string => part !== null);
-  if (parts.length === 0) return "Nobody's access changes.";
+  if (parts.length === 0) return ui("Nobody's access changes.");
   const sentence =
     parts.length > 1
       ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
@@ -206,28 +216,36 @@ function activityWords(
 ): string | null {
   if (!loses(capability)) return null;
   if (unmapped.has(capability.capability))
-    return "OpenBot doesn't record its use.";
+    return ui("OpenBot doesn't record its use.");
   const activity = capability.activity;
   if (!activity) return null;
-  if (activity.count === 0) return `Not used in the last ${days} days.`;
-  return `${activity.count}${activity.more ? " or more" : ""} in the last ${days} days: ${activity.what}.`;
+  if (activity.count === 0)
+    return ui("Not used in the last {{value0}} days.", {
+      value0: String(days),
+    });
+  return ui("{{value0}}{{value1}} in the last {{value2}} days: {{value3}}.", {
+    value0: String(activity.count),
+    value1: String(activity.more ? " or more" : ""),
+    value2: String(days),
+    value3: String(activity.what),
+  });
 }
 
 /** Where a past action acted, for the mark beside it. */
 function mediaOf(event: AuditEvent): ReplayRow["media"] {
   if (event.targetType === "host_access")
-    return { icon: <IconFolder />, label: "Folder on their own computer" };
+    return { icon: <IconFolder />, label: ui("Folder on their own computer") };
   if (event.eventType.startsWith("computer."))
-    return { icon: <IconDeviceDesktop />, label: "Computer action" };
+    return { icon: <IconDeviceDesktop />, label: ui("Computer action") };
   if (event.eventType.startsWith("password."))
-    return { icon: <IconKey />, label: "Login" };
+    return { icon: <IconKey />, label: ui("Login") };
   if (event.eventType.startsWith("delivery."))
-    return { icon: <IconMessage />, label: "Messaging app" };
+    return { icon: <IconMessage />, label: ui("Messaging app") };
   if (event.eventType.startsWith("bot."))
-    return { icon: <IconRobot />, label: "Bot" };
+    return { icon: <IconRobot />, label: ui("Bot") };
   if (event.eventType.startsWith("approval."))
-    return { icon: <IconChecklist />, label: "Approval rule" };
-  return { icon: <IconPlug />, label: "App call" };
+    return { icon: <IconChecklist />, label: ui("Approval rule") };
+  return { icon: <IconPlug />, label: ui("App call") };
 }
 
 /**
@@ -240,13 +258,14 @@ export function PermissionsPreview({
 }: {
   preview: UseQueryResult<CapabilityPreview>;
 }) {
+  useLocale();
   if (preview.isPending) return null;
   if (preview.error)
     return (
       <Field>
-        <FieldLabel>Who it changes</FieldLabel>
+        <FieldLabel>{ui("Who it changes")}</FieldLabel>
         <p className="text-destructive text-sm" role="alert">
-          {preview.error.message}
+          {<ErrorDetails error={preview.error} />}
         </p>
       </Field>
     );
@@ -285,14 +304,23 @@ export function PermissionsPreview({
   return (
     <>
       <Field aria-labelledby="permissions-preview" aria-live="polite">
-        <FieldLabel id="permissions-preview">Who it changes</FieldLabel>
+        <FieldLabel id="permissions-preview">{ui("Who it changes")}</FieldLabel>
         <div>
           <p className="font-medium text-sm">{previewHeadline(data.counts)}</p>
           <FieldDescription className="mt-1">
-            Worked out for all {plural(data.counts.people, "person", "people")}{" "}
-            with the rule OpenBot enforces.
+            {ui("Worked out for all")}{" "}
+            {plural(data.counts.people, "person", "people")}{" "}
+            {ui("with the rule OpenBot enforces.")}
             {data.counts.unchanged > 0
-              ? ` ${plural(data.counts.unchanged, "person isn't", "people aren't")} affected.`
+              ? ui(" {{value0}} affected.", {
+                  value0: String(
+                    plural(
+                      data.counts.unchanged,
+                      "person isn't",
+                      "people aren't",
+                    ),
+                  ),
+                })
               : ""}
           </FieldDescription>
         </div>
@@ -317,10 +345,12 @@ export function PermissionsPreview({
                     <ItemContent className="min-w-0">
                       <ItemTitle>{nameOf(person)}</ItemTitle>
                       <ItemDescription className="line-clamp-none">
-                        {person.role === "admin" ? "Admin" : "Member"}
+                        {person.role === "admin" ? ui("Admin") : ui("Member")}
                         {person.groups.length > 0
-                          ? ` in ${person.groups.join(", ")}`
-                          : ", in no group"}
+                          ? ui(" in {{value0}}", {
+                              value0: String(person.groups.join(", ")),
+                            })
+                          : ui(", in no group")}
                       </ItemDescription>
                       {person.capabilities
                         .filter(
@@ -347,8 +377,9 @@ export function PermissionsPreview({
                                 <span className="font-medium">
                                   {capability.title}.
                                 </span>{" "}
-                                Now {answerWords(capability.before)}. After
-                                this, {answerWords(capability.after)}.
+                                {ui("Now")} {answerWords(capability.before)}
+                                {ui(". After this,")}{" "}
+                                {answerWords(capability.after)}.
                               </p>
                               {activity ? (
                                 <p className="text-muted-foreground text-xs">
@@ -375,25 +406,26 @@ export function PermissionsPreview({
         ) : null}
         {listed > data.people.length ? (
           <p className="text-muted-foreground text-xs">
-            Showing the first {data.people.length} of {listed}.
+            {ui("Showing the first")} {data.people.length} {ui("of")} {listed}.
           </p>
         ) : null}
         {data.activity.unmapped.length > 0 ? (
           <FieldDescription>
-            OpenBot doesn't record use of{" "}
-            {data.activity.unmapped.map((entry) => entry.title).join(", ")}, so
-            recent use isn't shown for it.
+            {ui("OpenBot doesn't record use of")}{" "}
+            {data.activity.unmapped.map((entry) => entry.title).join(", ")}
+            {ui(", so recent use isn't shown for it.")}
           </FieldDescription>
         ) : null}
       </Field>
       {used.length > 0 ? (
         <Field aria-labelledby="permissions-used">
           <FieldLabel id="permissions-used">
-            Used in the last {data.activity.days} days
+            {ui("Used in the last")} {data.activity.days} {ui("days")}
           </FieldLabel>
           <FieldDescription>
-            The newest actions people took with what they would lose, from
-            Audit.
+            {ui(
+              "The newest actions people took with what they would lose, from Audit.",
+            )}
           </FieldDescription>
           <ReplayRows rows={used} total={usedTotal} />
         </Field>

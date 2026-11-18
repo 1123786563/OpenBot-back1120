@@ -187,7 +187,7 @@ describe("admin audit API", () => {
     );
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Only an admin can do this.",
     });
   });

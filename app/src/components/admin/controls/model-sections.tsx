@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconBrain,
   IconChartBar,
@@ -45,13 +47,27 @@ import { ControlsSection } from "./controls-section";
 
 /** Who serves the models, by the name an admin knows it by. */
 const SOURCE_NAMES: Record<ModelSource, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  google: "Google",
-  xai: "xAI",
-  gateway: "OpenAI-compatible endpoint",
-  chatgpt: "ChatGPT plan",
-  claude: "Claude plan",
+  get openai() {
+    return ui("OpenAI");
+  },
+  get anthropic() {
+    return ui("Anthropic");
+  },
+  get google() {
+    return ui("Google");
+  },
+  get xai() {
+    return ui("xAI");
+  },
+  get gateway() {
+    return ui("OpenAI-compatible endpoint");
+  },
+  get chatgpt() {
+    return ui("ChatGPT plan");
+  },
+  get claude() {
+    return ui("Claude plan");
+  },
 };
 
 /**
@@ -73,18 +89,21 @@ const SOURCE_VENDORS: Partial<Record<ModelSource, string>> = {
  * deployment's configuration; a row each once a deployment can hold more than one.
  */
 export function ProviderSection() {
+  useLocale();
   const available = useQuery(availableModelsQueryOptions());
   return (
     <ControlsSection
-      description="Built-in Bots and the framework picked at setup run on models from this provider."
-      title="Connected"
+      description={ui(
+        "Built-in Bots and the framework picked at setup run on models from this provider.",
+      )}
+      title={ui("Connected")}
     >
       {() => {
         if (available.isPending) return null;
         if (available.error)
           return (
             <p className="mt-4 text-destructive text-sm" role="alert">
-              Couldn't load the provider. Reload the page.
+              {ui("Couldn't load the provider. Reload the page.")}
             </p>
           );
         const { source } = available.data;
@@ -106,8 +125,13 @@ export function ProviderSection() {
                 <ItemTitle>{name}</ItemTitle>
                 <ItemDescription>
                   {available.data.listed
-                    ? `Default ${available.data.default} · ${available.data.models.length} models listed`
-                    : `Default ${available.data.default} · couldn't read its models`}
+                    ? ui("Default {{value0}} · {{value1}} models listed", {
+                        value0: String(available.data.default),
+                        value1: String(available.data.models.length),
+                      })
+                    : ui("Default {{value0}} · couldn't read its models", {
+                        value0: String(available.data.default),
+                      })}
                 </ItemDescription>
               </ItemContent>
             </Item>
@@ -124,17 +148,25 @@ export function ProviderSection() {
  * the default only. No switch: what is allowed says it.
  */
 export function ModelChoiceSection() {
+  useLocale();
   const available = useQuery(availableModelsQueryOptions());
   return (
     <ControlsSection
       description={() => {
         const data = available.data;
-        if (!data) return "Which models people can pick in each conversation.";
+        if (!data)
+          return ui("Which models people can pick in each conversation.");
         return data.exposure === "all"
-          ? `People can pick any model your provider lists, and its thinking level, in each conversation. Bots run on ${data.default} until somebody picks another.`
-          : `People pick among the models you allow below, and their thinking level, in each conversation. Until you allow one, every conversation runs on ${data.default}.`;
+          ? ui(
+              "People can pick any model your provider lists, and its thinking level, in each conversation. Bots run on {{value0}} until somebody picks another.",
+              { value0: String(data.default) },
+            )
+          : ui(
+              "People pick among the models you allow below, and their thinking level, in each conversation. Until you allow one, every conversation runs on {{value0}}.",
+              { value0: String(data.default) },
+            );
       }}
-      title="In conversations"
+      title={ui("In conversations")}
     >
       {({ data }) => {
         const listing = available.data;
@@ -153,17 +185,29 @@ export function ModelChoiceSection() {
               <ItemContent>
                 <ItemTitle>
                   {listing.exposure === "all"
-                    ? "Every listed model"
+                    ? ui("Every listed model")
                     : allowed === 0
-                      ? "No models allowed yet"
-                      : `${allowed} ${allowed === 1 ? "model" : "models"} allowed`}
+                      ? ui("No models allowed yet")
+                      : ui("{{value0}} {{value1}} allowed", {
+                          value0: String(allowed),
+                          value1: String(
+                            allowed === 1 ? ui("model") : ui("models"),
+                          ),
+                        })}
                 </ItemTitle>
                 <ItemDescription>
                   {listing.exposure === "all"
-                    ? `${listing.models.length} models, kept current from your provider.`
+                    ? ui(
+                        "{{value0}} models, kept current from your provider.",
+                        { value0: String(listing.models.length) },
+                      )
                     : allowed === 0
-                      ? "People don't see a model picker. Allow models below to offer them."
-                      : "People see them in the composer's model picker, with the default."}
+                      ? ui(
+                          "People don't see a model picker. Allow models below to offer them.",
+                        )
+                      : ui(
+                          "People see them in the composer's model picker, with the default.",
+                        )}
                 </ItemDescription>
               </ItemContent>
             </Item>
@@ -176,18 +220,24 @@ export function ModelChoiceSection() {
 
 /** What the allowed-models row says: the models themselves, the first few by name. */
 export function allowedSummary(models: readonly string[]): string {
-  if (models.length === 0) return "None listed";
+  if (models.length === 0) return ui("None listed");
   if (models.length <= 3) return models.join(", ");
-  return `${models.slice(0, 3).join(", ")} and ${models.length - 3} more`;
+  return ui("{{value0}} and {{value1}} more", {
+    value0: String(models.slice(0, 3).join(", ")),
+    value1: String(models.length - 3),
+  });
 }
 
 /** Admin, Providers: the allowlist every Bot's model is checked against. */
 export function ModelAllowlistSection() {
+  useLocale();
   const [open, setOpen] = useState(false);
   return (
     <ControlsSection
-      description="The models people may pick in each conversation. With Only allowed models on, a Bot on any other model is refused before it runs, and a remote Bot's own model is checked too."
-      title="Allowed models"
+      description={ui(
+        "The models people may pick in each conversation. With Only allowed models on, a Bot on any other model is refused before it runs, and a remote Bot's own model is checked too.",
+      )}
+      title={ui("Allowed models")}
     >
       {({ data, setSetting, saving }) => {
         const { modelAllowlist } = data.settings;
@@ -199,16 +249,18 @@ export function ModelAllowlistSection() {
                   <IconShieldLock />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Only allowed models</ItemTitle>
+                  <ItemTitle>{ui("Only allowed models")}</ItemTitle>
                   <ItemDescription>
                     {modelAllowlist.enabled
-                      ? "Bots can only run on the models listed below."
-                      : "Off. Runs on other models, a remote Bot's own included, aren't refused."}
+                      ? ui("Bots can only run on the models listed below.")
+                      : ui(
+                          "Off. Runs on other models, a remote Bot's own included, aren't refused.",
+                        )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <Switch
-                    aria-label="Only allowed models"
+                    aria-label={ui("Only allowed models")}
                     checked={modelAllowlist.enabled}
                     disabled={saving}
                     onCheckedChange={(enabled) =>
@@ -229,7 +281,7 @@ export function ModelAllowlistSection() {
                   <IconKey />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Allowed models</ItemTitle>
+                  <ItemTitle>{ui("Allowed models")}</ItemTitle>
                   <ItemDescription>
                     {allowedSummary(modelAllowlist.models)}
                   </ItemDescription>
@@ -281,6 +333,7 @@ export function AllowedModelsDialog({
   onSave: (models: string[]) => void;
   onClose: () => void;
 }) {
+  useLocale();
   const available = useQuery({
     ...availableModelsQueryOptions(),
     enabled: open,
@@ -330,27 +383,28 @@ export function AllowedModelsDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Allowed models</DialogTitle>
+          <DialogTitle>{ui("Allowed models")}</DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 flex flex-col gap-3 overflow-y-auto">
           <Input
-            aria-label="Search models"
+            aria-label={ui("Search models")}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search models"
+            placeholder={ui("Search models")}
             value={search}
           />
           {available.isPending ? null : available.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {available.error.message}
+              {<ErrorDetails error={available.error} />}
             </p>
           ) : !available.data.listed ? (
             <p className="text-muted-foreground text-sm">
-              Couldn't read the provider's models, so only the configured one is
-              listed. Add others by their full name.
+              {ui(
+                "Couldn't read the provider's models, so only the configured one is listed. Add others by their full name.",
+              )}
             </p>
           ) : null}
           {rows.length === 0 ? (
-            <PageEmpty icon={IconSearch} title="No matches" />
+            <PageEmpty icon={IconSearch} title={ui("No matches")} />
           ) : (
             <div className="flex flex-col gap-px">
               {rows.map((model) => (
@@ -374,15 +428,21 @@ export function AllowedModelsDialog({
                     <ItemTitle>{model.label}</ItemTitle>
                     <ItemDescription className="text-xs">
                       <span className="font-mono">{model.name}</span>
-                      {model.name === defaultName ? " · default" : ""}
+                      {model.name === defaultName ? ui(" · default") : ""}
                       {model.model?.efforts?.length
-                        ? ` · Thinking: ${model.model.efforts.map(effortLabel).join(", ")}`
+                        ? ui(" · Thinking: {{value0}}", {
+                            value0: String(
+                              model.model.efforts.map(effortLabel).join(", "),
+                            ),
+                          })
                         : ""}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <Checkbox
-                      aria-label={`Allow ${model.label}`}
+                      aria-label={ui("Allow {{value0}}", {
+                        value0: String(model.label),
+                      })}
                       checked={selected.includes(model.name)}
                       onCheckedChange={(checked) =>
                         toggle(model.name, checked === true)
@@ -403,10 +463,10 @@ export function AllowedModelsDialog({
             }}
           >
             <Input
-              aria-label="Another model"
+              aria-label={ui("Another model")}
               className="font-mono text-xs"
               onChange={(event) => setOther(event.target.value)}
-              placeholder="provider/model, for a model not listed"
+              placeholder={ui("provider/model, for a model not listed")}
               value={other}
             />
             <Button
@@ -415,19 +475,21 @@ export function AllowedModelsDialog({
               type="submit"
               variant="outline"
             >
-              Add
+              {ui("Add")}
             </Button>
           </form>
           {defaultName && !selected.includes(defaultName) ? (
             <p className="text-muted-foreground text-xs">
-              {defaultName} is the default and stays offered. With Only allowed
-              models on, a built-in Bot on it is refused unless you allow it.
+              {uiNodes(
+                "{{slot0}}is the default and stays offered. With Only allowed models on, a built-in Bot on it is refused unless you allow it.",
+                [defaultName],
+              )}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             onClick={() => {
@@ -437,7 +499,7 @@ export function AllowedModelsDialog({
             size="sm"
             type="button"
           >
-            Save
+            {ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -450,24 +512,27 @@ export function AllowedModelsDialog({
  * only a team is told that refused runs are counted.
  */
 export function ModelUsageSection({ team }: { team: boolean }) {
+  useLocale();
   const usage = useQuery(modelUsageQueryOptions(30));
   return (
     <ControlsSection
       description={
         team
-          ? "Runs on each model in the last 30 days, including runs the allowlist refused."
-          : "Runs on each model in the last 30 days."
+          ? ui(
+              "Runs on each model in the last 30 days, including runs the allowlist refused.",
+            )
+          : ui("Runs on each model in the last 30 days.")
       }
-      title="Usage"
+      title={ui("Usage")}
     >
       {() =>
         usage.isPending ? null : usage.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load model usage. Reload the page.
+            {ui("Couldn't load model usage. Reload the page.")}
           </p>
         ) : usage.data.summary.length === 0 ? (
-          <PageEmpty icon={IconChartBar} title="No recent runs">
-            Runs will appear here once a Bot answers.
+          <PageEmpty icon={IconChartBar} title={ui("No recent runs")}>
+            {ui("Runs will appear here once a Bot answers.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -481,17 +546,19 @@ export function ModelUsageSection({ team }: { team: boolean }) {
                   <ItemContent>
                     <ItemTitle>{row.model}</ItemTitle>
                     <ItemDescription>
-                      {row.runs} runs by {row.people}{" "}
-                      {row.people === 1 ? "person" : "people"}
+                      {row.runs} {ui("runs by")} {row.people}{" "}
+                      {row.people === 1 ? ui("person") : ui("people")}
                       {row.refused > 0
-                        ? ` · ${row.refused} off the allowlist`
+                        ? ui(" · {{value0}} off the allowlist", {
+                            value0: String(row.refused),
+                          })
                         : ""}{" "}
                       · {row.source}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
                     <span className="text-muted-foreground text-sm">
-                      {new Date(row.lastUsedAt).toLocaleDateString()}
+                      {new Date(row.lastUsedAt).toLocaleDateString(getLocale())}
                     </span>
                   </ItemActions>
                 </Item>

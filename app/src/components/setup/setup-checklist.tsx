@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconApps,
   IconBrain,
@@ -69,6 +70,7 @@ export function SetupChecklist({
    */
   openPage: (target: { label: string; path: string }) => void;
 }) {
+  useLocale();
   const checklist = useQuery(setupChecklistQueryOptions());
   const recheck = useMutation(recheckSetupMutationOptions(queryClient));
 
@@ -90,7 +92,7 @@ export function SetupChecklist({
       size="sm"
       variant="ghost"
     >
-      {checking ? "Checking…" : "Check again"}
+      {checking ? ui("Checking…") : ui("Check again")}
     </Button>
   );
 
@@ -98,14 +100,14 @@ export function SetupChecklist({
     <div className="flex w-full flex-col gap-3" data-setup-checklist="">
       {recheck.error ? (
         <p className="text-sm text-destructive" role="alert">
-          Couldn't check again. Try again.
+          {ui("Couldn't check again. Try again.")}
         </p>
       ) : null}
       {/* Nothing while the first answer is on its way: OpenBot has no loading placeholder. */}
       {checklist.isPending ? null : checklist.error ? (
         <>
           <p className="text-sm text-destructive" role="alert">
-            Couldn't check your setup. Check again.
+            {ui("Couldn't check your setup. Check again.")}
           </p>
           {checkAgain}
         </>
@@ -117,7 +119,7 @@ export function SetupChecklist({
               : summaryOf(checklist.data.rows)}
           </p>
           <PageRows className="mt-0">
-            <ul aria-label="Setup">
+            <ul aria-label={ui("Setup")}>
               {checklist.data.rows.map((row, at) => (
                 <li
                   data-ready={row.ready ? "" : undefined}
@@ -152,7 +154,7 @@ export function summaryOf(rows: SetupRow[]): string {
       : unchecked === 1
         ? "1 thing isn't checked yet."
         : `${unchecked} things aren't checked yet.`;
-  if (gaps.length === 0) return notChecked ?? "Everything is set up.";
+  if (gaps.length === 0) return notChecked ?? ui("Everything is set up.");
   const required = gaps.filter((row) => row.required).length;
   const things =
     gaps.length === 1 ? "1 thing needs" : `${gaps.length} things need`;
@@ -174,24 +176,24 @@ export function summaryOf(rows: SetupRow[]): string {
 /** A member's line over the list: whether anything is left, and who sees to it, without counting. */
 export function memberSummaryOf(rows: SetupRow[]): string {
   return rows.every((row) => row.ready)
-    ? "Everything is set up."
-    : "Your admin sets up anything that isn't ready yet.";
+    ? ui("Everything is set up.")
+    : ui("Your admin sets up anything that isn't ready yet.");
 }
 
 /** The pill's words and colours: done green, a gap that blocks red, everything else amber. */
 function pillFor(row: SetupRow) {
   if (row.status === "ready")
     return {
-      label: "Ready",
+      label: ui("Ready"),
       tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     };
   if (row.status === "not_checked")
     return {
-      label: "Not checked",
+      label: ui("Not checked"),
       tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     };
   return {
-    label: "Needs setup",
+    label: ui("Needs setup"),
     tone: row.required
       ? "bg-destructive/10 text-destructive"
       : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -208,6 +210,7 @@ function SetupItem({
   member: boolean;
   openPage: (target: { label: string; path: string }) => void;
 }) {
+  useLocale();
   const Icon = ICONS[row.id];
   const pill = member && !row.ready ? null : pillFor(row);
   return (
@@ -221,7 +224,7 @@ function SetupItem({
           {row.title}
           {row.required && !member ? (
             <span className="text-xs ms-2 whitespace-nowrap font-normal text-muted-foreground">
-              Required
+              {ui("Required")}
             </span>
           ) : null}
         </ItemTitle>
@@ -261,6 +264,7 @@ function Fix({
   fix: SetupFix;
   openPage: (target: { label: string; path: string }) => void;
 }) {
+  useLocale();
   const page = (target: { label: string; path: string }) => (
     <a
       className={LINK}
@@ -275,31 +279,36 @@ function Fix({
   );
   const guide = (url: string) => (
     <a className={LINK} href={url} rel="noopener noreferrer" target="_blank">
-      Setup guide
+      {ui("Setup guide")}
     </a>
   );
 
   if (fix.kind === "page") {
     return (
       <p className="text-sm text-muted-foreground">
-        Open {page(fix)}. {fix.docsUrl ? guide(fix.docsUrl) : null}
+        {ui("Open")} {page(fix)}. {fix.docsUrl ? guide(fix.docsUrl) : null}
       </p>
     );
   }
 
   return (
     <p className="text-sm text-muted-foreground">
-      Set{" "}
+      {ui("Set")}{" "}
       {fix.names.map((name, at) => (
         <Fragment key={name}>
-          {at > 0 ? (at === fix.names.length - 1 ? " and " : ", ") : null}
+          {at > 0 ? (at === fix.names.length - 1 ? ui(" and ") : ", ") : null}
           <code className="text-xs rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground [overflow-wrap:anywhere]">
             {name}
           </code>
         </Fragment>
       ))}
-      , then restart {PRODUCT}.
-      {fix.page ? <> Or add the key in {page(fix.page)}.</> : null}{" "}
+      {ui(", then restart")} {PRODUCT}.
+      {fix.page ? (
+        <>
+          {" "}
+          {ui("Or add the key in")} {page(fix.page)}.
+        </>
+      ) : null}{" "}
       {guide(fix.docsUrl)}
     </p>
   );

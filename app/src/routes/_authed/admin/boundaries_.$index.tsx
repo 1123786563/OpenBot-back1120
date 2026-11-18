@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   keepPreviousData,
   useMutation,
@@ -49,7 +51,9 @@ export const Route = createFileRoute("/_authed/admin/boundaries_/$index")({
 });
 
 const BACK = {
-  label: "Boundaries",
+  get label() {
+    return ui("Boundaries");
+  },
   linkProps: { to: "/admin/boundaries" as const },
 };
 
@@ -60,6 +64,7 @@ const BACK = {
  * longer holds a rule, because it was removed elsewhere, says so rather than showing a neighbour.
  */
 function RulePage() {
+  useLocale();
   const { index } = Route.useParams();
   const stored = useQuery(actionPolicyQueryOptions());
   const policy = stored.data;
@@ -67,10 +72,10 @@ function RulePage() {
 
   if (!policy) {
     return (
-      <PageShell backButton={BACK} title="Rule">
+      <PageShell backButton={BACK} title={ui("Rule")}>
         {stored.error ? (
           <p className="text-destructive text-sm" role="alert">
-            {stored.error.message}
+            {<ErrorDetails error={stored.error} />}
           </p>
         ) : null}
       </PageShell>
@@ -78,9 +83,9 @@ function RulePage() {
   }
   if (rule === undefined) {
     return (
-      <PageShell backButton={BACK} title="Rule">
+      <PageShell backButton={BACK} title={ui("Rule")}>
         <p className="text-muted-foreground text-sm">
-          This rule isn't in place anymore. It may have been removed.
+          {ui("This rule isn't in place anymore. It may have been removed.")}
         </p>
       </PageShell>
     );
@@ -90,6 +95,7 @@ function RulePage() {
 }
 
 function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
+  useLocale();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const savePolicy = useMutation(saveActionPolicyMutationOptions(queryClient));
@@ -116,34 +122,47 @@ function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
     >
       {policy.mode === "dry-run" ? (
         <p className="text-amber-600 text-sm dark:text-amber-500">
-          Trial mode is on, so this rule records matching actions without
-          stopping them.
+          {ui(
+            "Trial mode is on, so this rule records matching actions without stopping them.",
+          )}
         </p>
       ) : null}
 
       <PageSection
-        description="Written in CEL. It is checked before every action a Bot takes."
-        title="Rule"
+        description={ui(
+          "Written in CEL. It is checked before every action a Bot takes.",
+        )}
+        title={ui("Rule")}
       >
         <RuleEditor policy={policy} rule={rule} />
       </PageSection>
 
-      <PageSection title="Recently stopped">
+      <PageSection title={ui("Recently stopped")}>
         {reach.isPending ? null : reach.error ? (
           <p className="mt-4 text-muted-foreground text-sm">
-            {reach.error.message}
+            {<ErrorDetails error={reach.error} />}
           </p>
         ) : reach.data.scanned === 0 ? (
           <p className="mt-4 text-muted-foreground text-sm">
-            No recorded actions yet. What this rule stops will show here once
-            Bots have acted.
+            {ui(
+              "No recorded actions yet. What this rule stops will show here once Bots have acted.",
+            )}
           </p>
         ) : (
           <>
             <p className="mt-4 text-muted-foreground text-sm">
               {reach.data.wouldAllow === 0
-                ? `It stopped none of the last ${reach.data.scanned} recorded actions.`
-                : `It stopped ${reach.data.wouldAllow} of the last ${reach.data.scanned} recorded actions.`}
+                ? ui(
+                    "It stopped none of the last {{value0}} recorded actions.",
+                    { value0: String(reach.data.scanned) },
+                  )
+                : ui(
+                    "It stopped {{value0}} of the last {{value1}} recorded actions.",
+                    {
+                      value0: String(reach.data.wouldAllow),
+                      value1: String(reach.data.scanned),
+                    },
+                  )}
             </p>
             <DryRunChanges
               changes={reach.data.changes.filter(
@@ -157,29 +176,32 @@ function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
       </PageSection>
 
       <PageSection
-        description="Bots can do this again from their next action."
-        title="Remove"
+        description={ui("Bots can do this again from their next action.")}
+        title={ui("Remove")}
       >
         <Button
           className="mt-4"
           onClick={() => setRemoving(true)}
           variant="destructive"
         >
-          Remove rule
+          {ui("Remove rule")}
         </Button>
       </PageSection>
 
       <Dialog onOpenChange={setRemoving} open={removing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove “{label.name}”?</DialogTitle>
+            <DialogTitle>
+              {ui("Remove “")}
+              {label.name}”?
+            </DialogTitle>
             <DialogDescription>
-              Every Bot can do this again from its next action.
+              {ui("Every Bot can do this again from its next action.")}
             </DialogDescription>
           </DialogHeader>
           {savePolicy.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {savePolicy.error.message}
+              {<ErrorDetails error={savePolicy.error} />}
             </p>
           ) : null}
           <DialogFooter>
@@ -188,7 +210,7 @@ function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
               size="sm"
               variant="ghost"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={savePolicy.isPending}
@@ -196,7 +218,7 @@ function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
               size="sm"
               variant="destructive"
             >
-              {savePolicy.isPending ? "Removing…" : "Remove"}
+              {savePolicy.isPending ? ui("Removing…") : ui("Remove")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -213,6 +235,7 @@ function RuleDetail({ policy, rule }: { policy: ActionPolicy; rule: string }) {
  * the old rule's place and name.
  */
 function RuleEditor({ policy, rule }: { policy: ActionPolicy; rule: string }) {
+  useLocale();
   const queryClient = useQueryClient();
   const savePolicy = useMutation(saveActionPolicyMutationOptions(queryClient));
   const [draft, setDraft] = useState(rule);
@@ -285,10 +308,10 @@ function RuleEditor({ policy, rule }: { policy: ActionPolicy; rule: string }) {
           changed ? (
             <>
               <Button onClick={reset} type="button" variant="outline">
-                Cancel
+                {ui("Cancel")}
               </Button>
               <Button disabled={!ready || savePolicy.isPending} type="submit">
-                {savePolicy.isPending ? "Saving…" : "Save rule"}
+                {savePolicy.isPending ? ui("Saving…") : ui("Save rule")}
               </Button>
             </>
           ) : undefined
@@ -297,7 +320,7 @@ function RuleEditor({ policy, rule }: { policy: ActionPolicy; rule: string }) {
         <FieldGroup>
           <DescribeRule onWritten={takeWritten} />
           <Field>
-            <FieldLabel htmlFor="rule-expression">Rule</FieldLabel>
+            <FieldLabel htmlFor="rule-expression">{ui("Rule")}</FieldLabel>
             <Textarea
               autoCapitalize="off"
               autoCorrect="off"
@@ -309,7 +332,7 @@ function RuleEditor({ policy, rule }: { policy: ActionPolicy; rule: string }) {
             />
             {duplicate ? (
               <p className="text-destructive text-sm">
-                This rule is already in place.
+                {ui("This rule is already in place.")}
               </p>
             ) : null}
             {written ? <RuleReading rule={draft} written={written} /> : null}

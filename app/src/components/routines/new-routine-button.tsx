@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconClock, IconPlus } from "@tabler/icons-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function NewRoutineButton({
   agentId?: string;
   variant?: "ghost" | "outline";
 }) {
+  useLocale();
   // A list drawn with no router around it, as a skin's own tests draw it, has nowhere to link to.
   if (!useRouter({ warn: false })) return null;
   return (
@@ -34,8 +36,7 @@ export function NewRoutineButton({
       size="sm"
       variant={variant}
     >
-      <IconPlus />
-      New routine
+      {uiNodes("{{slot0}}New routine", [<IconPlus key="slot0" />])}
     </Button>
   );
 }
@@ -54,6 +55,7 @@ export function RoutineComposerButton({
   agentId: string;
   channelId: string;
 }) {
+  useLocale();
   /*
    * A link needs a router to follow. The conversation always has one in the app; a conversation
    * drawn on its own, as its tests draw it, has nowhere to go, so it draws no clock.
@@ -64,7 +66,7 @@ export function RoutineComposerButton({
       <TooltipTrigger
         render={
           <Button
-            aria-label="Set up a routine"
+            aria-label={ui("Set up a routine")}
             data-slot="composer-routine"
             render={(props) => (
               <Link
@@ -80,7 +82,7 @@ export function RoutineComposerButton({
           </Button>
         }
       />
-      <TooltipContent>Set up a routine</TooltipContent>
+      <TooltipContent>{ui("Set up a routine")}</TooltipContent>
     </Tooltip>
   );
 }

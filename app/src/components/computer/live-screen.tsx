@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type Ref,
   useCallback,
@@ -149,6 +150,7 @@ export function LiveScreen({
   autoFocus = false,
   ref,
 }: Props) {
+  useLocale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   /** Keys sent down to the remote browser, by code, whose release goes there too, wherever the focus is by then. */
@@ -838,7 +840,7 @@ export function LiveScreen({
               tabIndex: 0,
             }
           : {})}
-        aria-label={driving ? label : "The Bot's screen, live"}
+        aria-label={driving ? label : ui("The Bot's screen, live")}
         data-connected={connected}
       />
       {inputProblem ? (

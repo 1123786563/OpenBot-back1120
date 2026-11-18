@@ -1,0 +1,227 @@
+{
+  "issues": {
+    "T01": {
+      "number": 62,
+      "id": 6424606481,
+      "url": "https://github.com/1123786563/OpenBot/issues/62",
+      "title": "[计费 01/20] 确定统一计费合同与隔离集成测试边界",
+      "dependencies": []
+    },
+    "T02": {
+      "number": 63,
+      "id": 6424610766,
+      "url": "https://github.com/1123786563/OpenBot/issues/63",
+      "title": "[计费 02/20] 核实双渠道商户产品与安全联调环境",
+      "dependencies": []
+    },
+    "T03": {
+      "number": 64,
+      "id": 6424614383,
+      "url": "https://github.com/1123786563/OpenBot/issues/64",
+      "title": "[计费 03/20] 建立 PostgreSQL 积分批次、流水与原子 outbox",
+      "dependencies": [
+        62
+      ]
+    },
+    "T04": {
+      "number": 65,
+      "id": 6424618658,
+      "url": "https://github.com/1123786563/OpenBot/issues/65",
+      "title": "[计费 04/20] 实现商品价格版本与北京时间月度周期规则",
+      "dependencies": [
+        62
+      ]
+    },
+    "T05": {
+      "number": 66,
+      "id": 6424623137,
+      "url": "https://github.com/1123786563/OpenBot/issues/66",
+      "title": "[计费 05/20] 实现原子预留、Run 上限与跨周期结算恢复",
+      "dependencies": [
+        64,
+        65
+      ]
+    },
+    "T06": {
+      "number": 67,
+      "id": 6424628500,
+      "url": "https://github.com/1123786563/OpenBot/issues/67",
+      "title": "[计费 06/20] 将个人计费账户接入可信后端身份与授权",
+      "dependencies": [
+        64,
+        4,
+        7
+      ]
+    },
+    "T07": {
+      "number": 68,
+      "id": 6424636539,
+      "url": "https://github.com/1123786563/OpenBot/issues/68",
+      "title": "[计费 07/20] 实现订单状态机与支付确认后的唯一权益发放",
+      "dependencies": [
+        64,
+        65
+      ]
+    },
+    "T08": {
+      "number": 69,
+      "id": 6424642186,
+      "url": "https://github.com/1123786563/OpenBot/issues/69",
+      "title": "[计费 08/20] 实现微信 Native/H5 支付适配器与通知协议",
+      "dependencies": [
+        62
+      ]
+    },
+    "T09": {
+      "number": 70,
+      "id": 6424647382,
+      "url": "https://github.com/1123786563/OpenBot/issues/70",
+      "title": "[计费 09/20] 实现支付宝网站支付适配器与通知协议",
+      "dependencies": [
+        62
+      ]
+    },
+    "T10": {
+      "number": 71,
+      "id": 6424652161,
+      "url": "https://github.com/1123786563/OpenBot/issues/71",
+      "title": "[计费 10/20] 实现人工退款审核、冻结与故障补偿",
+      "dependencies": [
+        66,
+        68
+      ]
+    },
+    "T11": {
+      "number": 72,
+      "id": 6424657958,
+      "url": "https://github.com/1123786563/OpenBot/issues/72",
+      "title": "[计费 11/20] 完成双渠道真实商户付款、退款与权益闭环",
+      "dependencies": [
+        63,
+        67,
+        68,
+        69,
+        70,
+        71
+      ]
+    },
+    "T12": {
+      "number": 73,
+      "id": 6424666863,
+      "url": "https://github.com/1123786563/OpenBot/issues/73",
+      "title": "[计费 12/20] 实现 Lago 社区版可靠事件同步 worker",
+      "dependencies": [
+        66
+      ]
+    },
+    "T13": {
+      "number": 74,
+      "id": 6424671808,
+      "url": "https://github.com/1123786563/OpenBot/issues/74",
+      "title": "[计费 13/20] 实现北京时间事件对账与迟到调整幂等",
+      "dependencies": [
+        73,
+        65
+      ]
+    },
+    "T14": {
+      "number": 75,
+      "id": 6424678220,
+      "url": "https://github.com/1123786563/OpenBot/issues/75",
+      "title": "[计费 14/20] 实现每日人民币对账与运营差异处理",
+      "dependencies": [
+        68,
+        69,
+        70,
+        71
+      ]
+    },
+    "T15": {
+      "number": 76,
+      "id": 6424685372,
+      "url": "https://github.com/1123786563/OpenBot/issues/76",
+      "title": "[计费 15/20] 接入收费工具与计算资源的逐步账本约束",
+      "dependencies": [
+        66,
+        67,
+        18,
+        11,
+        12
+      ]
+    },
+    "T16": {
+      "number": 77,
+      "id": 6424695566,
+      "url": "https://github.com/1123786563/OpenBot/issues/77",
+      "title": "[计费 16/20] 执行订阅额度、到期降级与手动恢复规则",
+      "dependencies": [
+        65,
+        67,
+        68,
+        13
+      ]
+    },
+    "T17": {
+      "number": 78,
+      "id": 6424704435,
+      "url": "https://github.com/1123786563/OpenBot/issues/78",
+      "title": "[计费 17/20] 交付个人账单 API 与 Web 收银台页面",
+      "dependencies": [
+        67,
+        68,
+        71,
+        74,
+        77
+      ]
+    },
+    "T18": {
+      "number": 79,
+      "id": 6424712743,
+      "url": "https://github.com/1123786563/OpenBot/issues/79",
+      "title": "[计费 18/20] 完成 Web、手机和桌面的真实支付回跳验收",
+      "dependencies": [
+        72,
+        78,
+        8,
+        9
+      ]
+    },
+    "T19": {
+      "number": 80,
+      "id": 6424722361,
+      "url": "https://github.com/1123786563/OpenBot/issues/80",
+      "title": "[计费 19/20] 准备正式商业配置与账务故障恢复关卡",
+      "dependencies": [
+        66,
+        68,
+        71,
+        73,
+        75,
+        76,
+        77
+      ]
+    },
+    "T20": {
+      "number": 81,
+      "id": 6424732210,
+      "url": "https://github.com/1123786563/OpenBot/issues/81",
+      "title": "[计费 20/20] 完成计费全链路验收与受控上线门禁",
+      "dependencies": [
+        79,
+        80,
+        74,
+        39
+      ]
+    }
+  },
+  "verified": true,
+  "child_count": 20,
+  "new_dependency_edges": 55,
+  "added_existing_dependencies": {
+    "32": [
+      66,
+      67
+    ]
+  },
+  "acyclic": true
+}

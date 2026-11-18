@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n";
 import { useFrontendTool, useHumanInTheLoop } from "@copilotkit/react-core/v2";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -56,6 +57,7 @@ const OFFERED: Readonly<Record<string, OfferRule>> = {
 };
 
 export function SkillTools() {
+  useLocale();
   useOfferedTo(OFFERED);
 
   /*
@@ -140,6 +142,7 @@ function ProposedSkillRender(props: {
   respond?: (result: unknown) => Promise<void>;
   result?: string;
 }) {
+  useLocale();
   const { data: page } = useQuery(pluginsPageQueryOptions());
   const { data: me } = useQuery(currentUserQueryOptions());
   const personal =

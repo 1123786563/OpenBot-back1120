@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { Message } from "@ag-ui/core";
 import {
   type Attachment,
@@ -178,6 +180,7 @@ export const VOICE_WAIT_MS = 1500;
 
 /** Whether `VOICE_WAIT_MS` has passed since `waiting` became true. Reset whenever it is false. */
 function useWaitedOut(waiting: boolean, key: string): boolean {
+  useLocale();
   const [waitedOut, setWaitedOut] = useState<string | null>(null);
   useEffect(() => {
     if (!waiting) return;
@@ -208,13 +211,20 @@ export function channelHistoryNotice({
     historyAvailability === "unavailable" &&
     (historyReadFailed || (messageCount === 0 && lastMessageAt !== null))
   ) {
-    return "Couldn't load earlier messages. You can keep using this conversation.";
+    return ui(
+      "Couldn't load earlier messages. You can keep using this conversation.",
+    );
   }
 
   if (unreadable > 0) {
     return unreadable === 1
-      ? "One earlier message couldn't be read, so it isn't shown. Everything else is here."
-      : `${unreadable} earlier messages couldn't be read, so they aren't shown. Everything else is here.`;
+      ? ui(
+          "One earlier message couldn't be read, so it isn't shown. Everything else is here.",
+        )
+      : ui(
+          "{{value0}} earlier messages couldn't be read, so they aren't shown. Everything else is here.",
+          { value0: String(unreadable) },
+        );
   }
 
   return null;
@@ -467,9 +477,13 @@ export function toMessageContent(
 function describeAttachments(attachments: readonly Attachment[]): string {
   if (attachments.length === 1) {
     const { filename } = uploadedAttachment(attachments[0]);
-    return filename ? `Sent ${filename}` : "Sent an attachment";
+    return filename
+      ? ui("Sent {{value0}}", { value0: String(filename) })
+      : ui("Sent an attachment");
   }
-  return `Sent ${attachments.length} attachments`;
+  return ui("Sent {{value0}} attachments", {
+    value0: String(attachments.length),
+  });
 }
 
 /** The components this deployment's people wrote, which a Bot draws as tools of those names. */
@@ -494,6 +508,7 @@ export function ChannelChat({
   channel: AgentChannel;
   runtimeAgentId: string;
 }) {
+  useLocale();
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
   // Mentions are scoped to the channel's permitted agents.
@@ -1673,7 +1688,7 @@ export function ChannelChat({
                 />
                 {voiceArchive.error && (
                   <p className="pb-2 text-sm text-destructive" role="alert">
-                    Couldn’t load voice chats. Reload the page.
+                    {ui("Couldn’t load voice chats. Reload the page.")}
                   </p>
                 )}
                 {voiceContextNotice && (
@@ -1694,7 +1709,7 @@ export function ChannelChat({
                 ) : null}
                 {answer.error ? (
                   <p className="pb-2 text-sm text-destructive" role="alert">
-                    {answer.error.message}
+                    {<ErrorDetails error={answer.error} />}
                   </p>
                 ) : null}
                 {channel.active ? null : (
@@ -1702,8 +1717,9 @@ export function ChannelChat({
                     className="pb-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    This Bot was deleted. You can still read this conversation,
-                    but the Bot can't reply.
+                    {ui(
+                      "This Bot was deleted. You can still read this conversation, but the Bot can't reply.",
+                    )}
                   </p>
                 )}
               </>
@@ -1780,7 +1796,9 @@ export function ChannelChat({
                 <>
                   {readingAnswer ? (
                     <ProgressRow
-                      label={`${botName} is reading your answer…`}
+                      label={ui("{{value0}} is reading your answer…", {
+                        value0: String(botName),
+                      })}
                       media={<BotOrb name={botName} seed={botSeed} size={20} />}
                     />
                   ) : null}

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowUpRight,
   IconCheck,
@@ -39,6 +40,7 @@ function linesOf(text: string): string[] {
 
 /** How it ended, in the header: clear at a glance, and in words a person reads. */
 function StatusBadge({ status }: { status: TerminalBlockStatus }) {
+  useLocale();
   const [tone, label, icon]: [Tone, string, ReactNode] =
     status.state === "running"
       ? ["neutral", "Running", null]
@@ -100,6 +102,7 @@ export function TerminalBlock({
   /** Beside the status: a time, in the Activity pane. */
   aside?: ReactNode;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const lines = linesOf(output);
   const folds = lines.length > SHOWN_LINES + 2;
@@ -124,7 +127,7 @@ export function TerminalBlock({
       </div>
       {folds && !open ? (
         <div className="select-none" style={{ color: TERMINAL_TEXT.muted }}>
-          … {lines.length - SHOWN_LINES} earlier lines
+          … {lines.length - SHOWN_LINES} {ui("earlier lines")}
         </div>
       ) : null}
       {shown.length ? (
@@ -138,7 +141,7 @@ export function TerminalBlock({
         </pre>
       ) : finished && ran ? (
         <div className="italic" style={{ color: TERMINAL_TEXT.muted }}>
-          It printed nothing.
+          {ui("It printed nothing.")}
         </div>
       ) : null}
     </>
@@ -146,7 +149,7 @@ export function TerminalBlock({
 
   return (
     <section
-      aria-label={typeof label === "string" ? label : "Command"}
+      aria-label={typeof label === "string" ? label : ui("Command")}
       className="my-1.5 flex w-full min-w-0 flex-col gap-1.5 rounded-xl border border-border bg-sidebar p-1.5 dark:border-white/10"
     >
       <header className="flex h-7 min-w-0 items-center gap-2 px-1 text-xs">
@@ -161,11 +164,11 @@ export function TerminalBlock({
         <StatusBadge status={status} />
         {openTerminal ? (
           <Button
-            aria-label="Open in the terminal"
+            aria-label={ui("Open in the terminal")}
             className="text-muted-foreground"
             onClick={openTerminal}
             size="icon-xs"
-            title="Open in the terminal"
+            title={ui("Open in the terminal")}
             variant="ghost"
           >
             <IconArrowUpRight />
@@ -204,14 +207,18 @@ export function TerminalBlock({
                 variant="ghost"
               >
                 {open ? <IconChevronUp /> : <IconChevronDown />}
-                {open ? "Show less" : `Show all ${lines.length} lines`}
+                {open
+                  ? ui("Show less")
+                  : ui("Show all {{value0}} lines", {
+                      value0: String(lines.length),
+                    })}
               </Button>
             ) : (
               <span />
             )}
             {truncated ? (
               <span className="px-1.5 text-[11px] text-white/60">
-                Long output. This is the end of it.
+                {ui("Long output. This is the end of it.")}
               </span>
             ) : null}
           </div>

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { ruleTitle } from "@openbot/shared/tool-name";
 import {
   IconChevronRight,
@@ -55,9 +57,15 @@ import {
 export const TOOL_PATTERN_EXAMPLE = "composio-gmail/*";
 
 export const HOST_LABELS: Record<HostCommandPolicy, string> = {
-  ask: "Ask every time",
-  allow: "Always allow",
-  never: "Never",
+  get ask() {
+    return ui("Ask every time");
+  },
+  get allow() {
+    return ui("Always allow");
+  },
+  get never() {
+    return ui("Never");
+  },
 };
 
 /**
@@ -80,6 +88,7 @@ export function LabelSelect<T extends string>({
   disabled?: boolean;
   onChange: (value: T) => void;
 }) {
+  useLocale();
   return (
     <Select
       disabled={disabled}
@@ -112,16 +121,26 @@ const TEAM_BEHAVIOUR_LABELS = Object.fromEntries(
 
 /** What kind of action a rule covers, in words. Any other kind is left unsaid. */
 const EFFECT_WORDS: Record<string, string> = {
-  read: "reading",
-  write: "changes",
-  destructive: "deleting",
-  delegate: "handing off work",
+  get read() {
+    return ui("reading");
+  },
+  get write() {
+    return ui("changes");
+  },
+  get destructive() {
+    return ui("deleting");
+  },
+  get delegate() {
+    return ui("handing off work");
+  },
 };
 
 /** "for Expenses"; nothing until the names arrive, so a Bot is never named by its id. */
 function forBot(name: string): string | null {
   if (!name) return null;
-  return name === GONE_BOT ? "for a Bot no longer here" : `for ${name}`;
+  return name === GONE_BOT
+    ? ui("for a Bot no longer here")
+    : ui("for {{value0}}", { value0: String(name) });
 }
 
 /** A rule saved from a folder's card is on the id OpenBot gave that folder (`host-access/broker.ts`). */
@@ -135,11 +154,11 @@ function folderWords(
   grantId: string,
   grants: readonly HostFolderGrant[] | undefined,
 ): string {
-  if (!grants) return "in a folder";
+  if (!grants) return ui("in a folder");
   const grant = grants.find((candidate) => candidate.id === grantId);
   return grant && !grant.revoked
-    ? `in ${grant.displayName}`
-    : "in a folder that's no longer shared";
+    ? ui("in {{value0}}", { value0: String(grant.displayName) })
+    : ui("in a folder that's no longer shared");
 }
 
 /**
@@ -162,11 +181,12 @@ export function RuleRow({
   onRevoke: () => void;
   onChange: (behaviour: RuleBehaviour) => void;
 }) {
+  useLocale();
   const labels = team ? TEAM_BEHAVIOUR_LABELS : BEHAVIOUR_LABELS;
   // The action in its approval card's words is the title ("Click", "Any action on Gmail"); the rest
   // of what the rule matches is the line beneath, never clamped, since two rules for one action
   // differ only there. The title already names an app's rule's place.
-  const { title, place } = ruleTitle(rule);
+  const { title, place } = ruleTitle(rule, ui);
   const botName = useBotNames();
   const folderRule = rule.scope.startsWith(FOLDER_GRANT);
   const folders = useQuery({
@@ -203,7 +223,7 @@ export function RuleRow({
             {match}
           </ItemDescription>
         ) : null}
-        {locked ? <ItemDescription>Locked</ItemDescription> : null}
+        {locked ? <ItemDescription>{ui("Locked")}</ItemDescription> : null}
       </ItemContent>
       <ItemActions>
         {locked ? (
@@ -214,7 +234,7 @@ export function RuleRow({
           <>
             <LabelSelect
               disabled={disabled}
-              label={`Behaviour for ${title}`}
+              label={ui("Behaviour for {{value0}}", { value0: String(title) })}
               labels={labels}
               onChange={onChange}
               value={rule.behaviour}
@@ -225,7 +245,7 @@ export function RuleRow({
               size="sm"
               variant="outline"
             >
-              Remove
+              {ui("Remove")}
             </Button>
           </>
         )}
@@ -260,6 +280,7 @@ export function RuleForm({
   /** The Bot every rule from this form is for, already known from the page it is on. */
   forBot?: string;
 }) {
+  useLocale();
   const blank = forBot ? { ...EMPTY_RULE, botId: forBot } : EMPTY_RULE;
   const [rule, setRule] = useState<ApprovalRuleInput>(blank);
   const [open, setOpen] = useState(false);
@@ -298,7 +319,7 @@ export function RuleForm({
         <ItemContent>
           <ItemTitle>{label}</ItemTitle>
           <ItemDescription>
-            A tool or app, and what a Bot does before using it.
+            {ui("A tool or app, and what a Bot does before using it.")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -310,9 +331,10 @@ export function RuleForm({
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
-              Use * to match anything. An app's tools start with its name, so{" "}
-              {TOOL_PATTERN_EXAMPLE} means every Gmail tool. A target of
-              *.example.com means every page on that site.
+              {uiNodes(
+                "Use * to match anything. An app's tools start with its name, so {{slot0}}means every Gmail tool. A target of *.example.com means every page on that site.",
+                [TOOL_PATTERN_EXAMPLE],
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4">
@@ -329,14 +351,20 @@ export function RuleForm({
               <FieldGroup>
                 {field(
                   "toolRef",
-                  "Tool or app",
+                  ui("Tool or app"),
                   `${TOOL_PATTERN_EXAMPLE}, computer_click, host/*`,
                 )}
-                {field("effect", "Kind of action", "* , write, read, delegate")}
+                {field(
+                  "effect",
+                  ui("Kind of action"),
+                  "* , write, read, delegate",
+                )}
                 {field("scope", "Target", "*, a site, a folder, a Bot name")}
                 {botField ? field("botId", "Bot", "* for every Bot") : null}
                 <Field>
-                  <FieldLabel htmlFor={`${id}-behaviour`}>Behaviour</FieldLabel>
+                  <FieldLabel htmlFor={`${id}-behaviour`}>
+                    {ui("Behaviour")}
+                  </FieldLabel>
                   <LabelSelect
                     id={`${id}-behaviour`}
                     labels={BEHAVIOUR_LABELS}
@@ -350,13 +378,13 @@ export function RuleForm({
             </form>
             {save.error ? (
               <p className="mt-4 text-destructive text-sm" role="alert">
-                {save.error.message}
+                {<ErrorDetails error={save.error} />}
               </p>
             ) : null}
           </DialogBody>
           <DialogFooter className="mt-4">
             <Button onClick={close} size="sm" variant="outline">
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={save.isPending || !rule.toolRef.trim()}
@@ -364,7 +392,7 @@ export function RuleForm({
               size="sm"
               type="submit"
             >
-              Save rule
+              {ui("Save rule")}
             </Button>
           </DialogFooter>
         </DialogContent>

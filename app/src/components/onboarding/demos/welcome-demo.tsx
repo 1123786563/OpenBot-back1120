@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconArrowUp, IconMicrophone, IconPlus } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { DemoOrb } from "@/components/onboarding/demo-orb";
@@ -16,6 +17,7 @@ const CHARACTER_MS = 38;
  * Off, or with nothing moving, it is the whole text at once.
  */
 function useTyped(text: string, active: boolean): string {
+  useLocale();
   const [shown, setShown] = useState(active ? 0 : text.length);
   useEffect(() => {
     if (!active) {
@@ -50,12 +52,15 @@ function useTyped(text: string, active: boolean): string {
  * with the orb listening.
  */
 export function WelcomeDemo() {
+  useLocale();
   return (
     <DemoStage
       beats={3}
       className="flex min-w-0 flex-col items-center gap-8 px-5 pt-12 pb-8 sm:px-8"
       kind="welcome"
-      label={`A message box where somebody asks a Bot: ${WELCOME_REQUEST}`}
+      label={ui("A message box where somebody asks a Bot: {{value0}}", {
+        value0: String(WELCOME_REQUEST),
+      })}
       rest={0}
     >
       {({ beat, playing, reduced }) => (
@@ -74,6 +79,7 @@ function WelcomeScene({
   playing: boolean;
   reduced: boolean;
 }) {
+  useLocale();
   const typing = beat === 0;
   const typed = useTyped(WELCOME_REQUEST, typing && playing);
   const sent = !typing;
@@ -93,7 +99,7 @@ function WelcomeScene({
               sent && !reduced ? "text-muted-foreground" : "text-foreground",
             )}
           >
-            {sent && !reduced ? WELCOME_REQUEST : typed}
+            {sent && !reduced ? ui(WELCOME_REQUEST) : typed}
             {typing && playing ? (
               <span
                 aria-hidden
@@ -143,7 +149,7 @@ function WelcomeScene({
                 : "text-blue-600 dark:text-blue-400"
             }
           >
-            {beat === 2 ? "Found three places" : "Working on it"}
+            {beat === 2 ? ui("Found three places") : ui("Working on it")}
           </span>
         </p>
       </div>

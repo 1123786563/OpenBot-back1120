@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { GALLERY_COMPONENTS } from "@/lib/copilot/gallery-registry";
 
 /**
@@ -46,9 +47,12 @@ export function GalleryPreview({
   available?: readonly { name: string; description: string }[];
   columns?: 1 | 2;
 }) {
+  useLocale();
   if (!available) {
     return (
-      <p className="text-muted-foreground text-sm">Loading what it can draw…</p>
+      <p className="text-muted-foreground text-sm">
+        {ui("Loading what it can draw…")}
+      </p>
     );
   }
 
@@ -62,7 +66,7 @@ export function GalleryPreview({
   if (shown.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        This Bot can't use any components yet. It answers in text.
+        {ui("This Bot can't use any components yet. It answers in text.")}
       </p>
     );
   }
@@ -107,6 +111,7 @@ export function GalleryPreview({
  * one to fit a tile; this draws at natural size, which is what the per-Bot panel below wants.
  */
 function PreviewOf({ name }: { name: string }) {
+  useLocale();
   const component = GALLERY_COMPONENTS.find((entry) => entry.name === name);
   if (!component) return null;
   if (!component.preview) {
@@ -117,8 +122,9 @@ function PreviewOf({ name }: { name: string }) {
      */
     return (
       <p className="text-muted-foreground text-sm">
-        Shows OpenBot's own records. There's nothing to show until a Bot asks
-        for it.
+        {ui(
+          "Shows OpenBot's own records. There's nothing to show until a Bot asks for it.",
+        )}
       </p>
     );
   }

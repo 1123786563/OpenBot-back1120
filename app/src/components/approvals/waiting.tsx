@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { offersStandingRule } from "@openbot/shared/standing-rule";
 import { approvalDetails, approvalWords } from "@openbot/shared/tool-name";
 import {
@@ -66,6 +68,7 @@ type WaitingRequest = ApprovalInboxData["requests"][number];
  * the Bot whose conversation it is.
  */
 function useWaiting(agentId: string | undefined) {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   const ours = (botId: string) => agentId === undefined || botId === agentId;
   return {
@@ -87,6 +90,7 @@ function QuestionRow({
   question: WaitingQuestion;
   botName: string;
 }) {
+  useLocale();
   const [text, setText] = useState("");
   const answer = useMutation(answerPersonQuestionMutationOptions(queryClient));
   return (
@@ -96,7 +100,7 @@ function QuestionRow({
       </ItemMedia>
       <ItemContent>
         <ItemTitle className="line-clamp-none">
-          {botName} asks: {question.question}
+          {uiNodes("{{slot0}}asks: {{slot1}}", [botName, question.question])}
         </ItemTitle>
         {question.why ? (
           <ItemDescription className="line-clamp-none">
@@ -107,9 +111,9 @@ function QuestionRow({
       {/* In from the edge by the icon and its gap, so the answer lines up with the question. */}
       <ItemFooter className="flex-col items-start pl-11">
         <Textarea
-          aria-label="Your answer"
+          aria-label={ui("Your answer")}
           onChange={(event) => setText(event.target.value)}
-          placeholder="Your answer"
+          placeholder={ui("Your answer")}
           value={text}
         />
         <Button
@@ -117,11 +121,11 @@ function QuestionRow({
           onClick={() => answer.mutate({ id: question.id, response: text })}
           size="sm"
         >
-          Send answer
+          {ui("Send answer")}
         </Button>
         {answer.error ? (
           <p role="alert" className="text-sm text-destructive">
-            {answer.error.message}
+            {<ErrorDetails error={answer.error} />}
           </p>
         ) : null}
       </ItemFooter>
@@ -140,11 +144,12 @@ function ApprovalDetails({
   args: unknown;
   className?: string;
 }) {
-  const details = approvalDetails(args);
+  useLocale();
+  const details = approvalDetails(args, ui);
   if (details.length === 0) return null;
   return (
     <dl
-      aria-label="What it would send"
+      aria-label={ui("What it would send")}
       className={cn(
         "max-h-52 space-y-1 overflow-auto rounded bg-muted p-3 text-xs",
         className,
@@ -173,8 +178,9 @@ function RequestRow({
   request: WaitingRequest;
   botName: string;
 }) {
+  useLocale();
   const decision = useMutation(decideApprovalMutationOptions(queryClient));
-  const words = approvalWords(request.action);
+  const words = approvalWords(request.action, ui);
   return (
     <Item size="sm">
       <ItemMedia variant="icon">
@@ -182,7 +188,7 @@ function RequestRow({
       </ItemMedia>
       <ItemContent className="min-w-0">
         <ItemTitle className="line-clamp-none">
-          {botName} wants to {words.action}
+          {uiNodes("{{slot0}}wants to {{slot1}}", [botName, words.action])}
         </ItemTitle>
         <ItemDescription className="line-clamp-none break-all">
           {words.place}
@@ -190,7 +196,7 @@ function RequestRow({
         {request.action.policy ? (
           <p className="text-sm">
             {request.action.policy.behaviour === "hand_off"
-              ? "Handed to you: "
+              ? ui("Handed to you: ")
               : ""}
             {request.action.policy.reason}
           </p>
@@ -206,7 +212,7 @@ function RequestRow({
             }
             size="sm"
           >
-            I did it myself
+            {ui("I did it myself")}
           </Button>
           <Button
             disabled={decision.isPending}
@@ -214,7 +220,7 @@ function RequestRow({
             size="sm"
             variant="outline"
           >
-            Don't do it
+            {ui("Don't do it")}
           </Button>
         </ItemFooter>
       ) : (
@@ -229,7 +235,7 @@ function RequestRow({
             }
             size="sm"
           >
-            Allow once
+            {ui("Allow once")}
           </Button>
           {offersStandingRule(request.action) ? (
             <>
@@ -244,7 +250,7 @@ function RequestRow({
                 size="sm"
                 variant="outline"
               >
-                Allow for this conversation
+                {ui("Allow for this conversation")}
               </Button>
               <Button
                 disabled={decision.isPending}
@@ -257,7 +263,7 @@ function RequestRow({
                 size="sm"
                 variant="outline"
               >
-                Always allow here
+                {ui("Always allow here")}
               </Button>
             </>
           ) : null}
@@ -267,13 +273,13 @@ function RequestRow({
             size="sm"
             variant="outline"
           >
-            Deny
+            {ui("Deny")}
           </Button>
         </ItemFooter>
       )}
       {decision.error ? (
         <p role="alert" className="basis-full pl-11 text-sm text-destructive">
-          {decision.error.message}
+          {<ErrorDetails error={decision.error} />}
         </p>
       ) : null}
     </Item>
@@ -285,6 +291,7 @@ function RequestRow({
  * each with when it was asked so the header can say how long it has waited.
  */
 export function useWaitingByBot(agentId: string | undefined) {
+  useLocale();
   const waiting = useWaiting(agentId);
   const byBot = new Map<string, { rows: ReactNode[]; times: string[] }>();
   const add = (botId: string, row: ReactNode, at: string) => {
@@ -319,6 +326,7 @@ export function useWaitingByBot(agentId: string | undefined) {
  * dialog instead.
  */
 function QuestionBoardRow({ question }: { question: WaitingQuestion }) {
+  useLocale();
   const navigate = useNavigate();
   const [answering, setAnswering] = useState(false);
   const { channelId } = question;
@@ -335,11 +343,13 @@ function QuestionBoardRow({ question }: { question: WaitingQuestion }) {
         actions={
           <>
             <Button onClick={open} size="sm">
-              Answer
+              {ui("Answer")}
             </Button>
             {/* Put it down unanswered: the Bot is not resumed, and nothing is sent to it. */}
             <Button
-              aria-label={`Dismiss ${question.question}`}
+              aria-label={ui("Dismiss {{value0}}", {
+                value0: String(question.question),
+              })}
               disabled={dismiss.isPending}
               onClick={() => dismiss.mutate({ id: question.id })}
               size="icon-sm"
@@ -354,7 +364,7 @@ function QuestionBoardRow({ question }: { question: WaitingQuestion }) {
         meta={[
           dismiss.error ? (
             <span className="text-destructive" key="error" role="alert">
-              {dismiss.error.message}
+              {<ErrorDetails error={dismiss.error} />}
             </span>
           ) : null,
         ]}
@@ -390,6 +400,7 @@ function AnswerDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  useLocale();
   const [text, setText] = useState("");
   const answer = useMutation(answerPersonQuestionMutationOptions(queryClient));
   const agents = useQuery(agentListQueryOptions());
@@ -412,7 +423,9 @@ function AnswerDialog({
             <BotOrb name={name} seed={bot?.avatarSeed || asker} size={20} />
             <span className="font-medium text-foreground">{name}</span>
             <span aria-hidden>·</span>
-            <span>asked {relativeTime(question.createdAt)}</span>
+            <span>
+              {uiNodes("asked {{slot0}}", [relativeTime(question.createdAt)])}
+            </span>
           </div>
           <DialogTitle className="whitespace-pre-wrap font-medium text-base leading-snug">
             {question.question}
@@ -423,13 +436,13 @@ function AnswerDialog({
             </DialogDescription>
           ) : (
             <DialogDescription className="sr-only">
-              {name} stopped until you answer.
+              {uiNodes("{{slot0}}stopped until you answer.", [name])}
             </DialogDescription>
           )}
         </DialogHeader>
         <InputGroup>
           <InputGroupTextarea
-            aria-label="Your answer"
+            aria-label={ui("Your answer")}
             autoFocus
             className="min-h-28"
             onChange={(event) => setText(event.target.value)}
@@ -439,13 +452,13 @@ function AnswerDialog({
                 send();
               }
             }}
-            placeholder={`Reply to ${name}`}
+            placeholder={ui("Reply to {{value0}}", { value0: String(name) })}
             value={text}
           />
           <InputGroupAddon align="block-end">
             {answer.error ? (
               <InputGroupText className="text-destructive text-xs" role="alert">
-                {answer.error.message}
+                {<ErrorDetails error={answer.error} />}
               </InputGroupText>
             ) : (
               <InputGroupText className="gap-1 font-normal text-xs">
@@ -458,7 +471,7 @@ function AnswerDialog({
                     {key}
                   </kbd>
                 ))}
-                <span className="ml-0.5">to send</span>
+                <span className="ml-0.5">{ui("to send")}</span>
               </InputGroupText>
             )}
             <InputGroupButton
@@ -468,7 +481,7 @@ function AnswerDialog({
               size="sm"
               variant="default"
             >
-              {answer.isPending ? "Sending…" : "Send answer"}
+              {answer.isPending ? ui("Sending…") : ui("Send answer")}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -483,8 +496,9 @@ function AnswerDialog({
  * nobody allows something they were not shown.
  */
 function RequestBoardRow({ request }: { request: WaitingRequest }) {
+  useLocale();
   const decision = useMutation(decideApprovalMutationOptions(queryClient));
-  const words = approvalWords(request.action);
+  const words = approvalWords(request.action, ui);
   const handOff = request.action.policy?.behaviour === "hand_off";
   const decide = (choice: ApprovalDecision) =>
     decision.mutate({ id: request.id, choice });
@@ -500,14 +514,14 @@ function RequestBoardRow({ request }: { request: WaitingRequest }) {
               size="sm"
               variant="outline"
             >
-              Don't do it
+              {ui("Don't do it")}
             </Button>
             <Button
               disabled={decision.isPending}
               onClick={() => decide("handled")}
               size="sm"
             >
-              I did it myself
+              {ui("I did it myself")}
             </Button>
           </>
         ) : (
@@ -518,21 +532,23 @@ function RequestBoardRow({ request }: { request: WaitingRequest }) {
               size="sm"
               variant="outline"
             >
-              Deny
+              {ui("Deny")}
             </Button>
             <Button
               disabled={decision.isPending}
               onClick={() => decide("allow_once")}
               size="sm"
             >
-              Allow
+              {ui("Allow")}
             </Button>
             {offersStandingRule(request.action) ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <Button
-                      aria-label={`More for ${words.action}`}
+                      aria-label={ui("More for {{value0}}", {
+                        value0: String(words.action),
+                      })}
                       size="icon-sm"
                       variant="ghost"
                     />
@@ -545,13 +561,13 @@ function RequestBoardRow({ request }: { request: WaitingRequest }) {
                     disabled={decision.isPending}
                     onClick={() => decide("allow_conversation")}
                   >
-                    Allow for this conversation
+                    {ui("Allow for this conversation")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={decision.isPending}
                     onClick={() => decide("allow_always")}
                   >
-                    Always allow here
+                    {ui("Always allow here")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -564,13 +580,13 @@ function RequestBoardRow({ request }: { request: WaitingRequest }) {
       meta={[
         request.action.policy ? (
           <span key="why">
-            {handOff ? "Handed to you: " : ""}
+            {handOff ? ui("Handed to you: ") : ""}
             {request.action.policy.reason}
           </span>
         ) : null,
         decision.error ? (
           <span className="text-destructive" key="error" role="alert">
-            {decision.error.message}
+            {<ErrorDetails error={decision.error} />}
           </span>
         ) : null,
       ]}
@@ -585,6 +601,7 @@ function RequestBoardRow({ request }: { request: WaitingRequest }) {
 
 /** The waiting questions and actions as rows, questions first, for a card that may hold more. */
 export function useWaitingRows(agentId: string | undefined) {
+  useLocale();
   const waiting = useWaiting(agentId);
   const botName = useBotNames();
   return {
@@ -615,12 +632,13 @@ export function useWaitingRows(agentId: string | undefined) {
  * decision.
  */
 export function WaitingForYou({ agentId }: { agentId?: string }) {
+  useLocale();
   const { error, rows } = useWaitingRows(agentId);
   return (
     <>
       {error ? (
         <p role="alert" className="mt-4 text-sm text-destructive">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {rows.length > 0 ? (

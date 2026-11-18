@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -108,7 +109,7 @@ const proactiveSettingsQuery = {
   queryFn: async (): Promise<ProactiveSettingsBody> =>
     (
       await client("/api/proactive/settings", {
-        fallback: "Couldn't load your check-ins",
+        fallback: ui("Couldn't load your check-ins"),
       })
     ).json(),
   refetchInterval: 30_000,
@@ -132,7 +133,7 @@ export const proactiveSuggestionsQueryOptions = () =>
     queryKey: proactiveKeys.suggestions,
     queryFn: (): Promise<ProactiveSuggestion[]> =>
       client("/api/proactive/suggestions", "suggestions", {
-        fallback: "Couldn't load what your Bots found",
+        fallback: ui("Couldn't load what your Bots found"),
       }),
     refetchInterval: 30_000,
   });
@@ -148,7 +149,7 @@ export const createProactiveSetting = (input: {
   client("/api/proactive/settings", {
     method: "POST",
     body: input,
-    fallback: "Couldn't turn on check-ins",
+    fallback: ui("Couldn't turn on check-ins"),
   });
 export const updateProactiveSetting = (
   id: string,
@@ -157,19 +158,19 @@ export const updateProactiveSetting = (
   client(`/api/proactive/settings/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: input,
-    fallback: "Couldn't change check-ins",
+    fallback: ui("Couldn't change check-ins"),
   });
 export const runProactiveNow = async (id: string): Promise<RunNowAnswer> =>
   (
     await client(`/api/proactive/settings/${encodeURIComponent(id)}/run`, {
       method: "POST",
-      fallback: "Couldn't start a check-in",
+      fallback: ui("Couldn't start a check-in"),
     })
   ).json();
 export const removeProactiveSetting = (id: string) =>
   client(`/api/proactive/settings/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    fallback: "Couldn't remove check-ins",
+    fallback: ui("Couldn't remove check-ins"),
   });
 
 /**
@@ -182,8 +183,8 @@ export const resolveSuggestion = (id: string, action: "start" | "dismiss") =>
     method: "POST",
     fallback:
       action === "start"
-        ? "Couldn't start this. Try again."
-        : "Couldn't hide this. Try again.",
+        ? ui("Couldn't start this. Try again.")
+        : ui("Couldn't hide this. Try again."),
   });
 
 /** A setting's check-ins produce items, so a change to either refreshes both. */

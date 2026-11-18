@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type BrowserApiState,
   browserApiPaths,
@@ -52,7 +53,7 @@ export function browserStateQueryOptions(options?: { poll?: boolean }) {
     queryFn: async (): Promise<BrowserApiState> =>
       (
         await client(browserApiPaths.state, {
-          fallback: "Couldn't load your browser.",
+          fallback: ui("Couldn't load your browser."),
         })
       ).json(),
     refetchInterval: options?.poll

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   MessageScroller as MessageScrollerPrimitive,
   useMessageScroller,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 function MessageScrollerProvider(
   props: React.ComponentProps<typeof MessageScrollerPrimitive.Provider>,
 ) {
+  useLocale();
   return <MessageScrollerPrimitive.Provider {...props} />;
 }
 
@@ -19,6 +21,7 @@ function MessageScroller({
   className,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Root>) {
+  useLocale();
   return (
     <MessageScrollerPrimitive.Root
       data-slot="message-scroller"
@@ -36,6 +39,7 @@ function MessageScrollerViewport({
   tabIndex,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport>) {
+  useLocale();
   // The primitive is always a tab stop so the keyboard can scroll it. One with nothing to scroll,
   // like a conversation that has not started, is a stop between the To: field and the composer.
   const scrollable = useMessageScrollerScrollable();
@@ -56,6 +60,7 @@ function MessageScrollerContent({
   className,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Content>) {
+  useLocale();
   return (
     <MessageScrollerPrimitive.Content
       data-slot="message-scroller-content"
@@ -70,6 +75,7 @@ function MessageScrollerItem({
   scrollAnchor = false,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Item>) {
+  useLocale();
   return (
     <MessageScrollerPrimitive.Item
       data-slot="message-scroller-item"
@@ -95,6 +101,7 @@ function MessageScrollerButton({
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Button> &
   Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+  useLocale();
   return (
     <MessageScrollerPrimitive.Button
       data-slot="message-scroller-button"
@@ -113,7 +120,7 @@ function MessageScrollerButton({
         <>
           <IconArrowDown />
           <span className="sr-only">
-            {direction === "end" ? "Scroll to end" : "Scroll to start"}
+            {direction === "end" ? ui("Scroll to end") : ui("Scroll to start")}
           </span>
         </>
       )}

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronDown, IconLoader2 } from "@tabler/icons-react";
 import { IconWaveform } from "@/components/icons/waveform";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import {
 } from "@/lib/voice/archive";
 
 export function VoiceChatCard({ call }: { call: VoiceChatEntry }) {
+  useLocale();
   const saving = call.saveState === "saving";
   const unsaved = call.saveState === "unsaved";
   const duration = `${Math.floor(call.durationSeconds / 60)
@@ -21,10 +23,10 @@ export function VoiceChatCard({ call }: { call: VoiceChatEntry }) {
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
           <IconWaveform className="size-3.5" />
-          <span className="flex-1 font-medium">Voice chat</span>
+          <span className="flex-1 font-medium">{ui("Voice chat")}</span>
           {saving && (
             <IconLoader2
-              aria-label="Saving voice chat"
+              aria-label={ui("Saving voice chat")}
               className="size-3 motion-safe:animate-spin"
             />
           )}
@@ -35,7 +37,7 @@ export function VoiceChatCard({ call }: { call: VoiceChatEntry }) {
           {call.transcript.map((entry) => (
             <div key={entry.id}>
               <p className="mb-0.5 text-xs font-medium text-muted-foreground">
-                {entry.role === "user" ? "You" : "Bot"}
+                {entry.role === "user" ? ui("You") : ui("Bot")}
               </p>
               <p className="whitespace-pre-wrap text-sm leading-relaxed">
                 {entry.text}
@@ -47,22 +49,22 @@ export function VoiceChatCard({ call }: { call: VoiceChatEntry }) {
       <p className="mt-1 text-sm leading-snug" aria-live="polite">
         {call.summary ??
           (saving
-            ? "Saving your conversation and preparing a summary…"
+            ? ui("Saving your conversation and preparing a summary…")
             : unsaved
-              ? "Couldn’t confirm this voice chat was saved."
-              : "Transcript saved. A summary couldn’t be generated.")}
+              ? ui("Couldn’t confirm this voice chat was saved.")
+              : ui("Transcript saved. A summary couldn’t be generated."))}
       </p>
       {(unsaved || (!saving && call.summaryStatus === "failed")) && (
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-xs text-muted-foreground">
-            {call.saveError ?? "You can still expand the transcript."}
+            {call.saveError ?? ui("You can still expand the transcript.")}
           </span>
           <Button
             size="xs"
             variant="ghost"
             onClick={() => saveVoiceSession(voiceSessionInput(call))}
           >
-            {unsaved ? "Retry save" : "Retry summary"}
+            {unsaved ? ui("Retry save") : ui("Retry summary")}
           </Button>
         </div>
       )}

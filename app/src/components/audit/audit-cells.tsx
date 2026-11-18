@@ -1,3 +1,4 @@
+import { ui, useLocale, localeFormatter } from "@/lib/i18n";
 import { outcomeForPerson } from "@openbot/shared/approval-outcomes";
 import {
   appToolsWords,
@@ -54,40 +55,50 @@ type NameFor = (botId: string) => string;
  * on a row is what they can find it by.
  */
 
-const WHEN = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
+const WHEN = localeFormatter(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }),
+);
 
 export function whenText(event: AuditEvent): string {
-  return WHEN.format(new Date(event.createdAt));
+  return WHEN().format(new Date(event.createdAt));
 }
 
-const DAY = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
+const DAY = localeFormatter(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+);
 
-const TIME = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
+const TIME = localeFormatter(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }),
+);
 
 /** The day over the time, so the column is as wide as a date rather than a date and a time. */
 export function WhenCell({ event }: { event: AuditEvent }) {
+  useLocale();
   const at = new Date(event.createdAt);
   return (
     <>
-      <div>{DAY.format(at)}</div>
-      <div>{TIME.format(at)}</div>
+      <div>{DAY().format(at)}</div>
+      <div>{TIME().format(at)}</div>
     </>
   );
 }
@@ -126,6 +137,7 @@ export function WhatCell({
   event: AuditEvent;
   storedName?: boolean;
 }) {
+  useLocale();
   return (
     <>
       <div
@@ -150,6 +162,7 @@ export function WhoCell({
   event: AuditEvent;
   nameFor: NameFor;
 }) {
+  useLocale();
   return (
     <>
       <div>
@@ -217,14 +230,15 @@ export function whatName(event: AuditEvent): string {
  * was nobody's approval (see {@link givenWithoutAsking}).
  */
 export function whatText(event: AuditEvent, storedNames = true): string {
-  if (!storedNames && givenWithoutAsking(event)) return "Let a Bot use an app";
+  if (!storedNames && givenWithoutAsking(event))
+    return ui("Let a Bot use an app");
   const action = actionOf(event);
-  if (action) return auditActionWords(action);
+  if (action) return auditActionWords(action, ui);
   const change =
     event.eventType === "configuration.changed"
-      ? auditChangeWords(event.payload ?? {})
+      ? auditChangeWords(event.payload ?? {}, ui)
       : undefined;
-  return change ?? auditEventWords(event.eventType);
+  return change ?? auditEventWords(event.eventType, ui);
 }
 
 type Element = { role?: string; name?: string } | string | undefined;
@@ -249,13 +263,14 @@ function appSubjectWords(event: AuditEvent): string | undefined {
   const target = event.targetId;
   if (event.targetType === "mcp_tool" && target)
     return event.eventType === "configuration.changed"
-      ? appToolsWords([target])
+      ? appToolsWords([target], ui)
       : connectorName(
           target.slice(0, Math.max(target.indexOf("/"), 0)) || target,
+          ui,
         );
   if (event.targetType === "mcp_server" && target) {
     const refs = refsOf(event);
-    return refs ? appToolsWords(refs) : connectorName(target);
+    return refs ? appToolsWords(refs, ui) : connectorName(target, ui);
   }
   // An approval asked about an app's tool names the app as where it would act.
   if (
@@ -264,7 +279,7 @@ function appSubjectWords(event: AuditEvent): string | undefined {
     typeof payload.tool === "string" &&
     payload.tool.startsWith(`${payload.scope}/`)
   )
-    return connectorName(payload.scope);
+    return connectorName(payload.scope, ui);
   return undefined;
 }
 
@@ -284,7 +299,7 @@ function subjectWords(event: AuditEvent): string | undefined {
     // With the data it was given or read: "Activity report · your Bots' activity".
     const functions = functionsOf(payload);
     return functions
-      ? `${componentName(target)} · ${dataWords(functions)}`
+      ? `${componentName(target)} · ${dataWords(functions, ui)}`
       : componentName(target);
   }
   // By the title its page shows ("Write a skill"), or its stored name in words once it is gone.
@@ -292,7 +307,7 @@ function subjectWords(event: AuditEvent): string | undefined {
     return event.subjectTitle || humanise(target);
   if (event.targetType === "credential") {
     if (typeof payload.server === "string")
-      return connectorName(payload.server);
+      return connectorName(payload.server, ui);
     const named = [payload.provider, payload.keyId].filter(
       (part): part is string => typeof part === "string" && part !== "",
     );
@@ -332,7 +347,10 @@ export function subjectText(event: AuditEvent, storedNames = true): string {
   if (event.eventType === "mcp.tools_discovered")
     return typeof payload.offered === "number" &&
       typeof payload.granted === "number"
-      ? `${payload.offered} of ${payload.granted} tools`
+      ? ui("{{value0}} of {{value1}} tools", {
+          value0: String(payload.offered),
+          value1: String(payload.granted),
+        })
       : "";
   // What an admin asked the trail, in their words.
   if (event.eventType === "audit.asked" || event.eventType === "what_if.asked")
@@ -367,9 +385,9 @@ export function subjectText(event: AuditEvent, storedNames = true): string {
       ? payload.folder
       : undefined;
   if (typeof payload.file === "string")
-    return inFolder(payload.file, folder) ?? payload.file;
+    return inFolder(payload.file, folder, ui) ?? payload.file;
   if (typeof payload.command === "string")
-    return inFolder(payload.command, folder) ?? payload.command;
+    return inFolder(payload.command, folder, ui) ?? payload.command;
   const folders = foldersOf(payload);
   if (folders) return folders;
   if (typeof element === "object" && element?.name)
@@ -467,19 +485,23 @@ export function startedByText(
 ): string {
   switch (initiatorKindOf(event)) {
     case "routine":
-      return "A routine";
+      return ui("A routine");
     case "handoff":
       return event.initiatorId
-        ? `Handed on by ${nameFor(event.initiatorId)}`
-        : "Handed on";
+        ? ui("Handed on by {{value0}}", {
+            value0: String(nameFor(event.initiatorId)),
+          })
+        : ui("Handed on");
     case "memory":
-      return "A memory source";
+      return ui("A memory source");
     case "responsibility":
-      return "A goal";
+      return ui("A goal");
     case "deployment":
-      return atStart(deployment);
+      return atStart(
+        deployment === "this deployment" ? ui("this deployment") : deployment,
+      );
     default:
-      return "A person";
+      return ui("A person");
   }
 }
 
@@ -511,22 +533,22 @@ function permissionSubject(payload: Record<string, unknown>): string {
         : "";
   const scope =
     payload.scopeKind === "organization"
-      ? "Everybody"
+      ? ui("Everybody")
       : payload.scopeKind === "role"
         ? payload.scopeId === "admin"
-          ? "Admins"
-          : "Members"
+          ? ui("Admins")
+          : ui("Members")
         : payload.scopeKind === "group" && typeof payload.scopeId === "string"
-          ? `Group: ${payload.scopeId}`
+          ? ui("Group: {{name}}", { name: payload.scopeId })
           : "";
   return [title, scope].filter(Boolean).join(" · ");
 }
 
 /** What a switch was set to, as the Permissions page says it: a group grants, the rest turn on or off. */
 function permissionSetting(payload: Record<string, unknown>): string {
-  if (payload.allowed === null) return "Set back to inherit";
-  if (payload.allowed === false) return "Turned off";
-  return payload.scopeKind === "group" ? "Granted" : "Turned on";
+  if (payload.allowed === null) return ui("Set back to inherit");
+  if (payload.allowed === false) return ui("Turned off");
+  return payload.scopeKind === "group" ? ui("Granted") : ui("Turned on");
 }
 
 export function decisionText(event: AuditEvent, storedNames = true): string {
@@ -534,7 +556,8 @@ export function decisionText(event: AuditEvent, storedNames = true): string {
   if (event.eventType === "capability.changed")
     return permissionSetting(payload);
   const outcome = outcomeOf(event);
-  if (!storedNames && givenWithoutAsking(event)) return "Allowed automatically";
+  if (!storedNames && givenWithoutAsking(event))
+    return ui("Allowed automatically");
   /*
    * Three different things, and the difference is what somebody comes to this row to find out.
    *
@@ -546,23 +569,23 @@ export function decisionText(event: AuditEvent, storedNames = true): string {
   const routed =
     event.eventType === "channel.routed"
       ? payload.viaMention === true
-        ? "The person chose this Bot"
+        ? ui("The person chose this Bot")
         : payload.fallback === true
-          ? "Sent to the default Bot"
-          : "Sent to the Bot it was meant for"
+          ? ui("Sent to the default Bot")
+          : ui("Sent to the Bot it was meant for")
       : null;
   const legacy = legacyFolderAction(event);
   return (
     routed ??
     approvalText(event) ??
-    (legacy?.outcome === "requested" ? "Asked for" : undefined) ??
+    (legacy?.outcome === "requested" ? ui("Asked for") : undefined) ??
     notConnectedText(event) ??
     (legacy ? undefined : DECISIONS[event.eventType]) ??
     (outcome === "refused"
-      ? "Blocked"
+      ? ui("Blocked")
       : outcome === "did-not-happen"
-        ? "Did not happen"
-        : "Allowed")
+        ? ui("Did not happen")
+        : ui("Allowed"))
   );
 }
 
@@ -586,8 +609,8 @@ function notConnectedText(event: AuditEvent): string | undefined {
   const prompt = connectPromptOf(event);
   if (!prompt) return undefined;
   return prompt.reason === "reconnect"
-    ? "No longer connected"
-    : "Not connected";
+    ? ui("No longer connected")
+    : ui("Not connected");
 }
 
 /**
@@ -598,10 +621,18 @@ function notConnectedText(event: AuditEvent): string | undefined {
 function notConnectedLine(prompt: ConnectPrompt, storedNames: boolean): string {
   if (storedNames && prompt.message) return prompt.message;
   if (prompt.reason === "reconnect")
-    return `${prompt.title} is no longer connected. Reconnect it in Connections.`;
+    return ui(
+      "{{value0}} is no longer connected. Reconnect it in Connections.",
+      { value0: String(prompt.title) },
+    );
   if (prompt.reason === "shared")
-    return `${prompt.title} uses a shared account nobody has connected yet. Ask an admin to connect it.`;
-  return `${prompt.title} isn't connected. Connect it in Connections.`;
+    return ui(
+      "{{value0}} uses a shared account nobody has connected yet. Ask an admin to connect it.",
+      { value0: String(prompt.title) },
+    );
+  return ui("{{value0}} isn't connected. Connect it in Connections.", {
+    value0: String(prompt.title),
+  });
 }
 
 /**
@@ -621,7 +652,7 @@ function approvalText(event: AuditEvent): string | undefined {
       | undefined;
     // Allowed by the person's own answer earlier in the conversation, not by a rule.
     if (outcome?.source === "conversation" && outcome.behaviour === "allow")
-      return "Allowed for this conversation";
+      return ui("Allowed for this conversation");
     const behaviour = outcome?.behaviour;
     return typeof behaviour === "string"
       ? GATE_DECISIONS[behaviour]
@@ -629,7 +660,9 @@ function approvalText(event: AuditEvent): string | undefined {
   }
   // An admin's guidance for auto-review, saved or taken away. Nothing was decided about an action.
   if (event.eventType === "approval.guidance_changed")
-    return payload.after === null ? "Guidance removed" : "Guidance saved";
+    return payload.after === null
+      ? ui("Guidance removed")
+      : ui("Guidance saved");
   return undefined;
 }
 
@@ -641,29 +674,47 @@ function guidanceLines(payload: Record<string, unknown>): string[] {
   const reading = (payload.reading ?? {}) as { summary?: unknown };
   if (typeof payload.after === "string")
     return [
-      `Guidance: “${payload.after}”`,
+      ui("Guidance: “{{text}}”", { text: payload.after }),
       ...(typeof reading.summary === "string" && reading.summary
-        ? [`Read as: ${reading.summary}`]
+        ? [ui("Read as: {{text}}", { text: reading.summary })]
         : []),
     ];
   return typeof payload.before === "string"
-    ? [`Removed: “${payload.before}”`]
+    ? [ui("Removed: “{{text}}”", { text: payload.before })]
     : [];
 }
 
 const PERSON_DECISIONS: Record<string, string> = {
-  allow_once: "Allowed once by a person",
-  allow_conversation: "Allowed for this conversation by a person",
-  allow_always: "Always allowed by a person",
-  deny: "Denied by a person",
-  handled: "Done by a person",
+  get allow_once() {
+    return ui("Allowed once by a person");
+  },
+  get allow_conversation() {
+    return ui("Allowed for this conversation by a person");
+  },
+  get allow_always() {
+    return ui("Always allowed by a person");
+  },
+  get deny() {
+    return ui("Denied by a person");
+  },
+  get handled() {
+    return ui("Done by a person");
+  },
 };
 
 const GATE_DECISIONS: Record<string, string> = {
-  allow: "Allowed without asking",
-  ask: "Asked a person first",
-  hand_off: "Handed to a person",
-  deny: "Blocked",
+  get allow() {
+    return ui("Allowed without asking");
+  },
+  get ask() {
+    return ui("Asked a person first");
+  },
+  get hand_off() {
+    return ui("Handed to a person");
+  },
+  get deny() {
+    return ui("Blocked");
+  },
 };
 
 /**
@@ -672,9 +723,9 @@ const GATE_DECISIONS: Record<string, string> = {
  */
 function refusalLine(payload: Record<string, unknown>): string | undefined {
   if (payload.refusal === "person_declined")
-    return "A person denied it when asked.";
+    return ui("A person denied it when asked.");
   if (payload.refusal === "approval" && typeof payload.reason === "string")
-    return outcomeForPerson(payload.reason);
+    return outcomeForPerson(payload.reason, ui);
   return undefined;
 }
 
@@ -696,13 +747,13 @@ function policyChangeLines(payload: Record<string, unknown>): string[] {
   const mode = (payload.mode ?? {}) as { before?: unknown; after?: unknown };
   const authoring = (payload.authoring ?? {}) as { text?: unknown };
   return [
-    ...named(payload.added).map((name) => `Added: ${name}`),
-    ...named(payload.removed).map((name) => `Removed: ${name}`),
+    ...named(payload.added).map((name) => ui("Added: {{name}}", { name })),
+    ...named(payload.removed).map((name) => ui("Removed: {{name}}", { name })),
     ...(mode.before !== mode.after && typeof mode.after === "string"
-      ? [mode.after === "dry-run" ? "Trial mode on" : "Trial mode off"]
+      ? [mode.after === "dry-run" ? ui("Trial mode on") : ui("Trial mode off")]
       : []),
     ...(typeof authoring.text === "string"
-      ? [`Written from: “${authoring.text}”`]
+      ? [ui("Written from: “{{text}}”", { text: authoring.text })]
       : []),
   ];
 }
@@ -712,8 +763,12 @@ function policyChangeLines(payload: Record<string, unknown>): string[] {
  * is given, which names the component and its data by their ids and sends the person to an admin.
  */
 const COMPONENT_REFUSALS: Record<string, string> = {
-  "component.refused": "This Bot can't show it.",
-  "component.function_refused": "It isn't allowed to read that data.",
+  get "component.refused"() {
+    return ui("This Bot can't show it.");
+  },
+  get "component.function_refused"() {
+    return ui("It isn't allowed to read that data.");
+  },
 };
 
 type RecordedDecision = {
@@ -755,10 +810,11 @@ function ruleNameLine(event: AuditEvent, storedNames: boolean): string | null {
     !ruleName.trim()
   )
     return null;
-  if (allowed !== false) return `Allowed by: ${ruleName}`;
+  if (allowed !== false)
+    return ui("Allowed by: {{value0}}", { value0: String(ruleName) });
   return mode === "dry-run"
-    ? `Would be stopped by: ${ruleName}`
-    : `Stopped by: ${ruleName}`;
+    ? ui("Would be stopped by: {{value0}}", { value0: String(ruleName) })
+    : ui("Stopped by: {{value0}}", { value0: String(ruleName) });
 }
 
 /**
@@ -799,12 +855,12 @@ export function decisionDetails(
     event.eventType === "approval.evaluated" &&
     typeof gate.reason === "string"
   )
-    lines.push(outcomeForPerson(gate.reason));
+    lines.push(outcomeForPerson(gate.reason, ui));
   if (
     event.eventType === "approval.withdrawn" &&
     typeof payload.reason === "string"
   )
-    lines.push(outcomeForPerson(payload.reason));
+    lines.push(outcomeForPerson(payload.reason, ui));
   /*
    * Why this run was offered what it was, which is the only part of a discovery row that cannot be
    * worked out from the numbers. "Nothing declared" and "selector unavailable" both offer everything
@@ -837,7 +893,9 @@ export function decisionDetails(
   )
     lines.push(payload.reason);
   if (event.eventType === "bot.declined" && typeof payload.reason === "string")
-    lines.push(`${payload.reason}, reported by the Bot itself`);
+    lines.push(
+      ui("{{reason}}, reported by the Bot itself", { reason: payload.reason }),
+    );
   const notConnected = connectPromptOf(event);
   if (failed && notConnected)
     lines.push(notConnectedLine(notConnected, storedNames));
@@ -870,7 +928,7 @@ export function decisionDetails(
       event.eventType === "capability.changed") &&
     typeof ruleAuthoring.text === "string"
   )
-    lines.push(`Written from: “${ruleAuthoring.text}”`);
+    lines.push(ui("Written from: “{{text}}”", { text: ruleAuthoring.text }));
   if (event.eventType === "approval.guidance_changed")
     lines.push(...guidanceLines(payload));
   if (
@@ -878,7 +936,7 @@ export function decisionDetails(
     decision.allowed === false &&
     decision.carriedOut
   )
-    lines.push("dry-run: recorded, not enforced");
+    lines.push(ui("dry-run: recorded, not enforced"));
   return lines;
 }
 
@@ -919,6 +977,7 @@ export function OnCell({
   /** Whether a tool or an app reads by its stored name, as Admin's do; see {@link subjectText}. */
   storedNames?: boolean;
 }) {
+  useLocale();
   const payload = event.payload ?? {};
   const element = payload.element as Element;
   const subject = subjectText(event, storedNames);
@@ -969,6 +1028,7 @@ export function BotCell({
   event: AuditEvent;
   nameFor: NameFor;
 }) {
+  useLocale();
   const bot = botIdOf(event);
   // The name and nothing else, a tooltip included: a person never reads a Bot's id. The CSV keeps it.
   return bot ? (
@@ -987,6 +1047,7 @@ export function StartedByCell({
   event: AuditEvent;
   nameFor: NameFor;
 }) {
+  useLocale();
   // Anything that ran with nobody watching is the colour of a warning; a person or the deployment is not.
   const unattended =
     event.initiatorKind === "routine" ||
@@ -1001,7 +1062,10 @@ export function StartedByCell({
           : "text-muted-foreground"
       }
     >
-      {startedByLine(startedByText(event, nameFor, deployment))}
+      {startedByLine(
+        startedByText(event, nameFor, deployment),
+        initiatorKindOf(event) === "handoff",
+      )}
     </span>
   );
 }
@@ -1010,10 +1074,14 @@ export function StartedByCell({
  * Under the Bot's name, so it says what it is: "Started by a routine", "Handed on by Scout",
  * "Started by OpenBot". Only a leading "A" or "This" is lowered; a name keeps its capitals.
  */
-export function startedByLine(text: string): string {
-  return text.startsWith("Handed on")
+export function startedByLine(text: string, handedOn = false): string {
+  return handedOn
     ? text
-    : `Started by ${text.replace(/^(A|This) /, (word) => word.toLowerCase())}`;
+    : ui("Started by {{value0}}", {
+        value0: String(
+          text.replace(/^(A|This) /, (word) => word.toLowerCase()),
+        ),
+      });
 }
 
 export function DecisionCell({
@@ -1024,6 +1092,7 @@ export function DecisionCell({
   /** Whether reasons read as recorded, as Admin's do; see {@link decisionDetails}. */
   storedNames?: boolean;
 }) {
+  useLocale();
   const outcome = outcomeOf(event);
   const expression = ruleExpression(event, storedNames);
   return (
@@ -1070,6 +1139,7 @@ const DETAIL_LINE =
  * fits in two lines depends on how wide the table left the column, which nothing here can know.
  */
 function RuleExpression({ expression }: { expression: string }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const [cut, setCut] = useState(false);
   const text = useRef<HTMLDivElement>(null);
@@ -1109,7 +1179,7 @@ function RuleExpression({ expression }: { expression: string }) {
           onClick={() => setOpen((was) => !was)}
           type="button"
         >
-          {open ? "Show less" : "Show full rule"}
+          {open ? ui("Show less") : ui("Show full rule")}
         </button>
       ) : null}
     </>
@@ -1138,11 +1208,21 @@ export const OUTCOME_ROW: Record<AuditOutcome, string> = {
  * and one whose selector could not be reached, and only the last is a fault.
  */
 const DISCOVERY_REASONS: Record<string, string> = {
-  "under-floor": "Few enough tools to offer them all",
-  "nothing-declared": "No skill declares any of these tools",
-  unavailable: "Couldn't choose, so all were offered",
-  "nothing-chosen": "No skill applied, so all were offered",
-  selected: "Chosen by skill",
+  get "under-floor"() {
+    return ui("Few enough tools to offer them all");
+  },
+  get "nothing-declared"() {
+    return ui("No skill declares any of these tools");
+  },
+  get unavailable() {
+    return ui("Couldn't choose, so all were offered");
+  },
+  get "nothing-chosen"() {
+    return ui("No skill applied, so all were offered");
+  },
+  get selected() {
+    return ui("Chosen by skill");
+  },
 };
 
 /** Target types whose id is a name worth putting on screen; anything else falls through. */
@@ -1155,65 +1235,153 @@ const NAMED_TARGETS = new Set([
 ]);
 
 const DECISIONS: Record<string, string> = {
-  "bot.declined": "The Bot declined",
+  get "bot.declined"() {
+    return ui("The Bot declined");
+  },
   // Not a refusal, so not the refusal colour: nothing was blocked. The Bot was asked and never
   // answered, which is the same complaint as an action that was allowed and then did not happen.
-  "agent.stream_stalled": "The Bot stopped responding",
-  "agent.tool_limit_refused": "Too many tools for its model",
-  "computer.policy_loaded": "Boundary at start-up",
-  "computer.policy_changed": "Boundaries saved",
+  get "agent.stream_stalled"() {
+    return ui("The Bot stopped responding");
+  },
+  get "agent.tool_limit_refused"() {
+    return ui("Too many tools for its model");
+  },
+  get "computer.policy_loaded"() {
+    return ui("Boundary at start-up");
+  },
+  get "computer.policy_changed"() {
+    return ui("Boundaries saved");
+  },
   // A draft for the admin to read. Not "Allowed": nothing was decided and nothing changed.
-  "computer.policy_translated": "Drafted, not saved",
+  get "computer.policy_translated"() {
+    return ui("Drafted, not saved");
+  },
   // A question read into filters. Not "Allowed": nothing was decided, and nothing left the trail.
-  "audit.asked": "Asked, nothing changed",
-  "what_if.asked": "Asked, nothing changed",
-  "what_if.checked": "Checked, nothing changed",
-  "computer.isolation_loaded": "Isolation at start-up",
-  "computer.control_taken": "A person took control",
-  "computer.control_released": "Control went back to the Bot",
-  "computer.help_requested": "The Bot asked for help",
-  "computer.secret_requested": "The Bot asked for a secret",
-  "computer.secret_supplied": "A person supplied a secret",
-  "computer.reset": "The computer was reset",
-  "computer.browser_cleared": "A person cleared the browser",
-  "computer.updated": "The computer was updated",
-  "computer.stopped": "A person pressed stop",
+  get "audit.asked"() {
+    return ui("Asked, nothing changed");
+  },
+  get "what_if.asked"() {
+    return ui("Asked, nothing changed");
+  },
+  get "what_if.checked"() {
+    return ui("Checked, nothing changed");
+  },
+  get "computer.isolation_loaded"() {
+    return ui("Isolation at start-up");
+  },
+  get "computer.control_taken"() {
+    return ui("A person took control");
+  },
+  get "computer.control_released"() {
+    return ui("Control went back to the Bot");
+  },
+  get "computer.help_requested"() {
+    return ui("The Bot asked for help");
+  },
+  get "computer.secret_requested"() {
+    return ui("The Bot asked for a secret");
+  },
+  get "computer.secret_supplied"() {
+    return ui("A person supplied a secret");
+  },
+  get "computer.reset"() {
+    return ui("The computer was reset");
+  },
+  get "computer.browser_cleared"() {
+    return ui("A person cleared the browser");
+  },
+  get "computer.updated"() {
+    return ui("The computer was updated");
+  },
+  get "computer.stopped"() {
+    return ui("A person pressed stop");
+  },
 
-  "component.granted": "Granted to this Bot",
-  "component.revoked": "Taken away from this Bot",
-  "component.published": "Published. Every Bot can use it",
-  "component.unpublished": "Unpublished. No Bot can use it",
-  "component.draft_saved": "Draft saved, not yet published",
-  "component.description_updated": "Description updated to this version's",
-  "component.refused": "Refused",
-  "component.function_granted": "Can read this",
-  "component.function_revoked": "Can no longer read this",
-  "component.function_called": "Read real data",
-  "component.function_refused": "Refused",
+  get "component.granted"() {
+    return ui("Granted to this Bot");
+  },
+  get "component.revoked"() {
+    return ui("Taken away from this Bot");
+  },
+  get "component.published"() {
+    return ui("Published. Every Bot can use it");
+  },
+  get "component.unpublished"() {
+    return ui("Unpublished. No Bot can use it");
+  },
+  get "component.draft_saved"() {
+    return ui("Draft saved, not yet published");
+  },
+  get "component.description_updated"() {
+    return ui("Description updated to this version's");
+  },
+  get "component.refused"() {
+    return ui("Refused");
+  },
+  get "component.function_granted"() {
+    return ui("Can read this");
+  },
+  get "component.function_revoked"() {
+    return ui("Can no longer read this");
+  },
+  get "component.function_called"() {
+    return ui("Read real data");
+  },
+  get "component.function_refused"() {
+    return ui("Refused");
+  },
   // A function failure is execution failure, not a policy refusal.
-  "component.function_failed": "Couldn't read it",
+  get "component.function_failed"() {
+    return ui("Couldn't read it");
+  },
 
   // Not a call and not a decision: the tools this run was allowed to see. Worded so nobody reads it
   // as permission, which it is not — everything named was already granted.
-  "mcp.tools_discovered": "Tools offered for one run",
-  "mcp.call_succeeded": "Called on this Bot's behalf",
-  "mcp.call_rejected": "Blocked",
-  "mcp.call_failed": "The server didn't answer",
+  get "mcp.tools_discovered"() {
+    return ui("Tools offered for one run");
+  },
+  get "mcp.call_succeeded"() {
+    return ui("Called on this Bot's behalf");
+  },
+  get "mcp.call_rejected"() {
+    return ui("Blocked");
+  },
+  get "mcp.call_failed"() {
+    return ui("The server didn't answer");
+  },
   // Not "Blocked": nothing about the Bot was judged, because nothing proved which Bot it was.
-  "mcp.callback_refused": "Couldn't confirm which Bot it was",
+  get "mcp.callback_refused"() {
+    return ui("Couldn't confirm which Bot it was");
+  },
 
   // A request closed without an answer: asking was turned off, or a rule now allows it.
-  "approval.withdrawn": "Withdrawn",
+  get "approval.withdrawn"() {
+    return ui("Withdrawn");
+  },
   // A draft for the admin to read, as a boundary's is. Nothing was decided and nothing changed.
-  "approval.rules_translated": "Drafted, not saved",
-  "plugin.grants_translated": "Drafted, not saved",
-  "plugin.grants_changed": "Actions saved",
+  get "approval.rules_translated"() {
+    return ui("Drafted, not saved");
+  },
+  get "plugin.grants_translated"() {
+    return ui("Drafted, not saved");
+  },
+  get "plugin.grants_changed"() {
+    return ui("Actions saved");
+  },
   // A draft network allowlist, as a boundary's is. Nothing was decided and nothing changed.
-  "network_policy.translated": "Drafted, not saved",
-  "capability.changes_translated": "Drafted, not saved",
+  get "network_policy.translated"() {
+    return ui("Drafted, not saved");
+  },
+  get "capability.changes_translated"() {
+    return ui("Drafted, not saved");
+  },
 
-  "configuration.changed": "Configuration changed",
-  "credential.created": "Credential saved",
+  get "configuration.changed"() {
+    return ui("Configuration changed");
+  },
+  get "credential.created"() {
+    return ui("Credential saved");
+  },
 };
 
 function hostOf(url: string): string {

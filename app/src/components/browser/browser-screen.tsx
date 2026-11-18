@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { BrowserApiState } from "@openbot/shared/openbot-browser";
 import { IconSearch } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
@@ -79,6 +80,7 @@ export function ScreenBrowser({
   /** Under the window, as wide as it. Kept short by its own cap, since its height is taken from the page's. */
   children?: ReactNode;
 }) {
+  useLocale();
   const language = narrationLanguage();
   const choice = useNarrationChoice();
   const narration = useNarration({
@@ -249,6 +251,7 @@ export function BrowserDesk({
   window: ReactNode;
   children?: ReactNode;
 }) {
+  useLocale();
   const desk = useRef<HTMLDivElement>(null);
   const column = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -269,7 +272,7 @@ export function BrowserDesk({
         className="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4"
         style={width === undefined ? undefined : { width }}
       >
-        {heading ?? <h1 className="sr-only">Browser</h1>}
+        {heading ?? <h1 className="sr-only">{ui("Browser")}</h1>}
         <div
           ref={frame}
           className="flex shrink-0 flex-col overflow-clip rounded-xl border bg-background shadow-sm"
@@ -308,6 +311,7 @@ export function OpeningBrowser({
   onRetry?: () => void;
   children?: ReactNode;
 }) {
+  useLocale();
   return (
     <BrowserDesk
       heading={heading}
@@ -340,7 +344,7 @@ export function OpeningBrowser({
                 </p>
                 {onRetry ? (
                   <Button onClick={onRetry} size="sm" variant="outline">
-                    Try again
+                    {ui("Try again")}
                   </Button>
                 ) : null}
               </div>
@@ -354,7 +358,7 @@ export function OpeningBrowser({
                   aria-hidden="true"
                   className="size-12 drop-shadow-[0_8px_24px_rgb(120_100_220/0.35)] motion-safe:animate-pulse"
                 />
-                Opening your browser…
+                {ui("Opening your browser…")}
               </div>
             )}
           </div>
@@ -392,6 +396,7 @@ function Screen({
   reopening: boolean;
   screen: RefObject<LiveScreenHandle | null>;
 }) {
+  useLocale();
   const [problem, setProblem] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   // The page sits flush under the toolbar, at the browser's own shape, as wide as the window.
@@ -404,7 +409,9 @@ function Screen({
         <LiveScreen
           computerId={computerId}
           driving
-          label="Your browser. Click it to type into it, and press Escape to leave it."
+          label={ui(
+            "Your browser. Click it to type into it, and press Escape to leave it.",
+          )}
           onProblem={setProblem}
           ref={screen}
           retryKey={retryKey}
@@ -420,9 +427,9 @@ function Screen({
         </div>
       ) : !open ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-muted-foreground text-sm">
-          <span>Your browser is closed.</span>
+          <span>{ui("Your browser is closed.")}</span>
           <Button disabled={reopening} onClick={reopen} size="sm">
-            {reopening ? "Opening…" : "Open it again"}
+            {reopening ? ui("Opening…") : ui("Open it again")}
           </Button>
         </div>
       ) : problem ? (
@@ -436,7 +443,7 @@ function Screen({
             size="sm"
             variant="outline"
           >
-            Try again
+            {ui("Try again")}
           </Button>
         </div>
       ) : blank ? (
@@ -451,12 +458,13 @@ function Screen({
  * over the empty page the browser itself would draw white. It goes where the address bar would.
  */
 function StartPage({ onGo }: { onGo: (url: string) => void }) {
+  useLocale();
   const [typed, setTyped] = useState("");
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-background px-6">
       <OpenBotLogo className="size-14 drop-shadow-[0_8px_24px_rgb(120_100_220/0.35)]" />
       <form
-        aria-label="Search or go to a site"
+        aria-label={ui("Search or go to a site")}
         className="w-full max-w-lg"
         onSubmit={(event) => {
           event.preventDefault();
@@ -468,9 +476,9 @@ function StartPage({ onGo }: { onGo: (url: string) => void }) {
       >
         <InputGroup className="h-11 rounded-full bg-muted/50 shadow-xs dark:bg-input/40">
           <InputGroupInput
-            aria-label="Search or go to a site"
+            aria-label={ui("Search or go to a site")}
             onChange={(event) => setTyped(event.target.value)}
-            placeholder="Search or type an address"
+            placeholder={ui("Search or type an address")}
             spellCheck={false}
             value={typed}
           />

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { memo, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ export const TranscriptRail = memo(function TranscriptRail({
   active,
   onJump,
 }: RailProps) {
+  useLocale();
   const listRef = useRef<HTMLOListElement | null>(null);
 
   /* A long conversation's rail scrolls; keep the current mark on it. */
@@ -63,7 +65,7 @@ export const TranscriptRail = memo(function TranscriptRail({
 
   return (
     <nav
-      aria-label="Turns"
+      aria-label={ui("Turns")}
       className="pointer-events-none absolute inset-y-0 left-2 z-10 hidden items-center @4xl:flex"
     >
       <ol
@@ -93,6 +95,7 @@ const RailMark = memo(function RailMark({
   current: boolean;
   onJump: (turn: Turn) => void;
 }) {
+  useLocale();
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger

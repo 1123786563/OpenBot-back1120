@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowLeft,
   IconBell,
@@ -53,7 +54,9 @@ type SettingsSidebarItem = {
 
 export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   {
-    title: "General",
+    get title() {
+      return ui("General");
+    },
     icon: IconSettings,
     /* `/settings` prefixes every other route here, and would otherwise light up on all of them. */
     exact: true,
@@ -61,51 +64,67 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   },
   {
     /* Where updates go for every Bot at once; how much each Bot sends is on that Bot's page. */
-    title: "Notifications",
+    get title() {
+      return ui("Notifications");
+    },
     icon: IconBell,
     linkOptions: { to: "/settings/notifications" },
   },
   {
     /* Whether Bots ask first, and rules for every Bot. Team settings are an administrator's. */
-    title: "Approvals",
+    get title() {
+      return ui("Approvals");
+    },
     icon: IconChecks,
     linkOptions: { to: "/settings/approvals" },
   },
   {
     /* The browsers signed in to the Recorder extension as you; each can be disconnected here. */
-    title: "Browsers",
+    get title() {
+      return ui("Browsers");
+    },
     icon: IconBrowser,
     linkOptions: { to: "/settings/browsers" },
   },
   {
     /* Who else's Bots use the Skills learned from your recordings: none, all, or the ones you open. */
-    title: "Learning",
+    get title() {
+      return ui("Learning");
+    },
     icon: IconSchool,
     linkOptions: { to: "/settings/learning" },
   },
   {
     /* What the deployment has and still needs: onboarding's checklist, to come back to. */
-    title: "Setup",
+    get title() {
+      return ui("Setup");
+    },
     icon: IconListCheck,
     linkOptions: { to: "/settings/setup" },
     setup: true,
   },
   {
     /* Logins saved from a Bot's private sign-in form. */
-    title: "Passwords",
+    get title() {
+      return ui("Passwords");
+    },
     icon: IconKey,
     linkOptions: { to: "/settings/passwords" },
   },
   {
     /* What OpenBot runs here and the memory it takes, with Restart and Stop. */
-    title: "This computer",
+    get title() {
+      return ui("This computer");
+    },
     icon: IconDeviceDesktop,
     desktopOnly: true,
     linkOptions: { to: "/settings/this-computer" },
   },
   {
     /* The same mark Admin gives UI Components. It is the same subject seen from the other side. */
-    title: "Components gallery",
+    get title() {
+      return ui("Components gallery");
+    },
     icon: IconLayoutGrid,
     linkOptions: { to: "/settings/components-gallery" },
   },
@@ -119,17 +138,23 @@ export const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
  */
 const PERSONAL_SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   {
-    title: "Keys",
+    get title() {
+      return ui("Keys");
+    },
     icon: IconLock,
     linkOptions: { to: "/settings/credentials" },
   },
   {
-    title: "Skills",
+    get title() {
+      return ui("Skills");
+    },
     icon: IconBook,
     linkOptions: { to: "/settings/skills" },
   },
   {
-    title: "Computer",
+    get title() {
+      return ui("Computer");
+    },
     icon: IconDeviceDesktop,
     linkOptions: { to: "/settings/computer" },
   },
@@ -147,8 +172,8 @@ export function settingsSidebarItems(
   return edition === "personal"
     ? [
         ...SETTINGS_SIDEBAR_ITEMS.map((item) =>
-          item.title === "Passwords"
-            ? { ...item, title: "Saved logins" }
+          item.linkOptions.to === "/settings/passwords"
+            ? { ...item, title: ui("Saved logins") }
             : item,
         ),
         ...PERSONAL_SETTINGS_SIDEBAR_ITEMS,
@@ -159,6 +184,7 @@ export function settingsSidebarItems(
 export function SettingsSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
+  useLocale();
   const user = useQuery(currentUserQueryOptions()).data;
   const capabilities = useQuery(deploymentCapabilitiesQueryOptions()).data;
   const canSetUp = mayOpenSetup(user, capabilities);
@@ -188,7 +214,7 @@ export function SettingsSidebar({
               render={(props) => (
                 <Link {...appLinkOptions} {...props}>
                   <IconArrowLeft className="mr-2 h-4 w-4" />
-                  Back to app
+                  {ui("Back to app")}
                 </Link>
               )}
             />
@@ -209,7 +235,7 @@ export function SettingsSidebar({
                   (!option.desktopOnly || desktopShell() !== null),
               )
               .map((option) => (
-                <SidebarMenuItem key={option.title}>
+                <SidebarMenuItem key={option.linkOptions.to}>
                   <SidebarMenuButton
                     render={(props) => (
                       <Link
@@ -222,7 +248,8 @@ export function SettingsSidebar({
                         {option.title}
                         {option.setup && toFix > 0 ? (
                           <span className="sr-only">
-                            , {toFix} {toFix === 1 ? "needs" : "need"} setup
+                            , {toFix} {toFix === 1 ? ui("needs") : ui("need")}{" "}
+                            {ui("setup")}
                           </span>
                         ) : null}
                       </Link>

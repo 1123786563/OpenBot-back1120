@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconDeviceDesktop,
   IconFolder,
@@ -51,11 +53,31 @@ const FIELDS: {
 }[] = [
   {
     key: "toolRef",
-    label: "Tool or app",
-    placeholder: "composio-gmail/*, computer_click, host/*",
+    get label() {
+      return ui("Tool or app");
+    },
+    get placeholder() {
+      return ui("composio-gmail/*, computer_click, host/*");
+    },
   },
-  { key: "effect", label: "Kind of action", placeholder: "*, write, read" },
-  { key: "scope", label: "Target", placeholder: "*, an app, a site" },
+  {
+    key: "effect",
+    get label() {
+      return ui("Kind of action");
+    },
+    get placeholder() {
+      return ui("*, write, read");
+    },
+  },
+  {
+    key: "scope",
+    get label() {
+      return ui("Target");
+    },
+    get placeholder() {
+      return ui("*, an app, a site");
+    },
+  },
 ];
 
 /**
@@ -86,6 +108,7 @@ export function RuleRowsEditor({
   problems: RuleRowProblem[];
   onChange: (rules: ApprovalRuleInput[]) => void;
 }) {
+  useLocale();
   const bots = useQuery(agentListQueryOptions());
   const set = (index: number, change: Partial<ApprovalRuleInput>) =>
     onChange(
@@ -93,9 +116,9 @@ export function RuleRowsEditor({
     );
   return (
     <Field>
-      <FieldLabel>Rules</FieldLabel>
+      <FieldLabel>{ui("Rules")}</FieldLabel>
       <FieldDescription>
-        Use * to match anything. Change any rule before you save.
+        {ui("Use * to match anything. Change any rule before you save.")}
       </FieldDescription>
       <div className="flex flex-col gap-4">
         {rules.map((rule, index) => {
@@ -113,10 +136,12 @@ export function RuleRowsEditor({
               <FieldSet className="gap-3">
                 <div className="flex items-center justify-between gap-2">
                   <FieldLegend className="mb-0" variant="label">
-                    Rule {row}
+                    {ui("Rule")} {row}
                   </FieldLegend>
                   <Button
-                    aria-label={`Remove rule ${row}`}
+                    aria-label={ui("Remove rule {{value0}}", {
+                      value0: String(row),
+                    })}
                     onClick={() =>
                       onChange(rules.filter((_, at) => at !== index))
                     }
@@ -159,7 +184,7 @@ export function RuleRowsEditor({
                     );
                   })}
                   <Field>
-                    <FieldLabel htmlFor={`${id}-botId`}>Bot</FieldLabel>
+                    <FieldLabel htmlFor={`${id}-botId`}>{ui("Bot")}</FieldLabel>
                     <LabelSelect
                       id={`${id}-botId`}
                       labels={botLabels(bots.data, rule.botId)}
@@ -174,7 +199,7 @@ export function RuleRowsEditor({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`${id}-behaviour`}>
-                      Behaviour
+                      {ui("Behaviour")}
                     </FieldLabel>
                     <LabelSelect
                       id={`${id}-behaviour`}
@@ -197,8 +222,7 @@ export function RuleRowsEditor({
             type="button"
             variant="outline"
           >
-            <IconPlus />
-            Add a rule
+            {uiNodes("{{slot0}}Add a rule", [<IconPlus key="slot0" />])}
           </Button>
         </div>
       ) : null}
@@ -214,15 +238,25 @@ const plural = (count: number, one: string, many = `${one}s`) =>
  * a person had denied; adds 0 asks." Safety requirements and auto-review are never counted.
  */
 export function backtestHeadline(report: ApprovalBacktest): string {
-  if (report.changed === 0) return "Would have changed no decisions.";
+  if (report.changed === 0) return ui("Would have changed no decisions.");
   const removed =
     report.removedAsks > 0
       ? `removes ${plural(report.removedAsks, "ask")}, of which ${report.removedDenied} a person had denied`
       : `removes ${plural(report.removedAsks, "ask")}`;
   const moved = report.changed - report.removedAsks - report.addedAsks;
-  return `Would have changed ${plural(report.changed, "decision")}: ${removed}; adds ${plural(report.addedAsks, "ask")}.${
-    moved > 0 ? ` ${moved} more would move between asking and handing off.` : ""
-  }`;
+  return ui(
+    "Would have changed {{value0}}: {{value1}}; adds {{value2}}.{{value3}}",
+    {
+      value0: String(plural(report.changed, "decision")),
+      value1: String(removed),
+      value2: String(plural(report.addedAsks, "ask")),
+      value3: String(
+        moved > 0
+          ? ` ${moved} more would move between asking and handing off.`
+          : "",
+      ),
+    },
+  );
 }
 
 /**
@@ -236,13 +270,15 @@ export function replayWords(
   return [
     `Replayed over the last ${plural(report.scanned, "action")} OpenBot checked.`,
     report.matched === 0
-      ? "These rules are about none of them."
+      ? ui("These rules are about none of them.")
       : `These rules are about ${report.matched} of them.`,
     report.fixed > 0
       ? `${report.fixed} ${report.fixed === 1 ? "was" : "were"} decided by a safety requirement, auto-review or a task, which rules don't change.`
       : null,
     asksMore
-      ? "Actions that ran with nothing to check aren't recorded, so a new ask can reach further than this shows."
+      ? ui(
+          "Actions that ran with nothing to check aren't recorded, so a new ask can reach further than this shows.",
+        )
       : null,
   ]
     .filter(Boolean)
@@ -291,14 +327,14 @@ function auditRowOf(change: BacktestChange): AuditEvent {
 /** Where an action acted, by its tool: an app, a computer, a folder, another Bot. */
 export function mediaOf(toolRef: string): ReplayRow["media"] {
   if (toolRef.startsWith("computer_"))
-    return { icon: <IconDeviceDesktop />, label: "Computer action" };
+    return { icon: <IconDeviceDesktop />, label: ui("Computer action") };
   if (toolRef.startsWith("host/"))
-    return { icon: <IconFolder />, label: "Folder on a computer" };
+    return { icon: <IconFolder />, label: ui("Folder on a computer") };
   if (toolRef.startsWith("bot/"))
-    return { icon: <IconUsers />, label: "Work handed to another Bot" };
+    return { icon: <IconUsers />, label: ui("Work handed to another Bot") };
   if (toolRef.startsWith("openbot/"))
-    return { icon: <IconLock />, label: "Private information" };
-  return { icon: <IconPlug />, label: "App call" };
+    return { icon: <IconLock />, label: ui("Private information") };
+  return { icon: <IconPlug />, label: ui("App call") };
 }
 
 function replayRowOf(change: BacktestChange): ReplayRow {
@@ -333,18 +369,20 @@ export function RulesBacktest({
   /** Whether a rule asks or hands off, which can reach actions the trail never recorded. */
   asksMore: boolean;
 }) {
+  useLocale();
   if (preview.isPending) return null;
   return (
     <Field aria-labelledby="rules-backtest" aria-live="polite">
-      <FieldLabel id="rules-backtest">On recent activity</FieldLabel>
+      <FieldLabel id="rules-backtest">{ui("On recent activity")}</FieldLabel>
       {preview.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {preview.error.message}
+          {<ErrorDetails error={preview.error} />}
         </p>
       ) : preview.data.report.scanned === 0 ? (
         <FieldDescription>
-          No checked actions to test against yet. You'll see what these rules
-          change once Bots have acted.
+          {ui(
+            "No checked actions to test against yet. You'll see what these rules change once Bots have acted.",
+          )}
         </FieldDescription>
       ) : (
         <div className="flex flex-col gap-3">

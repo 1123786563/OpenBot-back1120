@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { CopilotChatSuggestionView } from "@copilotkit/react-core/v2";
 import { isStarterTourAgent } from "@openbot/shared/starter-tour";
 import { useQuery } from "@tanstack/react-query";
@@ -20,11 +21,13 @@ type Props = {
 
 /** Independent of the Bot's name, harness attribution and conversation introduction. */
 export function StarterSuggestions(props: Props) {
+  useLocale();
   if (!props.agentId || !isStarterTourAgent(props.agentId)) return null;
   return <EligibleStarterSuggestions {...props} />;
 }
 
 function EligibleStarterSuggestions(props: Props) {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   const preferences = useQuery({
     ...userPreferencesQueryOptions(user?.id),
@@ -41,6 +44,7 @@ function EligibleStarterSuggestions(props: Props) {
 }
 
 function StarterSuggestionChoices({ onSelect, disabled = false }: Props) {
+  useLocale();
   const capabilities = useQuery(deploymentCapabilitiesQueryOptions());
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -87,7 +91,7 @@ function StarterSuggestionChoices({ onSelect, disabled = false }: Props) {
      * read as the row sitting on the composer.
      */
     <section
-      aria-label="Starter tasks"
+      aria-label={ui("Starter tasks")}
       className="relative mb-3 w-full max-w-2xl px-3 [&>div]:gap-1 [&>div]:bg-transparent"
     >
       <CopilotChatSuggestionView

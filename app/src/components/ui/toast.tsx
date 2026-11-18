@@ -1,5 +1,6 @@
 "use client";
 
+import { ui, useLocale } from "@/lib/i18n";
 import {
   type ToastManager,
   Toast as ToastPrimitive,
@@ -61,10 +62,12 @@ const toast: ToastManager = {
 };
 
 function ToastProvider({ ...props }: ToastPrimitive.Provider.Props) {
+  useLocale();
   return <ToastPrimitive.Provider {...props} />;
 }
 
 function ToastPortal({ ...props }: ToastPrimitive.Portal.Props) {
+  useLocale();
   return <ToastPrimitive.Portal data-slot="toast-portal" {...props} />;
 }
 
@@ -74,6 +77,7 @@ function ToastPortal({ ...props }: ToastPrimitive.Portal.Props) {
  * raised while one was open (Clear browser data, in a Bot's screen) was drawn behind it, where nobody could read it.
  */
 function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
@@ -87,6 +91,7 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
 }
 
 function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Root
       data-slot="toast"
@@ -114,6 +119,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
 }
 
 function ToastContent({ className, ...props }: ToastPrimitive.Content.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Content
       data-slot="toast-content"
@@ -127,6 +133,7 @@ function ToastContent({ className, ...props }: ToastPrimitive.Content.Props) {
 }
 
 function ToastTitle({ className, ...props }: ToastPrimitive.Title.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Title
       data-slot="toast-title"
@@ -140,6 +147,7 @@ function ToastDescription({
   className,
   ...props
 }: ToastPrimitive.Description.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Description
       data-slot="toast-description"
@@ -154,6 +162,7 @@ function ToastAction({
   render = <Button variant="outline" size="sm" />,
   ...props
 }: ToastPrimitive.Action.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Action
       data-slot="toast-action"
@@ -170,10 +179,11 @@ function ToastClose({
   render = <Button variant="ghost" size="icon-sm" />,
   ...props
 }: ToastPrimitive.Close.Props) {
+  useLocale();
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="Close"
+      aria-label={ui("Close")}
       render={render}
       className={cn(
         "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",
@@ -195,6 +205,7 @@ const TOAST_ICONS: Record<string, React.ReactNode> = {
 };
 
 function ToastIcon({ type }: { type: string | undefined }) {
+  useLocale();
   const icon = type ? TOAST_ICONS[type] : undefined;
   if (!icon) return null;
   return (
@@ -208,6 +219,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
 }
 
 function ToastList() {
+  useLocale();
   const { toasts } = ToastPrimitive.useToastManager();
   return toasts.map((toastItem) => (
     <Toast key={toastItem.id} toast={toastItem}>
@@ -229,6 +241,7 @@ function Toaster({
   toastManager = toast,
   ...props
 }: ToastPrimitive.Provider.Props) {
+  useLocale();
   return (
     <ToastProvider toastManager={toastManager} {...props}>
       {children}

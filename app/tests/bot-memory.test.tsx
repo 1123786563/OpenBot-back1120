@@ -1,3 +1,4 @@
+import { readErrorDetails } from "./read-error-details";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -179,7 +180,7 @@ test("reopening a research row after a failure starts without it", async () => {
   await user.click(await view.findByRole("button", { name: /Expenses/ }));
   refuseWrite = "Research is paused.";
   await user.click(await view.findByRole("button", { name: "Run now" }));
-  expect((await view.findByRole("alert")).textContent).toBe(
+  expect(readErrorDetails(await view.findByRole("alert"))).toBe(
     "Research is paused.",
   );
   await user.keyboard("{Escape}");

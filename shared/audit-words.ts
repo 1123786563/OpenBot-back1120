@@ -1,5 +1,6 @@
 import { appToolName, connectorName, humanise } from "./tool-name";
 import { lowerFirst } from "./tool-name-words";
+import { englishInterface, type InterfaceTranslator } from "./interface-copy";
 
 /**
  * What an Activity or Audit row is about, in words: the What column, where the trail's own names
@@ -222,21 +223,24 @@ export const AUDIT_EVENT_WORDS: Readonly<Record<string, string>> = {
  * one of OpenBot's own (`bot/message_bot`), or an app's whole account (`gmail/*`). A name this has
  * no words for is split into words, never shown as stored.
  */
-export function auditActionWords(action: string): string {
+export function auditActionWords(
+  action: string,
+  translate: InterfaceTranslator = englishInterface,
+): string {
   const known = [
     action,
     action.replace(/^host\//, "host_"),
     `computer_${action}`,
   ].find((name) => Object.hasOwn(ACTIONS, name));
-  if (known && ACTIONS[known]) return ACTIONS[known];
+  if (known && ACTIONS[known]) return translate(ACTIONS[known]);
   const slash = action.indexOf("/");
   const app = action.slice(0, slash);
   const tool = action.slice(slash + 1);
   if (slash <= 0 || !tool)
     return humanise(action.replace(/^(computer|host)_/, ""));
   return tool === "*"
-    ? `Use ${connectorName(app)}`
-    : appToolName(app, tool).label;
+    ? translate("Use {{app}}", { app: connectorName(app, translate) })
+    : appToolName(app, tool, translate).label;
 }
 
 /**
@@ -247,23 +251,24 @@ export function auditActionWords(action: string): string {
  */
 export function auditChangeWords(
   payload: Record<string, unknown>,
+  translate: InterfaceTranslator = englishInterface,
 ): string | undefined {
   const { change, kind } = payload;
   if (change === "plugin_granted") {
-    if (kind === "skill") return "Give a Bot a skill";
-    if (kind === "bot") return "Let a Bot ask another Bot";
+    if (kind === "skill") return translate("Give a Bot a skill");
+    if (kind === "bot") return translate("Let a Bot ask another Bot");
     // One row names every tool a Bot was given at once; see `grantTools` on the server.
     return Array.isArray(payload.refs) && payload.refs.length > 1
-      ? "Give a Bot tools"
-      : "Give a Bot a tool";
+      ? translate("Give a Bot tools")
+      : translate("Give a Bot a tool");
   }
   if (change === "plugin_revoked") {
-    if (kind === "skill") return "Take a skill from a Bot";
-    if (kind === "bot") return "Stop a Bot asking another Bot";
-    return "Take a tool from a Bot";
+    if (kind === "skill") return translate("Take a skill from a Bot");
+    if (kind === "bot") return translate("Stop a Bot asking another Bot");
+    return translate("Take a tool from a Bot");
   }
   return typeof change === "string" && Object.hasOwn(CHANGES, change)
-    ? CHANGES[change]
+    ? translate(CHANGES[change])
     : undefined;
 }
 
@@ -293,14 +298,20 @@ export const DATA_FUNCTION_WORDS: Readonly<Record<string, string>> = {
  * The data a component was given or read, in words: "your Bots' activity and what was refused".
  * A function with no words of its own is split into words, never shown as stored.
  */
-export function dataWords(functions: readonly string[]): string {
+export function dataWords(
+  functions: readonly string[],
+  translate: InterfaceTranslator = englishInterface,
+): string {
   const words = functions.map((name) =>
     Object.hasOwn(DATA_FUNCTION_WORDS, name)
-      ? (DATA_FUNCTION_WORDS[name] as string)
+      ? translate(DATA_FUNCTION_WORDS[name])
       : humanise(name).toLowerCase(),
   );
   return words.length > 1
-    ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`
+    ? translate("{{first}} and {{last}}", {
+        first: words.slice(0, -1).join(", "),
+        last: words.at(-1) ?? "",
+      })
     : (words[0] ?? "");
 }
 
@@ -312,32 +323,47 @@ const TOOLS_NAMED = 2;
  * goal, list goals and 5 more on Routines". What a row gave or took, for a page anybody
  * can open, where the refs themselves are never shown.
  */
-export function appToolsWords(refs: readonly string[]): string {
+export function appToolsWords(
+  refs: readonly string[],
+  translate: InterfaceTranslator = englishInterface,
+): string {
   const first = refs[0] ?? "";
   const app = first.slice(0, Math.max(first.indexOf("/"), 0)) || first;
   const named = refs
     .slice(0, refs.length > TOOLS_NAMED + 1 ? TOOLS_NAMED : refs.length)
     .map((ref, index) => {
-      const words = auditActionWords(ref);
+      const words = auditActionWords(ref, translate);
       return index === 0 ? words : lowerFirst(words);
     });
   const more = refs.length - named.length;
   const list =
     more > 0
-      ? `${named.join(", ")} and ${more} more`
+      ? translate("{{list}} and {{count}} more", {
+          list: named.join(", "),
+          count: more,
+        })
       : named.length > 1
-        ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
+        ? translate("{{first}} and {{last}}", {
+            first: named.slice(0, -1).join(", "),
+            last: named.at(-1) ?? "",
+          })
         : (named[0] ?? "");
-  return `${list} on ${connectorName(app)}`;
+  return translate("{{list}} on {{app}}", {
+    list,
+    app: connectorName(app, translate),
+  });
 }
 
 /**
  * An event in words: its own entry above, or, for a type older rows carry that no longer has one,
  * its stored name split into words. Never the stored name as it is.
  */
-export function auditEventWords(eventType: string): string {
+export function auditEventWords(
+  eventType: string,
+  translate: InterfaceTranslator = englishInterface,
+): string {
   return Object.hasOwn(AUDIT_EVENT_WORDS, eventType)
-    ? (AUDIT_EVENT_WORDS[eventType] as string)
+    ? translate(AUDIT_EVENT_WORDS[eventType])
     : humanise(
         eventType
           .replace(/^mcp\./, "app.")
@@ -362,6 +388,11 @@ const TYPE_WORDS: Record<string, string> = {
 };
 
 /** One event type as a filter names it: a kind of row, then how it ended where that matters. */
-export function auditTypeWords(type: string): string {
-  return TYPE_WORDS[type] ?? auditEventWords(type);
+export function auditTypeWords(
+  type: string,
+  translate: InterfaceTranslator = englishInterface,
+): string {
+  return TYPE_WORDS[type]
+    ? translate(TYPE_WORDS[type])
+    : auditEventWords(type, translate);
 }

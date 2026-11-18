@@ -13,6 +13,7 @@
     "extension"
   ],
   "scripts": {
+    "i18n:check": "bun scripts/i18n-check.ts",
     "build": "bun run generate:app-config && bun run --filter '*' build",
     "dev": "bun run generate:app-config && bun run --filter app --filter server --parallel dev",
     "generate:app-config": "bun --env-file=.env scripts/generate-app-config.ts",
@@ -42,7 +43,8 @@
     "@types/bun": "^1.3.3",
     "roughjs": "^4.6.6",
     "typescript": "^5.9.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "4.4.3"
   },
   "dependencies": {
     "playwright-core": "1.62.1"

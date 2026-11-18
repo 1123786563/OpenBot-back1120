@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import type {
   LearningAutoAssignState,
   LearningProposal,
@@ -74,15 +76,27 @@ function automaticMessage(
     automatic.state === "assigned" &&
     settings.defaultTarget?.containerId === automatic.containerId
   )
-    return `OpenBot assigned this project's "${automatic.containerId}" container automatically. You can change it here.`;
+    return ui(
+      'OpenBot assigned this project\'s "{{value0}}" container automatically. You can change it here.',
+      { value0: String(automatic.containerId) },
+    );
   if (automatic.state === "absent")
-    return `This project has no "${automatic.containerId}" Learning container yet. Nothing is collected.`;
+    return ui(
+      'This project has no "{{value0}}" Learning container yet. Nothing is collected.',
+      { value0: String(automatic.containerId) },
+    );
   if (automatic.state === "not_entitled")
-    return "This project's plan doesn't include Learning. No container was assigned.";
+    return ui(
+      "This project's plan doesn't include Learning. No container was assigned.",
+    );
   if (automatic.state === "learning_off")
-    return "Learning is switched off in the backend. Nothing is collected until it's turned on there.";
+    return ui(
+      "Learning is switched off in the backend. Nothing is collected until it's turned on there.",
+    );
   if (automatic.state === "unavailable")
-    return "Couldn't reach the backend to find this project's Learning container. OpenBot will try again.";
+    return ui(
+      "Couldn't reach the backend to find this project's Learning container. OpenBot will try again.",
+    );
   return undefined;
 }
 
@@ -95,17 +109,22 @@ function TargetFields({
   onChange: (target: LearningTarget | null) => void;
   label: string;
 }) {
+  useLocale();
   const fieldId = useId();
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="grid gap-2 text-sm" htmlFor={`${fieldId}-container`}>
-        {label} container ID
+        {label}
+        {ui("container ID")}
         <Input
+          key="slot1"
           id={`${fieldId}-container`}
-          aria-label={`${label} container ID`}
+          aria-label={ui("{{value0}} container ID", {
+            value0: String(label),
+          })}
           value={target?.containerId ?? ""}
           maxLength={64}
-          placeholder="support-learning"
+          placeholder={ui("support-learning")}
           onChange={(event) =>
             onChange(
               event.target.value
@@ -116,13 +135,14 @@ function TargetFields({
         />
       </label>
       <label className="grid gap-2 text-sm" htmlFor={`${fieldId}-revision`}>
-        Exact revision (optional)
+        {ui("Exact revision (optional)")}
         <Input
+          key="slot0"
           id={`${fieldId}-revision`}
-          aria-label={`${label} revision`}
+          aria-label={ui("{{value0}} revision", { value0: String(label) })}
           value={target?.revision ?? ""}
           disabled={!target}
-          placeholder="Latest published"
+          placeholder={ui("Latest published")}
           maxLength={256}
           onChange={(event) => {
             if (target)
@@ -146,6 +166,7 @@ function ContainerSetup({
 }: {
   automatic: Extract<LearningAutoAssignState, { state: "absent" }>;
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const create = useMutation({
     mutationFn: createLearningContainer,
@@ -164,11 +185,13 @@ function ContainerSetup({
             onClick={() => create.mutate()}
           >
             {create.isPending
-              ? "Creating…"
-              : `Create the ${automatic.containerId} container`}
+              ? ui("Creating…")
+              : ui("Create the {{value0}} container", {
+                  value0: String(automatic.containerId),
+                })}
           </Button>
           <span className="text-muted-foreground">
-            Uses this deployment's backend credentials.
+            {ui("Uses this deployment's backend credentials.")}
           </span>
         </div>
       )}
@@ -179,7 +202,7 @@ function ContainerSetup({
       )}
       {automatic.instructions && (
         <p>
-          <span className="font-medium">To create it: </span>
+          <span className="font-medium">{ui("To create it:")} </span>
           {automatic.instructions}
         </p>
       )}
@@ -198,6 +221,7 @@ function withoutReviewKeys(settings: LearningSettings): LearningSettings {
 }
 
 export function LearningPage() {
+  useLocale();
   const queryClient = useQueryClient();
   const settingsQuery = useQuery(learningSettingsQueryOptions());
   const automatic = useQuery(learningAutomaticQueryOptions());
@@ -243,19 +267,23 @@ export function LearningPage() {
 
   return (
     <PageShell
-      title="Automatic learning"
-      description="Learn from finished conversations, review the skills OpenBot proposes, and give published skills to Bots."
+      title={ui("Automatic learning")}
+      description={ui(
+        "Learn from finished conversations, review the skills OpenBot proposes, and give published skills to Bots.",
+      )}
     >
       <PageSection
-        title="Participation"
-        description="Container changes apply to new conversations. Existing ones keep their first container. Containers must already exist in the same project. Until you save here, OpenBot uses that project's openbot container."
+        title={ui("Participation")}
+        description={ui(
+          "Container changes apply to new conversations. Existing ones keep their first container. Containers must already exist in the same project. Until you save here, OpenBot uses that project's openbot container.",
+        )}
       >
         {settingsQuery.isPending && (
-          <p role="status">Loading Learning settings…</p>
+          <p role="status">{ui("Loading Learning settings…")}</p>
         )}
         {settingsQuery.error && (
           <p role="alert" className="text-destructive">
-            {settingsQuery.error.message}
+            {<ErrorDetails error={settingsQuery.error} />}
           </p>
         )}
         {settings && (
@@ -268,16 +296,17 @@ export function LearningPage() {
           >
             <label className="flex items-center gap-2 text-sm">
               <input
+                key="slot0"
                 type="checkbox"
                 checked={settings.enabled}
                 onChange={(event) =>
                   change({ ...settings, enabled: event.target.checked })
                 }
               />
-              Turn on automatic learning and skill delivery
+              {ui("Turn on automatic learning and skill delivery")}
             </label>
             <TargetFields
-              label="Default"
+              label={ui("Default")}
               target={settings.defaultTarget}
               onChange={(defaultTarget) =>
                 change({ ...settings, defaultTarget })
@@ -292,18 +321,19 @@ export function LearningPage() {
               <ContainerSetup automatic={automatic.data} />
             )}
             <p className="text-muted-foreground text-sm">
-              With no default, Bots without their own container are left out.
-              IDs are 1 to 64 lowercase letters, numbers and single hyphens.
-              Leave revision empty to use the latest published skills.
+              {ui(
+                "With no default, Bots without their own container are left out. IDs are 1 to 64 lowercase letters, numbers and single hyphens. Leave revision empty to use the latest published skills.",
+              )}
             </p>
             <fieldset className="grid gap-4">
               <legend className="mb-3 font-medium">
-                Per-Bot participation
+                {ui("Per-Bot participation")}
               </legend>
               {(agents.error || hiddenAgents.error) && (
                 <p role="alert" className="text-destructive">
-                  Couldn't load the Bot list. Saved settings for each Bot are
-                  below.
+                  {ui(
+                    "Couldn't load the Bot list. Saved settings for each Bot are below.",
+                  )}
                 </p>
               )}
               {botIds.map((id) => {
@@ -319,7 +349,9 @@ export function LearningPage() {
                       {nameFor(id)}
                       <select
                         className={selectClass}
-                        aria-label={`${nameFor(id)} participation`}
+                        aria-label={ui("{{value0}} participation", {
+                          value0: String(nameFor(id)),
+                        })}
                         value={mode}
                         onChange={(event) => {
                           const mappings = { ...settings.agents };
@@ -336,10 +368,14 @@ export function LearningPage() {
                           change({ ...settings, agents: mappings });
                         }}
                       >
-                        <option value="inherit">Use deployment default</option>
-                        <option value="exclude">Leave out of Learning</option>
+                        <option value="inherit">
+                          {ui("Use deployment default")}
+                        </option>
+                        <option value="exclude">
+                          {ui("Leave out of Learning")}
+                        </option>
                         <option value="container">
-                          Use a specific container
+                          {ui("Use a specific container")}
                         </option>
                       </select>
                     </label>
@@ -365,34 +401,37 @@ export function LearningPage() {
             <div className="flex items-center justify-end gap-3">
               {saved && (
                 <p role="status" className="text-sm">
-                  Settings saved.
+                  {ui("Settings saved.")}
                 </p>
               )}
               <Button type="submit" disabled={save.isPending}>
-                {save.isPending ? "Saving…" : "Save Learning settings"}
+                {save.isPending ? ui("Saving…") : ui("Save Learning settings")}
               </Button>
             </div>
             {save.error && (
               <p role="alert" className="text-destructive">
-                {save.error.message}
+                {<ErrorDetails error={save.error} />}
               </p>
             )}
           </form>
         )}
       </PageSection>
       <PageSection
-        title="Review and publish"
-        description="OpenBot studies finished conversations and proposes skills. Review and publish them below. Bots only use published skills."
+        title={ui("Review and publish")}
+        description={ui(
+          "OpenBot studies finished conversations and proposes skills. Review and publish them below. Bots only use published skills.",
+        )}
       >
         <div className="grid gap-4">
           <label className="grid gap-2 text-sm">
-            Show the container for
+            {ui("Show the container for")}
             <select
+              key="slot0"
               className={selectClass}
               value={selected}
               onChange={(event) => setSelected(event.target.value)}
             >
-              <option value="">Deployment default</option>
+              <option value="">{ui("Deployment default")}</option>
               {botIds.map((id) => (
                 <option key={id} value={id}>
                   {nameFor(id)}
@@ -400,10 +439,12 @@ export function LearningPage() {
               ))}
             </select>
           </label>
-          {overview.isPending && <p role="status">Checking the backend…</p>}
+          {overview.isPending && (
+            <p role="status">{ui("Checking the backend…")}</p>
+          )}
           {overview.error && (
             <p role="alert" className="text-destructive">
-              {overview.error.message}
+              {<ErrorDetails error={overview.error} />}
             </p>
           )}
           {snapshot && (
@@ -412,10 +453,12 @@ export function LearningPage() {
                 {snapshot.configuration === "configured"
                   ? `${snapshot.container?.name} (${snapshot.container?.id})`
                   : snapshot.configuration === "invalid"
-                    ? "The selected container or its instrumentation isn't available."
+                    ? ui(
+                        "The selected container or its instrumentation isn't available.",
+                      )
                     : snapshot.configuration === "selection_required"
-                      ? "Choose a Bot, or set a default container."
-                      : "No Learning container is assigned."}
+                      ? ui("Choose a Bot, or set a default container.")
+                      : ui("No Learning container is assigned.")}
               </p>
               {snapshot.modelProblem && (
                 <p role="alert" className="text-destructive text-sm">
@@ -425,9 +468,12 @@ export function LearningPage() {
               <dl className="grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm">
                 {(
                   [
-                    ["Threads ready", snapshot.pendingThreadCount],
-                    ["Candidates to review", snapshot.pendingCandidateCount],
-                    ["Published skills", snapshot.publishedSkillCount],
+                    [ui("Threads ready"), snapshot.pendingThreadCount],
+                    [
+                      ui("Candidates to review"),
+                      snapshot.pendingCandidateCount,
+                    ],
+                    [ui("Published skills"), snapshot.publishedSkillCount],
                     ["Insights", snapshot.insightCount],
                   ] as const
                 ).map(([label, count]) =>
@@ -442,10 +488,12 @@ export function LearningPage() {
               </dl>
               <p className="text-sm">
                 {snapshot.hasActiveRun
-                  ? "An analysis is running."
+                  ? ui("An analysis is running.")
                   : snapshot.latestRunStatus
-                    ? `Latest analysis: ${snapshot.latestRunStatus}.`
-                    : "No analysis has run yet."}
+                    ? ui("Latest analysis: {{value0}}.", {
+                        value0: String(snapshot.latestRunStatus),
+                      })
+                    : ui("No analysis has run yet.")}
               </p>
               {/* Links into Intelligence's dashboard, where there is one to link to. */}
               {(snapshot.links.learning || snapshot.links.candidates) && (
@@ -456,7 +504,7 @@ export function LearningPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Manage Learning in the backend dashboard
+                      {ui("Manage Learning in the backend dashboard")}
                     </a>
                   )}
                   {snapshot.links.candidates && (
@@ -465,7 +513,7 @@ export function LearningPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Review skill candidates
+                      {ui("Review skill candidates")}
                     </a>
                   )}
                 </div>
@@ -474,34 +522,45 @@ export function LearningPage() {
           )}
           {selected && (
             <div className="grid gap-2 rounded-lg border p-4 text-sm">
-              <h3 className="font-medium">Skill delivery</h3>
+              <h3 className="font-medium">{ui("Skill delivery")}</h3>
               {delivery.isPending ? (
-                <p>Checking delivery…</p>
+                <p>{ui("Checking delivery…")}</p>
               ) : delivery.error ? (
-                <p role="alert">{delivery.error.message}</p>
+                <p role="alert">{<ErrorDetails error={delivery.error} />}</p>
               ) : (
                 delivery.data && (
                   <>
                     <p>
                       {!delivery.data.configured
-                        ? "Delivery is off for this Bot."
+                        ? ui("Delivery is off for this Bot.")
                         : !delivery.data.initialized
-                          ? "Waiting for the first verified skill snapshot."
+                          ? ui("Waiting for the first verified skill snapshot.")
                           : delivery.data.stale
-                            ? "Using the last verified snapshot. A refresh is pending."
-                            : "A verified snapshot is available."}
+                            ? ui(
+                                "Using the last verified snapshot. A refresh is pending.",
+                              )
+                            : ui("A verified snapshot is available.")}
                     </p>
                     {delivery.data.revision && (
-                      <p>Loaded revision: {delivery.data.revision}</p>
+                      <p>
+                        {uiNodes("Loaded revision: {{slot0}}", [
+                          delivery.data.revision,
+                        ])}
+                      </p>
                     )}
                     {delivery.data.lastCheckedAt && (
                       <p>
-                        Last checked:{" "}
-                        {new Date(delivery.data.lastCheckedAt).toLocaleString()}
+                        {uiNodes("Last checked: {{slot0}}", [
+                          new Date(delivery.data.lastCheckedAt).toLocaleString(
+                            getLocale(),
+                          ),
+                        ])}
                       </p>
                     )}
                     {delivery.data.error && (
-                      <p role="alert">{delivery.data.error.message}</p>
+                      <p role="alert">
+                        {<ErrorDetails error={delivery.data.error} />}
+                      </p>
                     )}
                   </>
                 )
@@ -524,12 +583,12 @@ export function LearningPage() {
                 void queryClient.invalidateQueries({ queryKey: key });
             }}
           >
-            Refresh status
+            {ui("Refresh status")}
           </Button>
           <p className="text-muted-foreground text-sm">
-            OpenBot keeps project credentials on the server. Turning Learning
-            off here keeps settings and conversation assignments. Schedules stay
-            in the backend.
+            {ui(
+              "OpenBot keeps project credentials on the server. Turning Learning off here keeps settings and conversation assignments. Schedules stay in the backend.",
+            )}
           </p>
         </div>
       </PageSection>
@@ -556,6 +615,7 @@ const STATUS: Record<LearningProposal["status"], string> = {
  * dashboard of its own to do it in.
  */
 function ProposedSkills({ agentId }: { agentId?: string }) {
+  useLocale();
   const proposals = useQuery(learningProposalsQueryOptions(agentId));
   const learnNow = useMutation(startLearningRunMutationOptions(appQueryClient));
   const review = useMutation(
@@ -565,8 +625,10 @@ function ProposedSkills({ agentId }: { agentId?: string }) {
   const containerId = proposals.data?.containerId ?? null;
   return (
     <PageSection
-      title="Proposed skills"
-      description="Approve a skill to publish it to the Bots that use this container. Each decision is recorded in the audit log."
+      title={ui("Proposed skills")}
+      description={ui(
+        "Approve a skill to publish it to the Bots that use this container. Each decision is recorded in the audit log.",
+      )}
       action={
         <Button
           type="button"
@@ -575,33 +637,35 @@ function ProposedSkills({ agentId }: { agentId?: string }) {
           disabled={!containerId || learnNow.isPending}
           onClick={() => learnNow.mutate(agentId)}
         >
-          {learnNow.isPending ? "Starting…" : "Learn now"}
+          {learnNow.isPending ? ui("Starting…") : ui("Learn now")}
         </Button>
       }
     >
       {learnNow.isSuccess && (
         <p role="status" className="mt-4 text-sm">
-          Learning started. New skills appear here when it finishes.
+          {ui("Learning started. New skills appear here when it finishes.")}
         </p>
       )}
       {learnNow.error && (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {learnNow.error.message}
+          {<ErrorDetails error={learnNow.error} />}
         </p>
       )}
       {proposals.isPending ? null : proposals.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {proposals.error.message}
+          {<ErrorDetails error={proposals.error} />}
         </p>
       ) : !containerId ? (
-        <PageEmpty icon={IconSparkles} title="No container">
-          Choose a container under Participation to see the skills OpenBot
-          proposes for it.
+        <PageEmpty icon={IconSparkles} title={ui("No container")}>
+          {ui(
+            "Choose a container under Participation to see the skills OpenBot proposes for it.",
+          )}
         </PageEmpty>
       ) : proposals.data.proposals.length === 0 ? (
-        <PageEmpty icon={IconSparkles} title="No proposed skills yet">
-          OpenBot proposes skills once it has learned from finished
-          conversations. Learn now starts it.
+        <PageEmpty icon={IconSparkles} title={ui("No proposed skills yet")}>
+          {ui(
+            "OpenBot proposes skills once it has learned from finished conversations. Learn now starts it.",
+          )}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -676,7 +740,7 @@ const FAILURES: Record<string, string> = {
 
 /** What an admin reads for a failed run. The code itself stays in the row's title. */
 function failureSentence(code: string | null): string {
-  return (code && FAILURES[code]) || "The run failed.";
+  return (code && FAILURES[code]) || ui("The run failed.");
 }
 
 const RUN_POLL_MS = 10_000;
@@ -705,10 +769,10 @@ function runCounts(run: LearningRunSummary): string | null {
 function runTimes(run: LearningRunSummary): string | null {
   const times = [
     run.startedAt
-      ? `Started ${new Date(run.startedAt).toLocaleString()}`
+      ? `Started ${new Date(run.startedAt).toLocaleString(getLocale())}`
       : null,
     run.completedAt
-      ? `Finished ${new Date(run.completedAt).toLocaleString()}`
+      ? `Finished ${new Date(run.completedAt).toLocaleString(getLocale())}`
       : null,
   ].filter((time) => time !== null);
   return times.length > 0 ? times.join(". ") : null;
@@ -716,26 +780,31 @@ function runTimes(run: LearningRunSummary): string | null {
 
 /** The analysis runs of the container shown above, newest first, so no dashboard is needed to see one fail. */
 function AnalysisRuns({ agentId }: { agentId?: string }) {
+  useLocale();
   const runs = useQuery({
     ...learningRunsQueryOptions(agentId),
     refetchInterval: (query) => runPollInterval(query.state.data?.runs),
   });
   return (
     <PageSection
-      title="Analysis runs"
-      description="Each run looks at finished conversations and proposes skills."
+      title={ui("Analysis runs")}
+      description={ui(
+        "Each run looks at finished conversations and proposes skills.",
+      )}
     >
       {runs.isPending ? null : runs.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {runs.error.message}
+          {<ErrorDetails error={runs.error} />}
         </p>
       ) : !runs.data.containerId ? (
-        <PageEmpty icon={IconHistory} title="No container">
-          Choose a container under Participation to see its analysis runs.
+        <PageEmpty icon={IconHistory} title={ui("No container")}>
+          {ui(
+            "Choose a container under Participation to see its analysis runs.",
+          )}
         </PageEmpty>
       ) : runs.data.runs.length === 0 ? (
-        <PageEmpty icon={IconHistory} title="No analysis runs yet">
-          A run appears here once Learning has analyzed conversations.
+        <PageEmpty icon={IconHistory} title={ui("No analysis runs yet")}>
+          {ui("A run appears here once Learning has analyzed conversations.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -749,7 +818,7 @@ function AnalysisRuns({ agentId }: { agentId?: string }) {
                 <ItemContent>
                   <ItemTitle>
                     {RUN_STATUS[run.status]} ·{" "}
-                    {run.trigger === "manual" ? "Manual" : "Automatic"}
+                    {run.trigger === "manual" ? ui("Manual") : ui("Automatic")}
                   </ItemTitle>
                   {[runTimes(run), runCounts(run)]
                     .filter((line) => line !== null)
@@ -773,24 +842,29 @@ function AnalysisRuns({ agentId }: { agentId?: string }) {
 
 /** The skills published in the container shown above, each opening to its files. */
 function PublishedSkills({ agentId }: { agentId?: string }) {
+  useLocale();
   const skills = useQuery(learnedSkillsQueryOptions(agentId));
   const [open, setOpen] = useState<string | null>(null);
   return (
     <PageSection
-      title="Published skills"
-      description="Bots on this container use these skills. Open one to read it."
+      title={ui("Published skills")}
+      description={ui(
+        "Bots on this container use these skills. Open one to read it.",
+      )}
     >
       {skills.isPending ? null : skills.error ? (
         <p role="alert" className="mt-4 text-destructive text-sm">
-          {skills.error.message}
+          {<ErrorDetails error={skills.error} />}
         </p>
       ) : !skills.data.containerId ? (
-        <PageEmpty icon={IconSparkles} title="No container">
-          Choose a container under Participation to see its published skills.
+        <PageEmpty icon={IconSparkles} title={ui("No container")}>
+          {ui(
+            "Choose a container under Participation to see its published skills.",
+          )}
         </PageEmpty>
       ) : skills.data.skills.length === 0 ? (
-        <PageEmpty icon={IconSparkles} title="No published skills yet">
-          Skills you approve above appear here.
+        <PageEmpty icon={IconSparkles} title={ui("No published skills yet")}>
+          {ui("Skills you approve above appear here.")}
         </PageEmpty>
       ) : (
         <PageRows>

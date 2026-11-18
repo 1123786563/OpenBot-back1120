@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { ActivityMessage, Message } from "@ag-ui/core";
 import type {
   SaveVoiceSessionInput,
@@ -42,7 +43,7 @@ export function voiceSessionQueryOptions(channelId: string) {
         if (cursor) params.set("cursor", cursor);
         const response = await client(`/api/voice/sessions?${params}`, {
           signal,
-          fallback: "Could not load voice chats.",
+          fallback: ui("Could not load voice chats."),
         });
         const page = (await response.json()) as VoiceSessionPage;
         sessions.push(...page.sessions);
@@ -134,6 +135,7 @@ export function saveVoiceSession(
 }
 
 export function useVoiceArchive(channelId: string) {
+  useLocale();
   const saved = useQuery(voiceSessionQueryOptions(channelId), queryClient);
   const { data: pending = [] } = useQuery(
     {

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconCheck } from "@tabler/icons-react";
 import { type RegisterableHotkey, useHotkeys } from "@tanstack/react-hotkeys";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -77,6 +78,7 @@ export function DecisionCard({
   submitting?: boolean;
   error?: string | null;
 }) {
+  useLocale();
   const id = useId();
   const reduceMotion = useReducedMotion();
   const [picked, setPicked] = useState(options[0]?.value ?? OTHER);
@@ -159,7 +161,7 @@ export function DecisionCard({
             {answer ? (
               <Badge tone={answer.tone}>{answer.label}</Badge>
             ) : (
-              <Badge tone="caution">Waiting on you</Badge>
+              <Badge tone="caution">{ui("Waiting on you")}</Badge>
             )}
           </motion.span>
         </AnimatePresence>
@@ -246,7 +248,7 @@ export function DecisionCard({
                   />
                   <Dot on={picked === OTHER} />
                   <input
-                    aria-label="Your answer"
+                    aria-label={ui("Your answer")}
                     className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                     disabled={submitting}
                     onChange={(event) => setText(event.target.value)}
@@ -273,10 +275,10 @@ export function DecisionCard({
             <div className="flex justify-end px-4 py-2.5">
               <Button disabled={!canSend} onClick={send}>
                 {submitting
-                  ? "Sending…"
+                  ? ui("Sending…")
                   : picked === OTHER
-                    ? "Send"
-                    : (pickedOption?.label ?? "Send")}
+                    ? ui("Send")
+                    : (pickedOption?.label ?? ui("Send"))}
               </Button>
             </div>
           </motion.div>
@@ -315,6 +317,7 @@ export function DecisionCard({
 
 /** The radio's dot: a ring, filled in on the picked row. */
 function Dot({ on }: { on: boolean }) {
+  useLocale();
   return (
     <span
       aria-hidden
@@ -328,6 +331,7 @@ function Dot({ on }: { on: boolean }) {
 
 /** The digit that picks a row. Hidden from screen readers: the row is already a radio. */
 function Key({ index }: { index: number }) {
+  useLocale();
   if (index > 8) return null;
   return (
     <kbd

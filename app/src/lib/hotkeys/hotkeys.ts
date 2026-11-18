@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 /**
  * Every app-wide keyboard shortcut, in one place.
  *
@@ -32,8 +33,12 @@ export type Hotkey = {
 export const HOTKEYS = [
   {
     id: "new-chat",
-    label: "New conversation",
-    description: "Start a new conversation from anywhere in OpenBot.",
+    get label() {
+      return ui("New conversation");
+    },
+    get description() {
+      return ui("Start a new conversation from anywhere in OpenBot.");
+    },
     combo: { key: "n", shift: true },
   },
 ] as const satisfies readonly Hotkey[];

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ManageSection } from "@/components/bot-profile/manage";
@@ -11,19 +12,20 @@ export const Route = createFileRoute("/_authed/_app/bots/$agentId/")({
 });
 
 function BotProfilePage() {
+  useLocale();
   const { agentId } = Route.useParams();
   const navigate = useNavigate();
   const agent = useQuery(agentQueryOptions(agentId));
   const toRoster = () => void navigate({ to: "/bots" });
   return (
     <PageShell
-      backButton={{ label: "Bots", linkProps: { to: "/bots" } }}
+      backButton={{ label: ui("Bots"), linkProps: { to: "/bots" } }}
       // No description: the Bot's own role, under its orb just below, says what this page is about.
-      title={agent.data?.name ?? "Bot"}
+      title={agent.data?.name ?? ui("Bot")}
     >
       {agent.isPending ? null : agent.error ? (
         <p className="mt-6 text-destructive text-sm" role="alert">
-          Couldn't open this Bot. It may not be shared with you.
+          {ui("Couldn't open this Bot. It may not be shared with you.")}
         </p>
       ) : (
         <BotProfile

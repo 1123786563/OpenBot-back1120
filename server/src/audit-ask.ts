@@ -833,7 +833,7 @@ export function describeFilters(
   // The kind of row first, in the words the Audit page's views use, so the reading starts there.
   if (filters.eventType)
     lines.push(
-      `Kind of row, any of: ${filters.eventType.map(auditTypeWords).join("; ")}`,
+      `Kind of row, any of: ${filters.eventType.map((type) => auditTypeWords(type)).join("; ")}`,
     );
   if (filters.bot)
     lines.push(`Bot: ${labels.bots[filters.bot] ?? filters.bot}`);

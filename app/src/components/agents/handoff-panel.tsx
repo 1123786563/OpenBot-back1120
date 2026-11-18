@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconArrowsExchange, IconBolt, IconLock } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
@@ -40,6 +42,7 @@ import { queryClient } from "@/query-client";
  * its own, and nothing at all when there is nothing to say to somebody who cannot change it.
  */
 export function HandoffPanel({ agentId }: { agentId: string }) {
+  useLocale();
   const handoff = useQuery(agentHandoffQueryOptions(agentId));
   const agents = useQuery(agentListQueryOptions());
   /*
@@ -73,37 +76,41 @@ export function HandoffPanel({ agentId }: { agentId: string }) {
         /* The current answer at a glance, so the list below is detail rather than homework. */
         grantable && total > 0 ? (
           <span className="text-muted-foreground text-sm tabular-nums">
-            {granted} of {total}
+            {uiNodes("{{slot0}}of {{slot1}}", [granted, total])}
           </span>
         ) : null
       }
-      description="Choose which Bots this Bot can ask for help. Their answers appear in the same conversation under their own names. This does not change who can ask this Bot for help."
-      title="Bots it can ask"
+      description={ui(
+        "Choose which Bots this Bot can ask for help. Their answers appear in the same conversation under their own names. This does not change who can ask this Bot for help.",
+      )}
+      title={ui("Bots it can ask")}
     >
       {/* Facts about the deployment rather than rows to act on, so said as sentences. */}
       {enabled ? null : (
-        <PageEmpty icon={IconArrowsExchange} title="Handoffs are off">
-          An admin turned off handing work between Bots. These settings are
-          kept, and they apply again once it's back on.
+        <PageEmpty icon={IconArrowsExchange} title={ui("Handoffs are off")}>
+          {ui(
+            "An admin turned off handing work between Bots. These settings are kept, and they apply again once it's back on.",
+          )}
         </PageEmpty>
       )}
 
       {grantable ? null : (
-        <PageEmpty icon={IconLock} title="Can't hand off work">
-          This Bot can't hand work to other Bots. Other Bots can still hand work
-          to it.
+        <PageEmpty icon={IconLock} title={ui("Can't hand off work")}>
+          {ui(
+            "This Bot can't hand work to other Bots. Other Bots can still hand work to it.",
+          )}
         </PageEmpty>
       )}
 
       {setGrant.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {setGrant.error.message}
+          {<ErrorDetails error={setGrant.error} />}
         </p>
       ) : null}
 
       {grantable && total === 0 ? (
-        <PageEmpty icon={IconBolt} title="No other Bots yet">
-          When there are more, you can let this Bot ask them here.
+        <PageEmpty icon={IconBolt} title={ui("No other Bots yet")}>
+          {ui("When there are more, you can let this Bot ask them here.")}
         </PageEmpty>
       ) : null}
       {candidates.length > 0 ? (
@@ -128,13 +135,17 @@ export function HandoffPanel({ agentId }: { agentId: string }) {
                    */}
                   <ItemDescription>
                     {candidate.hidden
-                      ? `${candidate.title} · hidden from your Bots list`
+                      ? ui("{{value0}} · hidden from your Bots list", {
+                          value0: String(candidate.title),
+                        })
                       : candidate.title}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
                   <Switch
-                    aria-label={`Let this Bot ask ${candidate.name}`}
+                    aria-label={ui("Let this Bot ask {{value0}}", {
+                      value0: String(candidate.name),
+                    })}
                     checked={reachable.includes(candidate.id)}
                     disabled={!canGrant || setGrant.isPending}
                     onCheckedChange={(next: boolean) =>
@@ -153,8 +164,8 @@ export function HandoffPanel({ agentId }: { agentId: string }) {
       ) : null}
 
       {canGrant ? null : (
-        <PageEmpty icon={IconLock} title="Set by an admin">
-          An admin decides which Bots this one can ask.
+        <PageEmpty icon={IconLock} title={ui("Set by an admin")}>
+          {ui("An admin decides which Bots this one can ask.")}
         </PageEmpty>
       )}
     </PageSection>

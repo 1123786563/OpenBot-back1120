@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { Message } from "@ag-ui/core";
 import { IconX } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -35,6 +37,7 @@ export function useConversationQuestion(
   channelId: string,
   threadId: string,
 ): WaitingQuestion | undefined {
+  useLocale();
   const inbox = useQuery(approvalInboxOptions());
   return conversationQuestion(inbox.data, channelId, threadId);
 }
@@ -143,6 +146,7 @@ function QuestionParts({
   parts: readonly QuestionPart[];
   onAnswered: (answer: string) => Promise<void>;
 }) {
+  useLocale();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const several = parts.length > 1;
@@ -188,10 +192,14 @@ function QuestionParts({
             </QuestionnaireChoices>
           ) : null}
           <QuestionnaireInput
-            aria-label={`${part.header}, in your own words`}
+            aria-label={ui("{{value0}}, in your own words", {
+              value0: String(part.header),
+            })}
             className="min-h-9 bg-card dark:bg-card"
             placeholder={
-              part.options ? "Or answer in your own words" : "Your answer"
+              part.options
+                ? ui("Or answer in your own words")
+                : ui("Your answer")
             }
           />
           <QuestionnaireError />
@@ -199,14 +207,18 @@ function QuestionParts({
       ))}
       <QuestionnaireActions className="min-h-8">
         <QuestionnairePrevious size="sm" variant="ghost">
-          Back
+          {ui("Back")}
         </QuestionnairePrevious>
         {several ? (
           <QuestionnaireProgress className="col-start-2 row-start-1 justify-self-end" />
         ) : null}
-        <QuestionnaireNext size="sm">Next</QuestionnaireNext>
+        <QuestionnaireNext size="sm">{ui("Next")}</QuestionnaireNext>
         <QuestionnaireSubmit disabled={sending} size="sm">
-          {sending ? "Sending…" : several ? "Send answers" : "Send answer"}
+          {sending
+            ? ui("Sending…")
+            : several
+              ? ui("Send answers")
+              : ui("Send answer")}
         </QuestionnaireSubmit>
       </QuestionnaireActions>
       {error ? (
@@ -238,20 +250,26 @@ export function QuestionNotice({
   avatarSeed: string;
   onAnswered: (answer: string) => Promise<void>;
 }) {
+  useLocale();
   const dismiss = useMutation(
     dismissPersonQuestionMutationOptions(queryClient),
   );
   const parts = question.parts?.length ? question.parts : undefined;
   return (
     <section
-      aria-label={`${botName} is waiting on your answer`}
+      aria-label={ui("{{value0}} is waiting on your answer", {
+        value0: String(botName),
+      })}
       className="flex gap-2.5 px-3 pt-2.5 pb-2"
     >
       <BotOrb name={botName} seed={avatarSeed} size={20} />
       <div className="flex max-h-80 min-w-0 flex-1 flex-col gap-1 overflow-y-auto">
         <p className="text-muted-foreground text-xs">
-          <span className="font-medium text-foreground">{botName}</span> is
-          waiting on your answer
+          {uiNodes("{{slot0}}is waiting on your answer", [
+            <span key="slot0" className="font-medium text-foreground">
+              {botName}
+            </span>,
+          ])}
         </p>
         <p className="whitespace-pre-wrap text-sm leading-snug">
           {question.question}
@@ -264,17 +282,17 @@ export function QuestionNotice({
         {parts ? <QuestionParts onAnswered={onAnswered} parts={parts} /> : null}
         {dismiss.error ? (
           <p className="text-destructive text-sm" role="alert">
-            {dismiss.error.message}
+            {<ErrorDetails error={dismiss.error} />}
           </p>
         ) : null}
       </div>
       <Button
-        aria-label="Dismiss question"
+        aria-label={ui("Dismiss question")}
         className="-mt-1 -mr-1"
         disabled={dismiss.isPending}
         onClick={() => dismiss.mutate({ id: question.id })}
         size="icon-sm"
-        title="Dismiss without answering"
+        title={ui("Dismiss without answering")}
         variant="ghost"
       >
         <IconX />

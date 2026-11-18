@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconPencil,
   IconPin,
@@ -56,6 +57,7 @@ export const Channel = memo(function Channel({
   busy: boolean;
   emphasis: MessageListEmphasis;
 }) {
+  useLocale();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // Whether this row's channel is the one on screen, as a boolean, so navigating between
@@ -102,7 +104,7 @@ export const Channel = memo(function Channel({
             <ChannelItemContent
               participantIds={participantIds}
               name={name}
-              title={summary || untitled || "New conversation"}
+              title={summary || untitled || ui("New conversation")}
               displayedTitle={threadTitle}
               lastMessageAt={lastMessageAt}
               emphasis={emphasis}
@@ -124,12 +126,12 @@ export const Channel = memo(function Channel({
             }}
           >
             {pinned ? <IconPinnedOff /> : <IconPin />}
-            {pinned ? "Unpin conversation" : "Pin conversation"}
+            {pinned ? ui("Unpin conversation") : ui("Pin conversation")}
           </ContextMenuItem>
           {canRename ? (
             <ContextMenuItem onClick={() => setRenaming(true)}>
               <IconPencil />
-              Rename conversation…
+              {ui("Rename conversation…")}
             </ContextMenuItem>
           ) : null}
           <ContextMenuItem
@@ -137,7 +139,7 @@ export const Channel = memo(function Channel({
             onClick={() => setConfirming(true)}
           >
             <IconTrash />
-            Delete conversation…
+            {ui("Delete conversation…")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

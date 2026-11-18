@@ -186,7 +186,7 @@ describe("authentication availability", () => {
     );
 
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "No identity provider is configured.",
     });
   });

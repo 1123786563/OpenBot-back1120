@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconFingerprint, IconShieldLock } from "@tabler/icons-react";
 import { PageRows } from "@/components/layout/page-shell";
 import {
@@ -14,10 +15,13 @@ import { ControlsSection } from "./controls-section";
 
 /** Admin, Identity providers: whether SSO is the only way in, and directory provisioning. */
 export function SignInSection() {
+  useLocale();
   return (
     <ControlsSection
-      description="Addresses in INITIAL_ADMIN_EMAILS can always use social sign-in as an emergency way in. Each of those sign-ins shows in Audit."
-      title="Sign-in"
+      description={ui(
+        "Addresses in INITIAL_ADMIN_EMAILS can always use social sign-in as an emergency way in. Each of those sign-ins shows in Audit.",
+      )}
+      title={ui("Sign-in")}
     >
       {({ data, setSetting, saving }) => (
         <PageRows>
@@ -26,16 +30,20 @@ export function SignInSection() {
               <IconShieldLock />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Require SSO</ItemTitle>
+              <ItemTitle>{ui("Require SSO")}</ItemTitle>
               <ItemDescription>
                 {data.settings.ssoRequired
-                  ? "People can only sign in through a registered SAML or OpenID Connect provider."
-                  : "People can also sign in with Google, Microsoft or Okta."}
+                  ? ui(
+                      "People can only sign in through a registered SAML or OpenID Connect provider.",
+                    )
+                  : ui(
+                      "People can also sign in with Google, Microsoft or Okta.",
+                    )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Require SSO"
+                aria-label={ui("Require SSO")}
                 checked={data.settings.ssoRequired}
                 disabled={saving}
                 onCheckedChange={(checked) =>
@@ -50,16 +58,25 @@ export function SignInSection() {
               <IconFingerprint />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>SCIM provisioning</ItemTitle>
+              <ItemTitle>{ui("SCIM provisioning")}</ItemTitle>
               <ItemDescription className="line-clamp-none">
                 {data.scim.configured
-                  ? `Directory base URL ${data.scim.baseUrl ?? "(set BETTER_AUTH_URL)"} with the SCIM_BEARER_TOKEN bearer token. Deprovisioning ends sessions, blocks the address, retires connector credentials and stops their computers.`
-                  : "Off. Set SCIM_BEARER_TOKEN to accept provisioning from Okta, Entra or another directory."}
+                  ? ui(
+                      "Directory base URL {{value0}} with the SCIM_BEARER_TOKEN bearer token. Deprovisioning ends sessions, blocks the address, retires connector credentials and stops their computers.",
+                      {
+                        value0: String(
+                          data.scim.baseUrl ?? "(set BETTER_AUTH_URL)",
+                        ),
+                      },
+                    )
+                  : ui(
+                      "Off. Set SCIM_BEARER_TOKEN to accept provisioning from Okta, Entra or another directory.",
+                    )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <span className="text-muted-foreground text-sm">
-                {data.scim.configured ? "On" : "Off"}
+                {data.scim.configured ? ui("On") : ui("Off")}
               </span>
             </ItemActions>
           </Item>

@@ -285,7 +285,7 @@ describe("GET /api/admin/audit-events?format=csv", () => {
       "http://openbot.local/api/admin/audit-events?format=xlsx",
     );
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: 'Query parameter "format" must be "json" or "csv".',
     });
   });

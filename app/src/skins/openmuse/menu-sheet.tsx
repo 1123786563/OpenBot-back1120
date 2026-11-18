@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconHome,
   IconLogout,
@@ -56,6 +57,7 @@ import {
  * other OpenBot surface. Nothing here is OpenMuse's own data; each row opens an OpenBot route.
  */
 export function MenuSheet({ onClose }: { onClose: () => void }) {
+  useLocale();
   const { bot } = useMuse();
   const user = useQuery(currentUserQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
@@ -78,26 +80,28 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-col gap-3.5">
         <LinkRow
-          detail={`Your ongoing conversation with ${botName}`}
+          detail={ui("Your ongoing conversation with {{value0}}", {
+            value0: String(botName),
+          })}
           icon={IconMessageCircle}
           render={<MainChatLink agentId={bot?.id} onClick={onClose} />}
-          title="Main chat"
+          title={ui("Main chat")}
         />
         <MuseLinkButton
           icon={IconPlus}
           primary
           render={<NewChatLink agentId={bot?.id} onClick={onClose} />}
         >
-          New chat
+          {ui("New chat")}
         </MuseLinkButton>
         <div className="mt-3 flex items-center justify-between">
-          <h2 className={museText.heading}>Conversations</h2>
+          <h2 className={museText.heading}>{ui("Conversations")}</h2>
           <MuseLinkButton
             icon={IconUsersGroup}
             render={<Link onClick={onClose} to="/channel/new" />}
             small
           >
-            New group
+            {ui("New group")}
           </MuseLinkButton>
         </div>
         <label className="relative block">
@@ -106,20 +110,26 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
             className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-4 size-4 text-muted-foreground"
           />
           <input
-            aria-label="Search conversations"
+            aria-label={ui("Search conversations")}
             className="min-h-[45px] w-full rounded-[19px] border border-border bg-card py-3 pr-4 pl-10 text-[16px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-[var(--openmuse-focus)]"
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search conversations"
+            placeholder={ui("Search conversations")}
             value={search}
           />
         </label>
         {channels.isPending ? null : channels.error ? (
-          <ErrorNotice error="Couldn't load your conversations." />
+          <ErrorNotice error={ui("Couldn't load your conversations.")} />
         ) : shown.length === 0 ? (
           <p className={museText.muted}>
             {searching
-              ? `No conversation has “${search.trim()}” in its name or latest message.`
-              : `Start a conversation with ${botName} and it shows up here.`}
+              ? ui(
+                  "No conversation has “{{value0}}” in its name or latest message.",
+                  { value0: String(search.trim()) },
+                )
+              : ui(
+                  "Start a conversation with {{value0}} and it shows up here.",
+                  { value0: String(botName) },
+                )}
           </p>
         ) : (
           <div>
@@ -138,15 +148,16 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
           searching={searching}
         />
         <p className={museText.small}>
-          A conversation stays with the Bots in it. Pin one to keep it at the
-          top.
+          {ui(
+            "A conversation stays with the Bots in it. Pin one to keep it at the top.",
+          )}
         </p>
         <Divider className="my-1.5" />
         <div>
           <LinkRow
             icon={IconHome}
             render={<Link onClick={onClose} to="/" />}
-            title="Home"
+            title={ui("Home")}
           />
           {/* OpenBot's own destinations, from the one list its sidebar draws. */}
           {navigation.map((item) => (
@@ -172,7 +183,7 @@ export function MenuSheet({ onClose }: { onClose: () => void }) {
               }}
               small
             >
-              Sign out
+              {ui("Sign out")}
             </MuseButton>
             <ErrorNotice error={signOut.error?.message} />
           </>
@@ -193,6 +204,7 @@ function ConversationRow({
   channel: ChannelSummary;
   onOpen: () => void;
 }) {
+  useLocale();
   const agents = useQuery(agentListQueryOptions());
   const navigate = useNavigate();
   const openId = useParams({
@@ -254,7 +266,7 @@ function ConversationRow({
             </span>
             {busy ? (
               <span className="shrink-0 text-[var(--openmuse-accent)]">
-                · working
+                {ui("· working")}
               </span>
             ) : null}
           </span>
@@ -263,12 +275,12 @@ function ConversationRow({
           <span
             className="mt-2 size-2 shrink-0 rounded-full bg-[var(--openmuse-accent)]"
             role="img"
-            aria-label="Unread"
+            aria-label={ui("Unread")}
           />
         ) : null}
         {channel.pinned ? (
           <IconPinFilled
-            aria-label="Pinned"
+            aria-label={ui("Pinned")}
             className="mt-1 size-3.5 shrink-0 text-muted-foreground"
           />
         ) : null}
@@ -282,10 +294,10 @@ function ConversationRow({
           }
           small
         >
-          {channel.pinned ? "Unpin" : "Pin"}
+          {channel.pinned ? ui("Unpin") : ui("Pin")}
         </MuseButton>
         <MuseButton icon={IconTrash} onClick={() => setConfirming(true)} small>
-          Delete
+          {ui("Delete")}
         </MuseButton>
       </div>
       <ErrorNotice error={setPinned.error?.message} />

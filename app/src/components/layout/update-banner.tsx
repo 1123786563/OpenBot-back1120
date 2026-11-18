@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { updateOffered } from "@openbot/shared/desktop-updates";
 import { IconX } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ import { queryClient } from "@/query-client";
  * same reason: CopilotKit's dev inspector floats over the top-right corner on localhost.
  */
 export function UpdateBanner() {
+  useLocale();
   const offer = useQuery(desktopAppUpdateQueryOptions());
   const dismiss = useMutation(dismissAppUpdateMutationOptions(queryClient));
   const install = useMutation(installAppUpdateMutationOptions(queryClient));
@@ -38,7 +40,7 @@ export function UpdateBanner() {
 
   return (
     <aside
-      aria-label="OpenBot update"
+      aria-label={ui("OpenBot update")}
       className="flex shrink-0 flex-col border-b border-border bg-muted/60 px-4 py-1.5 text-sm"
     >
       {/* One line, as tall as its buttons, in every state, so the page under it never moves as
@@ -61,10 +63,10 @@ export function UpdateBanner() {
               size="sm"
               variant="link"
             >
-              Update and restart
+              {ui("Update and restart")}
             </Button>
             <Button
-              aria-label="Dismiss"
+              aria-label={ui("Dismiss")}
               disabled={dismiss.isPending}
               onClick={() => dismiss.mutate(version)}
               size="icon-xs"
@@ -77,7 +79,9 @@ export function UpdateBanner() {
       </div>
       {install.error && !busy ? (
         <p className="text-destructive" role="alert">
-          Couldn't install the update: {reason(install.error)}
+          {uiNodes("Couldn't install the update: {{slot0}}", [
+            reason(install.error),
+          ])}
         </p>
       ) : null}
     </aside>
@@ -88,7 +92,11 @@ export function UpdateBanner() {
 export function describe(progress: DesktopAppUpdate["installing"]): string {
   if (progress?.restarting) return "Restarting…";
   if (!progress?.total) return "Downloading…";
-  return `Downloading… ${Math.min(100, Math.round((progress.downloaded / progress.total) * 100))}%`;
+  return ui("Downloading… {{value0}}%", {
+    value0: String(
+      Math.min(100, Math.round((progress.downloaded / progress.total) * 100)),
+    ),
+  });
 }
 
 /** The desktop app refuses with its own sentence, as a plain string. */

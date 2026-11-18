@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { Message } from "@ag-ui/core";
 import { useCopilotKit } from "@copilotkit/react-core/v2";
 import {
@@ -621,7 +622,7 @@ export function outputOf(result: ToolOutcome): string {
   ) {
     // The reason was written to the Bot ("Do not try this action ... again"); a person reads theirs.
     return typeof result.reason === "string"
-      ? outcomeForPerson(result.reason)
+      ? outcomeForPerson(result.reason, ui)
       : "";
   }
 
@@ -749,7 +750,7 @@ function declinedCommand(command: string): ActivityDetails {
   return {
     kind: "command",
     subject: command,
-    output: outcomeForPerson(DECLINED_BY_PERSON),
+    output: outcomeForPerson(DECLINED_BY_PERSON, ui),
     refused: true,
     declined: true,
   };

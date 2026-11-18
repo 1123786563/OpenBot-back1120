@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconDeviceDesktop,
@@ -76,22 +77,38 @@ const TEXT_FIELDS: {
   icon: typeof IconId;
   multiline?: boolean;
 }[] = [
-  { field: "name", label: "Name", icon: IconId },
-  { field: "title", label: "Title", icon: IconTag },
+  {
+    field: "name",
+    get label() {
+      return ui("Name");
+    },
+    icon: IconId,
+  },
+  {
+    field: "title",
+    get label() {
+      return ui("Title");
+    },
+    icon: IconTag,
+  },
   {
     field: "roleDescription",
     // Not "Role": beside "Title" it read as a second job title, when it is the standing
     // instruction the Bot carries into every channel. The create dialog says the same.
     // The starter Bot is the exception: this is what it does, for the person, and what it is
     // told is the row below.
-    label: "What it does",
+    get label() {
+      return ui("What it does");
+    },
     icon: IconTextCaption,
     multiline: true,
   },
   {
     // Only the starter Bot has this row. See `AgentProfile.instructions`.
     field: "instructions",
-    label: "Instructions",
+    get label() {
+      return ui("Instructions");
+    },
     icon: IconNotes,
     multiline: true,
   },
@@ -106,6 +123,7 @@ const TEXT_SCHEMAS: Record<TextField, ZodType<string>> = {
 
 /** Who a Bot is and where it runs. Editable by whoever may manage it; read-only for everyone else. */
 export function SetupSections({ agent }: { agent: AgentProfile }) {
+  useLocale();
   // One person and one shared computer: nobody to see a Bot, and no computer of its own to give it.
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -138,7 +156,7 @@ export function SetupSections({ agent }: { agent: AgentProfile }) {
 
   return (
     <>
-      <PageSection title="Identity">
+      <PageSection title={ui("Identity")}>
         <PageRows>
           {fields.map(({ field, label, icon: Icon }, index) => (
             <Fragment key={field}>
@@ -197,9 +215,9 @@ export function SetupSections({ agent }: { agent: AgentProfile }) {
                   <IconShieldCheck />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>System owned</ItemTitle>
+                  <ItemTitle>{ui("System owned")}</ItemTitle>
                   <ItemDescription>
-                    Comes with OpenBot. It doesn't belong to a person.
+                    {ui("Comes with OpenBot. It doesn't belong to a person.")}
                   </ItemDescription>
                 </ItemContent>
               </Item>
@@ -230,6 +248,7 @@ function VisibilityRow({
   agent: AgentProfile;
   onSave: (visibility: AgentProfile["visibility"]) => Promise<unknown>;
 }) {
+  useLocale();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -238,16 +257,21 @@ function VisibilityRow({
         <IconEye />
       </ItemMedia>
       <ItemContent>
-        <ItemTitle>Visibility</ItemTitle>
+        <ItemTitle>{ui("Visibility")}</ItemTitle>
         <ItemDescription>
           {error ??
             (agent.visibility === "private"
               ? agent.isolationActive
-                ? `Only you can see it and start conversations with it. ${ISOLATED_MAKING_PUBLIC}`
-                : "Only you can see it and start conversations with it."
+                ? ui(
+                    "Only you can see it and start conversations with it. {{value0}}",
+                    { value0: String(ISOLATED_MAKING_PUBLIC) },
+                  )
+                : ui("Only you can see it and start conversations with it.")
               : agent.isolationActive
-                ? `Everyone on OpenBot can find and use it. ${ISOLATED_PUBLIC_SHARES_LOGINS}`
-                : "Everyone on OpenBot can find and use it.")}
+                ? ui("Everyone on OpenBot can find and use it. {{value0}}", {
+                    value0: String(ISOLATED_PUBLIC_SHARES_LOGINS),
+                  })
+                : ui("Everyone on OpenBot can find and use it."))}
         </ItemDescription>
       </ItemContent>
       <ItemActions>
@@ -278,13 +302,13 @@ function VisibilityRow({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="private">Private</SelectItem>
-              <SelectItem value="public">Public</SelectItem>
+              <SelectItem value="private">{ui("Private")}</SelectItem>
+              <SelectItem value="public">{ui("Public")}</SelectItem>
             </SelectContent>
           </Select>
         ) : (
           <span className="text-muted-foreground text-sm">
-            {agent.visibility === "private" ? "Private" : "Public"}
+            {agent.visibility === "private" ? ui("Private") : ui("Public")}
           </span>
         )}
       </ItemActions>
@@ -311,6 +335,7 @@ function IsolatedRow({
   agent: AgentProfile;
   onSave: (isolated: boolean) => Promise<unknown>;
 }) {
+  useLocale();
   const { data: capabilities } = useQuery(agentCapabilitiesQueryOptions());
   const { data: mine } = useQuery(myCapabilitiesQueryOptions());
   const [saving, setSaving] = useState(false);
@@ -346,7 +371,7 @@ function IsolatedRow({
         <IconDeviceDesktop />
       </ItemMedia>
       <ItemContent>
-        <ItemTitle id={`isolated-${agent.id}`}>Isolated</ItemTitle>
+        <ItemTitle id={`isolated-${agent.id}`}>{ui("Isolated")}</ItemTitle>
         <ItemDescription className="line-clamp-none">
           {error ?? summary}
         </ItemDescription>
@@ -375,7 +400,7 @@ function IsolatedRow({
           />
         ) : (
           <span className="text-muted-foreground text-sm">
-            {agent.isolated ? "On" : "Off"}
+            {agent.isolated ? ui("On") : ui("Off")}
           </span>
         )}
       </ItemActions>
@@ -386,8 +411,8 @@ function IsolatedRow({
 /** Where a Bot without a computer of its own runs: on the computer of whoever is using it. */
 function sharedSummary(isPublic: boolean): string {
   return isPublic
-    ? "Runs on the computer of whoever is using it."
-    : "Runs on your computer, alongside your other Bots.";
+    ? ui("Runs on the computer of whoever is using it.")
+    : ui("Runs on your computer, alongside your other Bots.");
 }
 
 /**
@@ -410,6 +435,7 @@ function EditTextDialog({
   onSave: (value: string) => Promise<unknown>;
   onClose: () => void;
 }) {
+  useLocale();
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -477,10 +503,10 @@ function EditTextDialog({
             size="sm"
             variant="outline"
           >
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button disabled={saving} onClick={() => void submit()} size="sm">
-            {saving ? "Saving…" : "Save"}
+            {saving ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -493,23 +519,24 @@ function EditTextDialog({
  * deployment's tool credential, so there is nothing to show but that sentence.
  */
 function ConnectionSection({ agent }: { agent: AgentProfile }) {
+  useLocale();
   const builtIn = !agent.endpoint || agent.builtIn;
   return (
-    <PageSection title="Connection">
+    <PageSection title={ui("Connection")}>
       <PageRows>
         <Item size="sm">
           <ItemMedia variant="icon">
             <IconPlugConnected />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>{builtIn ? "Built in" : "Agent URL"}</ItemTitle>
+            <ItemTitle>{builtIn ? ui("Built in") : ui("Agent URL")}</ItemTitle>
             <ItemDescription
               className={
                 builtIn ? undefined : "line-clamp-none break-all font-mono"
               }
             >
               {builtIn
-                ? "Runs inside OpenBot. There's nothing to connect."
+                ? ui("Runs inside OpenBot. There's nothing to connect.")
                 : agent.endpoint}
             </ItemDescription>
           </ItemContent>

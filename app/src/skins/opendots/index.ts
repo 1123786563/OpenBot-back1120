@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { Skin } from "../types";
 import { OpenDotsFrame } from "./frame";
 import { MemoriesScreen, RoutinesScreen } from "./screens";
@@ -11,8 +12,11 @@ import { MemoriesScreen, RoutinesScreen } from "./screens";
 export const opendots: Skin = {
   id: "opendots",
   name: "OpenDots",
-  description:
-    "A compact sidebar of your Bots, with each Bot's computer beside the conversation.",
+  get description() {
+    return ui(
+      "A compact sidebar of your Bots, with each Bot's computer beside the conversation.",
+    );
+  },
   Frame: OpenDotsFrame,
   screens: {
     routines: RoutinesScreen,

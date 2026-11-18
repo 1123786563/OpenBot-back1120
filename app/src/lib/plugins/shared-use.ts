@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   mutationOptions,
   type QueryClient,
@@ -53,7 +54,7 @@ export function sharedUseRequestsQueryOptions(enabled: boolean) {
     queryKey: sharedUseKeys.requests(),
     queryFn: () =>
       client<SharedUseRequest[]>("/api/approvals/shared-use", "requests", {
-        fallback: "Couldn't load shared account requests.",
+        fallback: ui("Couldn't load shared account requests."),
       }),
     enabled,
     refetchInterval: 10_000,
@@ -66,7 +67,7 @@ export function botSharedAppsQueryOptions(botId: string) {
     queryFn: async (): Promise<BotSharedApps> => {
       const response = await client(
         `/api/approvals/shared-use/bot/${encodeURIComponent(botId)}`,
-        { fallback: "Couldn't load this Bot's shared apps." },
+        { fallback: ui("Couldn't load this Bot's shared apps.") },
       );
       return response.json();
     },
@@ -84,7 +85,7 @@ export function decideSharedUseMutationOptions(queryClient: QueryClient) {
     }) =>
       client(
         `/api/approvals/shared-use/${encodeURIComponent(id)}/${decision}`,
-        { method: "POST", fallback: "Couldn't save that decision." },
+        { method: "POST", fallback: ui("Couldn't save that decision.") },
       ),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["approvals"] }),
   });
@@ -100,7 +101,7 @@ export function requestSharedUseMutationOptions(queryClient: QueryClient) {
       client("/api/approvals/shared-use", {
         method: "POST",
         body,
-        fallback: "Couldn't send the request.",
+        fallback: ui("Couldn't send the request."),
       }),
     onSettled: (_data, _error, body) =>
       queryClient.invalidateQueries({
@@ -111,7 +112,8 @@ export function requestSharedUseMutationOptions(queryClient: QueryClient) {
 
 export function describeApproval(approval: SharedUseApproval): string {
   const outside = approval.outsideInput ? ", and outside input" : "";
-  if (approval.audience === "owner") return `Only its owner${outside}`;
+  if (approval.audience === "owner")
+    return ui("Only its owner{{value0}}", { value0: String(outside) });
   if (approval.audience === "team") return `Everyone${outside}`;
   const groups = approval.members
     .filter((member) => member.kind === "group")
@@ -125,5 +127,5 @@ export function describeApproval(approval: SharedUseApproval): string {
       : []),
     ...(people ? [`${people} ${people === 1 ? "person" : "people"}`] : []),
   ];
-  return `${parts.join(" and ") || "Nobody named"}${outside}`;
+  return `${parts.join(" and ") || ui("Nobody named")}${outside}`;
 }

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconArrowUpRight,
   IconDots,
@@ -48,6 +50,7 @@ export function SuggestionRow({
   setting?: ProactiveSetting;
   inGroup?: boolean;
 }) {
+  useLocale();
   const act = useMutation(resolveSuggestionMutationOptions(queryClient));
   const stop = useMutation(changeProactiveSettingMutationOptions(queryClient));
   const pressed = act.isPending ? act.variables.action : null;
@@ -64,10 +67,12 @@ export function SuggestionRow({
             size="sm"
             variant="outline"
           >
-            {pressed === "start" ? "Starting…" : "Work on it"}
+            {pressed === "start" ? ui("Starting…") : ui("Work on it")}
           </Button>
           <Button
-            aria-label={`Dismiss ${suggestion.title}`}
+            aria-label={ui("Dismiss {{value0}}", {
+              value0: String(suggestion.title),
+            })}
             disabled={act.isPending}
             onClick={() => act.mutate({ id: suggestion.id, action: "dismiss" })}
             size="icon-sm"
@@ -80,7 +85,9 @@ export function SuggestionRow({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    aria-label={`More for ${suggestion.title}`}
+                    aria-label={ui("More for {{value0}}", {
+                      value0: String(suggestion.title),
+                    })}
                     size="icon-sm"
                     variant="ghost"
                   />
@@ -99,8 +106,10 @@ export function SuggestionRow({
                   }
                 >
                   {setting.subject
-                    ? `Stop checking ${setting.subject}`
-                    : "Stop these check-ins"}
+                    ? ui("Stop checking {{value0}}", {
+                        value0: String(setting.subject),
+                      })
+                    : ui("Stop these check-ins")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -131,13 +140,15 @@ export function SuggestionRow({
             rel="noreferrer"
             target="_blank"
           >
-            {site ? `Open ${site}` : "Open"}
+            {site
+              ? ui("Open {{value0}}", { value0: String(site) })
+              : ui("Open")}
             <IconArrowUpRight aria-hidden className="size-3" />
           </a>
         ) : null,
         error ? (
           <span className="text-destructive" key="error" role="alert">
-            {error.message}
+            {<ErrorDetails error={error} />}
           </span>
         ) : null,
       ]}

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconFile, IconX } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -61,6 +62,7 @@ export function AttachmentStrip({
   images: readonly StagedImage[];
   onRemove: (id: string) => void;
 }) {
+  useLocale();
   const occupied = images.length > 0 || files.length > 0;
 
   return (
@@ -84,7 +86,7 @@ export function AttachmentStrip({
     <Collapse open={occupied}>
       <ul
         aria-hidden={!occupied}
-        aria-label="Attachments"
+        aria-label={ui("Attachments")}
         className="flex flex-wrap items-start gap-2 pb-3"
       >
         {images.map((image) => (
@@ -100,13 +102,15 @@ export function AttachmentStrip({
                * region, and a paste of eight images would interrupt eight times to say so.
                */
               <Skeleton
-                aria-label={`${image.alt ?? "Attachment"}, uploading`}
+                aria-label={ui("{{value0}}, uploading", {
+                  value0: String(image.alt ?? "Attachment"),
+                })}
                 className="size-20 rounded-xl"
                 role="img"
               />
             ) : (
               <img
-                alt={image.alt ?? "Attachment"}
+                alt={image.alt ?? ui("Attachment")}
                 className="size-20 rounded-xl border border-border object-cover"
                 src={image.url}
               />
@@ -138,7 +142,9 @@ export function AttachmentStrip({
                 {file.name}
               </p>
               {file.loading ? (
-                <p className="text-muted-foreground text-xs">Uploading…</p>
+                <p className="text-muted-foreground text-xs">
+                  {ui("Uploading…")}
+                </p>
               ) : file.size === undefined ? null : (
                 /*
                  * ON THE SIZE LINE, NOT UNDER IT, AND THAT IS A LAYOUT CONSTRAINT RATHER THAN A
@@ -157,12 +163,14 @@ export function AttachmentStrip({
                   className="truncate text-muted-foreground text-xs"
                   title={
                     file.mayTruncate === true
-                      ? "The Bot reads only the first 120,000 characters of this file."
+                      ? ui(
+                          "The Bot reads only the first 120,000 characters of this file.",
+                        )
                       : undefined
                   }
                 >
                   {formatBytes(file.size)}
-                  {file.mayTruncate === true ? " · may be cut" : null}
+                  {file.mayTruncate === true ? ui(" · may be cut") : null}
                 </p>
               )}
             </div>
@@ -194,6 +202,7 @@ function Staged({
   children: React.ReactNode;
   className?: string;
 }) {
+  useLocale();
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -223,9 +232,10 @@ function RemoveButton({
   name: string;
   onRemove: () => void;
 }) {
+  useLocale();
   return (
     <button
-      aria-label={`Remove ${name}`}
+      aria-label={ui("Remove {{value0}}", { value0: String(name) })}
       className="absolute top-1 right-1 grid size-5 place-items-center rounded-full border border-border bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
       onClick={onRemove}
       type="button"

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { WEB_HARNESSES } from "@openbot/shared/harnesses";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
@@ -19,12 +20,16 @@ const PANELS: Array<{ id: string; caption: string; picture: () => ReactNode }> =
   [
     {
       id: "local",
-      caption: "On this computer",
+      get caption() {
+        return ui("On this computer");
+      },
       picture: () => <LaptopIllustration />,
     },
     {
       id: "agents",
-      caption: "With the agents you already have",
+      get caption() {
+        return ui("With the agents you already have");
+      },
       picture: () => (
         <div className="flex flex-wrap justify-center gap-2">
           {FRAMEWORKS.map((harness) => (
@@ -41,12 +46,16 @@ const PANELS: Array<{ id: string; caption: string; picture: () => ReactNode }> =
     },
     {
       id: "organization",
-      caption: "For your organization",
+      get caption() {
+        return ui("For your organization");
+      },
       picture: () => <OrganizationFlow />,
     },
   ];
 
 function Panel({ panel }: { panel: (typeof PANELS)[number] }) {
+  useLocale();
+
   return (
     <div className="flex flex-col items-center gap-5" data-panel={panel.id}>
       <p className="text-xs font-medium text-muted-foreground">
@@ -63,13 +72,21 @@ function Panel({ panel }: { panel: (typeof PANELS)[number] }) {
  * With reduced motion the three sit one above the other.
  */
 export function SelfHostDemo() {
+  useLocale();
+
   return (
     <DemoStage
       beats={PANELS.length}
       beatMs={3200}
       className="flex min-h-[22rem] flex-col justify-center gap-10 px-4 py-8 sm:px-6"
       kind="self-host"
-      label={`${PRODUCT} on a laptop; frameworks that work as Bots: ${FRAMEWORKS.map((harness) => harness.name).join(", ")}; and your organization signing in with Google, Microsoft or Okta`}
+      label={ui(
+        "{{value0}} on a laptop; frameworks that work as Bots: {{value1}}; and your organization signing in with Google, Microsoft or Okta",
+        {
+          value0: String(PRODUCT),
+          value1: String(FRAMEWORKS.map((harness) => harness.name).join(", ")),
+        },
+      )}
       rest={-1}
     >
       {({ beat, reduced }) =>

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import Avatar from "boring-avatars";
 import { memo, type ReactNode } from "react";
@@ -30,6 +31,7 @@ export const ChannelAvatar = memo(function ChannelAvatar({
   size?: number;
   typing?: boolean;
 }) {
+  useLocale();
   const orbs = useBotLook() === "orb";
   const face = orbs ? orbFace : boringFace;
   const avatar =
@@ -98,6 +100,7 @@ function orbFace(id: string, size: number) {
  * Bot's name and never the id, hidden or not: whatever reads the orb's label should hear a Bot.
  */
 function OrbFace({ id, size }: { id: string; size: number }) {
+  useLocale();
   const { data: bot } = useQuery({
     ...agentListQueryOptions(),
     select: (agents) => agents.find((agent) => agent.id === id),
@@ -125,6 +128,7 @@ function GroupFaces({
   participantIds: string[];
   size: number;
 }) {
+  useLocale();
   const layout: Layout = typeof chosen === "number" ? LAYOUTS[chosen] : chosen;
   const shown = participantIds.slice(0, layout.at.length);
   const diameter = Math.round(size * layout.diameter);
@@ -169,9 +173,10 @@ function GroupFaces({
  * a different point in the same bounce, which is what makes the three read as one wave.
  */
 function TypingBadge() {
+  useLocale();
   return (
     <div className="absolute -bottom-0.5 -right-0.5 flex items-center gap-0.5 rounded-full bg-sidebar p-0.5 ring-2 ring-sidebar">
-      <span className="sr-only">Working…</span>
+      <span className="sr-only">{ui("Working…")}</span>
       <Dot className="[animation-delay:-0.3s]" />
       <Dot className="[animation-delay:-0.15s]" />
       <Dot />
@@ -180,6 +185,7 @@ function TypingBadge() {
 }
 
 function Dot({ className }: { className?: string }) {
+  useLocale();
   return (
     <span
       className={cn("size-1 rounded-full bg-primary animate-bounce", className)}

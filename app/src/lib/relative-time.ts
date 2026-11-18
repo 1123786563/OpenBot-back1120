@@ -1,3 +1,4 @@
+import { getLocale, ui, localeFormatter } from "@/lib/i18n";
 const RELATIVE_UNITS = [
   { limit: 60_000, divisor: 1_000, unit: "second" },
   { limit: 3_600_000, divisor: 60_000, unit: "minute" },
@@ -6,9 +7,12 @@ const RELATIVE_UNITS = [
   { limit: Number.POSITIVE_INFINITY, divisor: 604_800_000, unit: "week" },
 ] as const;
 
-const relativeFormat = new Intl.RelativeTimeFormat(undefined, {
-  numeric: "auto",
-});
+const relativeFormat = localeFormatter(
+  (locale) =>
+    new Intl.RelativeTimeFormat(locale, {
+      numeric: "auto",
+    }),
+);
 
 /** Locale-aware relative timestamp, e.g. "2 minutes ago". */
 export function relativeTime(iso: string): string {
@@ -20,7 +24,7 @@ export function relativeTime(iso: string): string {
   const scale =
     RELATIVE_UNITS.find(({ limit }) => Math.abs(elapsed) < limit) ??
     RELATIVE_UNITS[RELATIVE_UNITS.length - 1];
-  return relativeFormat.format(
+  return relativeFormat().format(
     -Math.round(elapsed / scale.divisor),
     scale.unit,
   );
@@ -43,9 +47,12 @@ export function relativeTimeShort(iso: string, now: Date = new Date()): string {
   const time = new Date(iso).getTime();
   if (!Number.isFinite(time)) return iso;
   const elapsed = now.getTime() - time;
-  if (elapsed < 60_000) return "now";
+  if (elapsed < 60_000) return ui("now");
   const scale =
     SHORT_UNITS.find(({ limit }) => elapsed < limit) ??
     SHORT_UNITS[SHORT_UNITS.length - 1];
-  return `${Math.floor(elapsed / scale.divisor)}${scale.suffix}`;
+  const value = Math.floor(elapsed / scale.divisor);
+  if (getLocale() === "en") return `${value}${scale.suffix}`;
+  const suffixes = { m: "分钟", h: "小时", d: "天", w: "周" };
+  return `${new Intl.NumberFormat(getLocale()).format(value)}${suffixes[scale.suffix]}`;
 }

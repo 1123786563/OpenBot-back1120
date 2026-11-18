@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconChevronRight, IconNotes } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -43,6 +45,7 @@ const DESCRIPTION =
  * text is a summary and a dialog on these screens, so a long box does not take over the page.
  */
 export function StandingInstructionsRow() {
+  useLocale();
   const stored = useQuery(instructionsQueryOptions());
   const [open, setOpen] = useState(false);
   const written = stored.data?.trim();
@@ -56,11 +59,12 @@ export function StandingInstructionsRow() {
           <IconNotes />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>Standing instructions</ItemTitle>
+          <ItemTitle>{ui("Standing instructions")}</ItemTitle>
           <ItemDescription>
             {stored.error
-              ? "Couldn't load your instructions."
-              : written || "None yet. Tell every Bot how you want things done."}
+              ? ui("Couldn't load your instructions.")
+              : written ||
+                ui("None yet. Tell every Bot how you want things done.")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -70,8 +74,8 @@ export function StandingInstructionsRow() {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Standing instructions</DialogTitle>
-            <DialogDescription>{DESCRIPTION}</DialogDescription>
+            <DialogTitle>{ui("Standing instructions")}</DialogTitle>
+            <DialogDescription>{ui(DESCRIPTION)}</DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4">
             <StandingInstructionsEditor />
@@ -84,6 +88,7 @@ export function StandingInstructionsRow() {
 
 /** The box itself, with its count and Save: in the row's dialog. */
 function StandingInstructionsEditor() {
+  useLocale();
   const stored = useQuery(instructionsQueryOptions());
   const save = useMutation(saveInstructionsMutationOptions(queryClient));
 
@@ -123,19 +128,21 @@ function StandingInstructionsEditor() {
     <>
       {stored.isPending ? null : stored.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {stored.error.message}
+          {<ErrorDetails error={stored.error} />}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
           <Textarea
-            aria-label="Standing instructions"
+            aria-label={ui("Standing instructions")}
             className="min-h-40"
             disabled={save.isPending}
             onChange={(event) => {
               setDraft(event.target.value);
               setSaved(false);
             }}
-            placeholder="We are two people, not a team. Write in British English, and never call our product a platform."
+            placeholder={ui(
+              "We are two people, not a team. Write in British English, and never call our product a platform.",
+            )}
             value={text}
           />
           <div className="flex flex-row items-center justify-between gap-4">
@@ -146,7 +153,10 @@ function StandingInstructionsEditor() {
                   : "text-muted-foreground text-xs"
               }
             >
-              {text.trim().length} of {INSTRUCTIONS_LIMIT} characters
+              {uiNodes("{{slot0}}of {{slot1}}characters", [
+                text.trim().length,
+                INSTRUCTIONS_LIMIT,
+              ])}
             </p>
             <div className="flex flex-row items-center gap-3">
               {/*
@@ -158,14 +168,16 @@ function StandingInstructionsEditor() {
                   {problem}
                 </span>
               ) : saved ? (
-                <span className="text-muted-foreground text-xs">Saved</span>
+                <span className="text-muted-foreground text-xs">
+                  {ui("Saved")}
+                </span>
               ) : null}
               <Button
                 disabled={save.isPending || over || unchanged}
                 onClick={submit}
                 size="sm"
               >
-                Save
+                {ui("Save")}
               </Button>
             </div>
           </div>

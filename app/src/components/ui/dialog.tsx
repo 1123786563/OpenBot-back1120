@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { IconX } from "@tabler/icons-react";
 import type * as React from "react";
@@ -17,18 +18,22 @@ import { cn } from "@/lib/utils";
  * behave identically across the app rather than nearly identically.
  */
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  useLocale();
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  useLocale();
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
 function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  useLocale();
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  useLocale();
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
@@ -36,6 +41,7 @@ function DialogOverlay({
   className,
   ...props
 }: DialogPrimitive.Backdrop.Props) {
+  useLocale();
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
@@ -65,6 +71,7 @@ function DialogContent({
    */
   overlayClassName?: string;
 }) {
+  useLocale();
   return (
     <DialogPortal>
       <DialogOverlay
@@ -97,7 +104,7 @@ function DialogContent({
             }
           >
             <IconX />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{ui("Close")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -106,6 +113,7 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  useLocale();
   return (
     <div
       data-slot="dialog-header"
@@ -127,6 +135,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
  * and gave the dialog a sideways scrollbar. The gutter still holds a 3px focus ring.
  */
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  useLocale();
   return (
     <div
       data-slot="dialog-body"
@@ -140,6 +149,7 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
+  useLocale();
   return (
     <div
       data-slot="dialog-footer"
@@ -150,6 +160,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  useLocale();
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
@@ -166,6 +177,7 @@ function DialogDescription({
   className,
   ...props
 }: DialogPrimitive.Description.Props) {
+  useLocale();
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconDots, IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/_authed/_app/capabilities/skills")({
 });
 
 function SkillsPage() {
+  useLocale();
   const queryClient = useQueryClient();
   const { new: isCreating, edit: editingSlug } = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -123,17 +125,18 @@ function SkillsPage() {
               size="sm"
               variant="ghost"
             >
-              <IconPlus />
-              New skill
+              {uiNodes("{{slot0}}New skill", [<IconPlus key="slot0" />])}
             </Button>
           }
           description={
             <>
-              Type <code>/</code> and a skill's name to give a Bot that
-              instruction. Only you see yours, and they work on Bots you own.
+              {ui("Type")} <code>/</code>{" "}
+              {ui(
+                "and a skill's name to give a Bot that instruction. Only you see yours, and they work on Bots you own.",
+              )}
             </>
           }
-          title="Your skills"
+          title={ui("Your skills")}
         >
           {/*
            * Nothing while the two queries are still in flight. The alternative is the empty state
@@ -146,13 +149,13 @@ function SkillsPage() {
            */}
           {loading ? null : !data ? (
             <p className="mt-4 text-destructive text-sm" role="alert">
-              Couldn't load your skills. Reload the page.
+              {ui("Couldn't load your skills. Reload the page.")}
             </p>
           ) : mine.length === 0 ? (
             <Empty className="mt-4 h-[180px] border border-dashed">
               <EmptyHeader>
                 <EmptyTitle className="text-muted-foreground">
-                  No skills yet. Write one with New skill.
+                  {ui("No skills yet. Write one with New skill.")}
                 </EmptyTitle>
               </EmptyHeader>
             </Empty>
@@ -187,7 +190,7 @@ function SkillsPage() {
                                 navigate({ search: { edit: skill.slug } })
                               }
                             >
-                              Edit
+                              {ui("Edit")}
                             </DropdownMenuItem>
                             {/*
                              * Deleting is immediate and there is no undo. It is behind a menu rather
@@ -202,7 +205,7 @@ function SkillsPage() {
                               }}
                               variant="destructive"
                             >
-                              Delete {skill.title}
+                              {ui("Delete")} {skill.title}
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
                         </DropdownMenuContent>
@@ -228,8 +231,10 @@ function SkillsPage() {
          */}
         {deployment.length > 0 ? (
           <PageSection
-            description="An admin writes these for everyone and picks which Bots use them."
-            title="Workspace skills"
+            description={ui(
+              "An admin writes these for everyone and picks which Bots use them.",
+            )}
+            title={ui("Workspace skills")}
           >
             <PageRows>
               {deployment.map((skill, index) => (

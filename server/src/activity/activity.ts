@@ -9,7 +9,15 @@
  * EVERY QUERY IS NARROWED TO THE PERSON FIRST. A public Bot works for many people; this screen shows
  * the work done in the caller's name and nothing of anybody else's.
  */
-import { approvalPhrase } from "@openbot/shared/tool-name";
+import {
+  approvalDisplay,
+  approvalPhrase,
+  type ApprovalDisplay,
+} from "@openbot/shared/tool-name";
+import type {
+  ActivityStarts,
+  SystemDisplay,
+} from "@openbot/shared/system-display";
 import {
   and,
   desc,
@@ -65,6 +73,11 @@ export type ActivityItem = {
   id: string;
   kind: ActivityKind;
   title: string;
+  titleDisplay?: SystemDisplay;
+  titleAction?: ApprovalDisplay;
+  detailDisplay?: SystemDisplay;
+  detailZhCN?: string;
+  detailStarts?: ActivityStarts;
   detail: string | null;
   /** A short state a person reads: running, waiting for you, queued, succeeded, failed… */
   status: string;
@@ -223,8 +236,12 @@ export function createActivityStore(database: Database) {
             // What the person called it, else its instruction, whole: the page shortens it to fit
             // and shows it all on hover. The store caps an instruction at 2,000 characters.
             title: routine.title || routine.instruction || "Routine",
+            ...(!routine.title && !routine.instruction
+              ? { titleDisplay: { key: "Routine" as const } }
+              : {}),
             // In words, by the helper the Routines page uses, so the two screens say it the same way.
             detail: `${describeCron(routine.cron)} (${routine.timezone})`,
+            detailZhCN: `${describeCron(routine.cron, "zh-CN")} (${routine.timezone})`,
             status: "scheduled",
             at: iso(routine.nextRunAt),
             channelId: routine.channelId,
@@ -250,6 +267,9 @@ export function createActivityStore(database: Database) {
             kind: "routine",
             title: routine.title || routine.instruction || "Routine",
             detail: clip(run.error),
+            ...(!routine.title && !routine.instruction
+              ? { titleDisplay: { key: "Routine" as const } }
+              : {}),
             status: run.status ?? "running",
             at: iso(run.finishedAt ?? run.startedAt),
             channelId: routine.channelId,
@@ -334,6 +354,21 @@ export function createActivityStore(database: Database) {
           kind: "responsibility",
           title: goal.title,
           detail: starts.length ? starts.join(" · ") : "Runs when asked",
+          ...(starts.length
+            ? {
+                detailStarts: {
+                  schedules: runBy.map((routine) => ({
+                    schedule: describeCron(routine.cron),
+                    scheduleZhCN: describeCron(routine.cron, "zh-CN"),
+                    timezone: routine.timezone,
+                  })),
+                  events: wakesOn,
+                },
+              }
+            : {}),
+          ...(!starts.length
+            ? { detailDisplay: { key: "Runs when asked" as const } }
+            : {}),
           status: "active",
           at: iso(runBy[0]?.nextRunAt ?? goal.updatedAt),
           channelId: goal.channelId,
@@ -367,6 +402,7 @@ export function createActivityStore(database: Database) {
             // A run, not the goal: "Goal · succeeded" under the goal's own title read as a second
             // goal that had finished, beside the one still active.
             title: `Run of ${goal.title}`,
+            titleDisplay: { key: "Run of {{name}}", name: goal.title },
             detail:
               clip(run.error ?? run.replyText) ?? `${source}/${eventType}`,
             status: run.status,
@@ -409,7 +445,14 @@ export function createActivityStore(database: Database) {
           id: hop.key,
           kind: "handoff",
           title: clip(work.task, 120) ?? "Delegated task",
+          ...(!clip(work.task, 120)
+            ? { titleDisplay: { key: "Delegated task" as const } }
+            : {}),
           detail: asked ? `Delegated to ${other}` : `Asked by ${other}`,
+          detailDisplay: {
+            key: asked ? "Delegated to {{name}}" : "Asked by {{name}}",
+            name: other ?? "Bot",
+          },
           status: hop.finishedAt
             ? hop.lastError === "Stopped by the person"
               ? "stopped"
@@ -456,6 +499,7 @@ export function createActivityStore(database: Database) {
           id: `approval:${approval.id}`,
           kind: "approval",
           title: phrase.charAt(0).toUpperCase() + phrase.slice(1),
+          titleAction: approvalDisplay(approval.action),
           detail: approval.action.policy?.reason ?? null,
           status: "waiting for you",
           at: iso(approval.createdAt),
@@ -489,6 +533,9 @@ export function createActivityStore(database: Database) {
           id: `question:${row.key}`,
           kind: "question",
           title: clip(question.question, 160) ?? "A question",
+          ...(!clip(question.question, 160)
+            ? { titleDisplay: { key: "A question" as const } }
+            : {}),
           detail: null,
           status: "waiting for you",
           at: iso(row.createdAt),
@@ -557,6 +604,9 @@ export function createActivityStore(database: Database) {
           id: row.key,
           kind: "follow_up",
           title: clip(payload.reason, 160) ?? "Follow-up",
+          ...(!clip(payload.reason, 160)
+            ? { titleDisplay: { key: "Follow-up" as const } }
+            : {}),
           detail: clip(payload.outcome?.detail ?? payload.instruction),
           status: row.finishedAt
             ? (payload.outcome?.status ?? "done")

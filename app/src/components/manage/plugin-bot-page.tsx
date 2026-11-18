@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBolt,
   IconListDetails,
@@ -101,6 +102,7 @@ export function PluginBotPage({
   pluginKey: string;
   agentId: string;
 }) {
+  useLocale();
   // Routines is every Bot's, in every edition: there is no switch to take it from one.
   const alwaysOn = key === ALWAYS_ON_APP;
   const paths = useManagePaths();
@@ -198,7 +200,7 @@ export function PluginBotPage({
 
   /* Nothing rather than a placeholder, so no sentence asserts anything while a fetch is open. */
   if (plugins.isPending || agents.isPending || hiddenAgents.isPending) {
-    return <PageShell title="Bot">{null}</PageShell>;
+    return <PageShell title={ui("Bot")}>{null}</PageShell>;
   }
 
   /*
@@ -213,11 +215,11 @@ export function PluginBotPage({
     return (
       <PageShell
         backButton={{ label: paths.pluginsLabel, linkProps: paths.plugins() }}
-        description="No app with that name is turned on."
+        description={ui("No app with that name is turned on.")}
         title={appTitle}
       >
-        <PageEmpty icon={IconPlugOff} title="This app is off">
-          Nothing to give a Bot here.
+        <PageEmpty icon={IconPlugOff} title={ui("This app is off")}>
+          {ui("Nothing to give a Bot here.")}
         </PageEmpty>
       </PageShell>
     );
@@ -234,10 +236,10 @@ export function PluginBotPage({
     return (
       <PageShell
         backButton={{ label: paths.pluginsLabel, linkProps: paths.plugins() }}
-        title="Plugins"
+        title={ui("Plugins")}
       >
         <p className="mt-12 text-destructive text-sm" role="alert">
-          Couldn't load plugins. Reload the page.
+          {ui("Couldn't load plugins. Reload the page.")}
         </p>
       </PageShell>
     );
@@ -259,11 +261,11 @@ export function PluginBotPage({
     return (
       <PageShell
         backButton={back}
-        description="There is no Bot with that name."
-        title="Not a Bot"
+        description={ui("There is no Bot with that name.")}
+        title={ui("Not a Bot")}
       >
-        <PageEmpty icon={IconBolt} title="Bot not found">
-          It may have been deleted after you opened this page.
+        <PageEmpty icon={IconBolt} title={ui("Bot not found")}>
+          {ui("It may have been deleted after you opened this page.")}
         </PageEmpty>
       </PageShell>
     );
@@ -349,7 +351,7 @@ export function PluginBotPage({
             <ItemContent>
               <ItemTitle className="font-mono text-xs">{tool.name}</ItemTitle>
               <ItemDescription>
-                {tool.description || "This action has no description."}
+                {tool.description || ui("This action has no description.")}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
@@ -365,7 +367,7 @@ export function PluginBotPage({
                */}
               {tool.destructive ? (
                 <span className="text-destructive text-xs">
-                  destroys things
+                  {ui("destroys things")}
                 </span>
               ) : null}
               {/*
@@ -376,10 +378,15 @@ export function PluginBotPage({
                */}
               {alwaysOn ? (
                 // Refused one Bot at a time by the server: Routines is every Bot's.
-                <span className="text-muted-foreground text-xs">Always on</span>
+                <span className="text-muted-foreground text-xs">
+                  {ui("Always on")}
+                </span>
               ) : (
                 <Switch
-                  aria-label={`Let ${botName} call ${tool.name}`}
+                  aria-label={ui("Let {{value0}} call {{value1}}", {
+                    value0: String(botName),
+                    value1: String(tool.name),
+                  })}
                   checked={held(tool)}
                   disabled={
                     granting !== null ||
@@ -428,8 +435,14 @@ export function PluginBotPage({
   return (
     <PageShell
       backButton={back}
-      description={`Which ${appTitle} actions ${botName} can call. Turning one off applies from the next call.`}
-      title={`${botName} and ${appTitle}`}
+      description={ui(
+        "Which {{value0}} actions {{value1}} can call. Turning one off applies from the next call.",
+        { value0: String(appTitle), value1: String(botName) },
+      )}
+      title={ui("{{value0}} and {{value1}}", {
+        value0: String(botName),
+        value1: String(appTitle),
+      })}
     >
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
@@ -440,11 +453,11 @@ export function PluginBotPage({
       <SkippedToolsNotice names={server.skippedTools ?? []} />
 
       {server.tools.length === 0 ? (
-        <PageEmpty icon={IconTool} title="No actions listed">
+        <PageEmpty icon={IconTool} title={ui("No actions listed")}>
           {toolsListError(server.lastError, {
             title: server.title,
             personal: false,
-          }) ?? "Refresh its tools to check again."}
+          }) ?? ui("Refresh its tools to check again.")}
         </PageEmpty>
       ) : (
         <>
@@ -471,10 +484,12 @@ export function PluginBotPage({
           )}
 
           <Input
-            aria-label={`Search ${appTitle} actions`}
+            aria-label={ui("Search {{value0}} actions", {
+              value0: String(appTitle),
+            })}
             className="mt-6"
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by action name"
+            placeholder={ui("Search by action name")}
             value={search}
           />
 
@@ -489,9 +504,13 @@ export function PluginBotPage({
           {ungranted.length > 0 ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <p className="text-muted-foreground text-xs">
-                {`This Bot would then have ${wouldHold} ${
-                  wouldHold === 1 ? "tool" : "tools"
-                } from this app.`}
+                {ui(
+                  "This Bot would then have {{value0}} {{value1}} from this app.",
+                  {
+                    value0: String(wouldHold),
+                    value1: String(wouldHold === 1 ? ui("tool") : ui("tools")),
+                  },
+                )}
               </p>
               <Button
                 disabled={granting !== null}
@@ -502,8 +521,13 @@ export function PluginBotPage({
               >
                 {/* The one in flight, not the ones finished: a count starting at zero of forty reads as nothing happening. */}
                 {granting
-                  ? `Granting ${Math.min(granting.done + 1, granting.total)} of ${granting.total}…`
-                  : "Turn on every read-only action"}
+                  ? ui("Granting {{value0}} of {{value1}}…", {
+                      value0: String(
+                        Math.min(granting.done + 1, granting.total),
+                      ),
+                      value1: String(granting.total),
+                    })
+                  : ui("Turn on every read-only action")}
               </Button>
             </div>
           ) : null}
@@ -511,18 +535,24 @@ export function PluginBotPage({
           <PageSection
             description={
               sharedSectionSentence("read", shared) ??
-              "These only read. Boundaries about writes don't apply to them."
+              ui(
+                "These only read. Boundaries about writes don't apply to them.",
+              )
             }
-            title="Reads"
+            title={ui("Reads")}
           >
             {reads.length === 0 ? (
               <PageEmpty
                 icon={needle ? IconSearch : IconListDetails}
-                title={needle ? "No matches" : "No read-only actions"}
+                title={needle ? ui("No matches") : ui("No read-only actions")}
               >
                 {needle
-                  ? `Nothing that only reads matches "${search.trim()}".`
-                  : `${appTitle} has no read-only actions.`}
+                  ? ui('Nothing that only reads matches "{{value0}}".', {
+                      value0: String(search.trim()),
+                    })
+                  : ui("{{value0}} has no read-only actions.", {
+                      value0: String(appTitle),
+                    })}
               </PageEmpty>
             ) : (
               rows(reads)
@@ -532,18 +562,28 @@ export function PluginBotPage({
           <PageSection
             description={
               sharedSectionSentence("write", shared) ??
-              "These change something at the vendor. Boundaries about writes apply to them."
+              ui(
+                "These change something at the vendor. Boundaries about writes apply to them.",
+              )
             }
-            title="Changes things"
+            title={ui("Changes things")}
           >
             {writes.length === 0 ? (
               <PageEmpty
                 icon={needle ? IconSearch : IconListDetails}
-                title={needle ? "No matches" : "No actions that change things"}
+                title={
+                  needle
+                    ? ui("No matches")
+                    : ui("No actions that change things")
+                }
               >
                 {needle
-                  ? `Nothing that changes things matches "${search.trim()}".`
-                  : `${appTitle} has no actions that change things.`}
+                  ? ui('Nothing that changes things matches "{{value0}}".', {
+                      value0: String(search.trim()),
+                    })
+                  : ui("{{value0}} has no actions that change things.", {
+                      value0: String(appTitle),
+                    })}
               </PageEmpty>
             ) : (
               rows(writes)
@@ -564,7 +604,10 @@ export function PluginBotPage({
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  Let {botName} use the shared {appTitle} account?
+                  {uiNodes("Let {{slot0}}use the shared {{slot1}}account?", [
+                    botName,
+                    appTitle,
+                  ])}
                 </DialogTitle>
               </DialogHeader>
               <DialogBody className="mt-4">
@@ -586,14 +629,14 @@ export function PluginBotPage({
                   size="sm"
                   variant="outline"
                 >
-                  Cancel
+                  {ui("Cancel")}
                 </Button>
                 <Button
                   disabled={grantingShared}
                   onClick={() => void confirmSharedGrant()}
                   size="sm"
                 >
-                  {grantingShared ? "Allowing…" : "Allow"}
+                  {grantingShared ? ui("Allowing…") : ui("Allow")}
                 </Button>
               </DialogFooter>
             </DialogContent>

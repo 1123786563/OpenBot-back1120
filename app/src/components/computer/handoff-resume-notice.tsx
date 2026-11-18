@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { readControl } from "@/lib/computers/control";
 import {
@@ -26,6 +27,7 @@ export function HandoffResumeNotice({
   ready: boolean;
   run: () => Promise<unknown>;
 }) {
+  useLocale();
   const [pending, setPending] = useState<PendingHandoff | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -110,8 +112,8 @@ export function HandoffResumeNotice({
       <span>
         {problem ??
           (busy
-            ? "Waiting for this browser handoff to finish."
-            : "A browser task is paused in this conversation.")}
+            ? ui("Waiting for this browser handoff to finish.")
+            : ui("A browser task is paused in this conversation."))}
       </span>
       {busy ? (
         <button
@@ -119,7 +121,7 @@ export function HandoffResumeNotice({
           className="underline"
           onClick={() => controller.current?.abort()}
         >
-          Stop waiting
+          {ui("Stop waiting")}
         </button>
       ) : (
         <button
@@ -128,7 +130,7 @@ export function HandoffResumeNotice({
           disabled={!pending || agent.isRunning}
           onClick={() => void resume()}
         >
-          Resume task
+          {ui("Resume task")}
         </button>
       )}
     </div>

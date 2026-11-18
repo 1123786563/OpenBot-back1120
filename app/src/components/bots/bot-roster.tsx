@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBolt,
   IconChevronRight,
@@ -50,6 +51,7 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
  * This replaces three screens (Bots, Agents and Team Bots) that listed the same Bots three ways.
  */
 export function BotRoster() {
+  useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const agents = useQuery(agentListQueryOptions());
@@ -63,7 +65,7 @@ export function BotRoster() {
   if (agents.data === undefined) {
     return (
       <p className="mt-6 text-destructive text-sm" role="alert">
-        Couldn't load your Bots. Reload the page.
+        {ui("Couldn't load your Bots. Reload the page.")}
       </p>
     );
   }
@@ -79,11 +81,11 @@ export function BotRoster() {
        */}
       <NeedsYouBoard />
       {pinned.length ? (
-        <PageSection title="Pinned">
+        <PageSection title={ui("Pinned")}>
           <RosterRows agents={pinned} byId={byId} />
         </PageSection>
       ) : null}
-      <PageSection title="Yours">
+      <PageSection title={ui("Yours")}>
         {yours.length ? (
           <RosterRows agents={yours} byId={byId} />
         ) : (
@@ -97,29 +99,28 @@ export function BotRoster() {
                   size="sm"
                   variant="outline"
                 >
-                  <IconPlus />
-                  New Bot
+                  {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
                 </Button>
               )
             }
             icon={IconBolt}
-            title={yoursPinned ? "All pinned" : "No Bots yet"}
+            title={yoursPinned ? ui("All pinned") : ui("No Bots yet")}
           >
             {yoursPinned
-              ? "Your Bots are all pinned above."
-              : "Bots you create show up here."}
+              ? ui("Your Bots are all pinned above.")
+              : ui("Bots you create show up here.")}
           </PageEmpty>
         )}
       </PageSection>
       {shared.length > 0 || !personal ? (
         <PageSection
-          title={personal ? "Included with OpenBot" : "Shared with you"}
+          title={personal ? ui("Included with OpenBot") : ui("Shared with you")}
         >
           {shared.length ? (
             <RosterRows agents={shared} byId={byId} />
           ) : (
-            <PageEmpty icon={IconShare} title="Nothing shared yet">
-              Bots somebody shares with you show up here.
+            <PageEmpty icon={IconShare} title={ui("Nothing shared yet")}>
+              {ui("Bots somebody shares with you show up here.")}
             </PageEmpty>
           )}
         </PageSection>
@@ -146,16 +147,21 @@ function HiddenSection({
   byId: Map<string, BotAttention>;
   personal: boolean;
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   return (
     <PageSection
       action={
         <Button onClick={() => setOpen(!open)} size="sm" variant="ghost">
-          {open ? "Hide" : "Show"}
+          {open ? ui("Hide") : ui("Show")}
         </Button>
       }
-      description={`${agents.length} ${agents.length === 1 ? "Bot" : "Bots"} you hid.${personal ? "" : " Only your list changes."}`}
-      title="Hidden"
+      description={ui("{{value0}} {{value1}} you hid.{{value2}}", {
+        value0: String(agents.length),
+        value1: String(agents.length === 1 ? ui("Bot") : ui("Bots")),
+        value2: String(personal ? "" : " Only your list changes."),
+      })}
+      title={ui("Hidden")}
     >
       {open ? <RosterRows agents={agents} byId={byId} /> : null}
     </PageSection>
@@ -169,6 +175,7 @@ function RosterRows({
   agents: AgentProfile[];
   byId: Map<string, BotAttention>;
 }) {
+  useLocale();
   return (
     <PageRows>
       {agents.map((agent, index) => (
@@ -193,6 +200,7 @@ function RosterRow({
   agent: AgentProfile;
   state: BotAttention | undefined;
 }) {
+  useLocale();
   const summary = state
     ? [state.paused ? "Paused" : "", attentionSummary(state)]
         .filter(Boolean)

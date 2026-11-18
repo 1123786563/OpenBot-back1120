@@ -1,6 +1,13 @@
 export type MessageListEmphasis = "agent" | "thread";
 
 export type NarrationPreference = "on" | "off";
+export const LANGUAGE_PREFERENCES = ["system", "zh-CN", "en"] as const;
+export type LanguagePreference = (typeof LANGUAGE_PREFERENCES)[number];
+export function isLanguagePreference(
+  value: unknown,
+): value is LanguagePreference {
+  return LANGUAGE_PREFERENCES.some((language) => language === value);
+}
 /** Whether this person's Bots check in on their behalf at all. */
 export type ProactivePreference = "on" | "off";
 /**
@@ -26,6 +33,7 @@ export function isSkinId(value: unknown): value is SkinId {
 }
 
 export type UserPreferences = {
+  language?: LanguagePreference;
   /** Server-owned first new eligible conversation; shared by both starter Bots. */
   starterTourChannelId?: string;
   /** Set by profile saves so choosing a name finishes the first-run prompt. */
@@ -50,6 +58,7 @@ export type UserPreferences = {
 };
 
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  language: "system",
   messageListEmphasis: "thread",
   selfHostBannerDismissed: false,
   narration: null,

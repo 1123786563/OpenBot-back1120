@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -65,7 +66,9 @@ export const taskListQueryOptions = () =>
   queryOptions({
     queryKey: taskKeys.list,
     queryFn: (): Promise<BotTask[]> =>
-      client("/api/tasks", "tasks", { fallback: "Couldn't load your tasks" }),
+      client("/api/tasks", "tasks", {
+        fallback: ui("Couldn't load your tasks"),
+      }),
     refetchInterval: (query) =>
       query.state.data?.some((task) => moving(task.status))
         ? LIVE_MS
@@ -83,14 +86,26 @@ export function liveStatus(status: TaskStatus, busy: boolean): TaskStatus {
 
 /** Each status in a word or two, as a row says it. */
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
-  ready_for_review: "Ready for review",
-  needs_input: "Needs input",
-  failed: "Failed",
-  working: "Working",
-  resolved: "Resolved",
+  get ready_for_review() {
+    return ui("Ready for review");
+  },
+  get needs_input() {
+    return ui("Needs input");
+  },
+  get failed() {
+    return ui("Failed");
+  },
+  get working() {
+    return ui("Working");
+  },
+  get resolved() {
+    return ui("Resolved");
+  },
 };
 
 /** What a failed task says after its status: "Couldn't finish: <reason>." */
 export function couldNotFinish(failure: string | null): string {
-  return failure ? `Couldn't finish: ${failure}.` : "Couldn't finish.";
+  return failure
+    ? ui("Couldn't finish: {{value0}}.", { value0: String(failure) })
+    : ui("Couldn't finish.");
 }

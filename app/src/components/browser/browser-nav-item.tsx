@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { RecorderActivity } from "@openbot/shared/recorder-api";
 import { IconChalkboardTeacher } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +25,8 @@ export const TEACH_A_BOT = "Teach a Bot";
  * when the server cannot be asked, there is no link, rather than one to a page saying there is nothing there.
  */
 export function BrowserNavItem() {
+  useLocale();
+
   const state = useQuery(browserStateQueryOptions());
   if (state.isPending || !state.data?.available) return null;
   return (
@@ -37,8 +40,12 @@ export function BrowserNavItem() {
 const STORE_TOAST = "browser-store-opened";
 
 const STORE_NAMES: Record<RecorderStore, string> = {
-  chrome: "Google Chrome",
-  edge: "Microsoft Edge",
+  get chrome() {
+    return ui("Google Chrome");
+  },
+  get edge() {
+    return ui("Microsoft Edge");
+  },
 };
 
 /**
@@ -46,7 +53,10 @@ const STORE_NAMES: Record<RecorderStore, string> = {
  * open in: adding it there is what lets them record from here.
  */
 export function storeTabSentence(store: RecorderStore): string {
-  return `The OpenBot Recorder's page is open in a new tab. Add it to ${STORE_NAMES[store]} to record from OpenBot.`;
+  return ui(
+    "The OpenBot Recorder's page is open in a new tab. Add it to {{value0}} to record from OpenBot.",
+    { value0: String(STORE_NAMES[store]) },
+  );
 }
 
 /** The short note that waits in OpenBot for a person who opened the Recorder's store page in a new tab: one at a time,
@@ -57,6 +67,8 @@ export function noteStoreTabOpened(store: RecorderStore): void {
 
 /** A link to the Teach a Bot page. */
 function BrowserPageLink({ activity }: { activity?: RecorderActivity }) {
+  useLocale();
+
   const recording = useRecordingLabel(activity);
   return (
     <SidebarMenuButton
@@ -79,12 +91,14 @@ function BrowserPageLink({ activity }: { activity?: RecorderActivity }) {
 
 /** The icon and the name every item in this part of the sidebar has, and what goes at the end of the row. */
 function BrowserLabel({ children }: { children?: ReactNode }) {
+  useLocale();
+
   return (
     <>
       <div className="size-[28px] flex items-center justify-center">
         <IconChalkboardTeacher />
       </div>
-      <span className="text-sm">{TEACH_A_BOT}</span>
+      <span className="text-sm">{ui(TEACH_A_BOT)}</span>
       {children}
     </>
   );
@@ -134,6 +148,8 @@ function recordingTooltip(recording: RecordingLabel | null) {
 
 /** The recording's red dot at the end of the row, named as the tooltip names it (Base UI's tooltip is never read out). */
 function RecordingDot({ label, live }: RecordingLabel) {
+  useLocale();
+
   return (
     <span aria-label={label} className="ml-auto" role="img">
       <RecordingMark live={live} />

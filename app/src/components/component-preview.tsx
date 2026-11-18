@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { OpenGenerativeUIActivityRenderer } from "@copilotkit/react-core/v2";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -15,13 +16,14 @@ export function AdminComponentPreview({
   name: string;
   kind: string;
 }) {
+  useLocale();
   const sandboxed = useQuery({
     ...sandboxedListQueryOptions(),
     enabled: kind === "sandboxed",
   });
   if (kind === "sandboxed" && sandboxed.isPending) return null;
   if (kind === "sandboxed" && sandboxed.error) {
-    return <PreviewNotice>Preview could not be loaded.</PreviewNotice>;
+    return <PreviewNotice>{ui("Preview could not be loaded.")}</PreviewNotice>;
   }
   return (
     <ComponentPreview
@@ -33,6 +35,7 @@ export function AdminComponentPreview({
 }
 
 function PreviewNotice({ children }: { children: ReactNode }) {
+  useLocale();
   return (
     <div className="flex h-full w-full items-center justify-center p-4">
       {/* The artwork stays pale in both themes, so this text must stay dark. */}
@@ -52,6 +55,7 @@ export function ComponentPreview({
   sandboxed?: SandboxedRecord;
   fill?: number;
 }) {
+  useLocale();
   const entry = galleryComponent(name);
   if (entry?.preview) {
     return (
@@ -65,7 +69,7 @@ export function ComponentPreview({
     if (!sandboxed.published || sandboxed.publishedHtml === null) {
       return (
         <PreviewNotice>
-          Publish in the playground to see a preview.
+          {ui("Publish in the playground to see a preview.")}
         </PreviewNotice>
       );
     }
@@ -82,7 +86,7 @@ export function ComponentPreview({
       <FittedPreview fill={fill}>
         <div
           className="w-full"
-          title="Published component with saved sample arguments"
+          title={ui("Published component with saved sample arguments")}
         >
           <OpenGenerativeUIActivityRenderer
             activityType="open-generative-ui"
@@ -99,10 +103,10 @@ export function ComponentPreview({
   return (
     <PreviewNotice>
       {entry
-        ? "This one is only drawn in a conversation."
+        ? ui("This one is only drawn in a conversation.")
         : kind === "sandboxed"
-          ? "Published in the playground."
-          : "This build cannot draw this."}
+          ? ui("Published in the playground.")
+          : ui("This build cannot draw this.")}
     </PreviewNotice>
   );
 }
@@ -153,6 +157,7 @@ function FittedPreview({
   children: ReactNode;
   fill: number;
 }) {
+  useLocale();
   const box = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);

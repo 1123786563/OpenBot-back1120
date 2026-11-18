@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconKey, IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -23,6 +24,7 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { useManagePaths } from "@/lib/manage-paths";
 
 export function CredentialsPage() {
+  useLocale();
   const paths = useManagePaths();
   // Called Keys in the personal edition, which links here from Connections too.
   const personal =
@@ -42,21 +44,24 @@ export function CredentialsPage() {
           size="sm"
           variant="ghost"
         >
-          <IconPlus />
-          Add credential
+          {uiNodes("{{slot0}}Add credential", [<IconPlus key="slot0" />])}
         </Button>
       }
       description={
         personal
-          ? "API keys and tokens your apps and models use. A saved key can't be viewed again."
-          : "Manage this deployment’s keys and tokens. Saved secrets cannot be viewed again."
+          ? ui(
+              "API keys and tokens your apps and models use. A saved key can't be viewed again.",
+            )
+          : ui(
+              "Manage this deployment’s keys and tokens. Saved secrets cannot be viewed again.",
+            )
       }
       title={paths.credentialsLabel}
     >
-      <PageSection title="Saved credentials">
+      <PageSection title={ui("Saved credentials")}>
         {credentials.isPending ? null : credentials.error ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load credentials. Reload the page.
+            {ui("Couldn't load credentials. Reload the page.")}
           </p>
         ) : credentials.data?.length === 0 ? (
           <PageEmpty
@@ -68,14 +73,13 @@ export function CredentialsPage() {
                 size="sm"
                 variant="outline"
               >
-                <IconPlus />
-                Add credential
+                {uiNodes("{{slot0}}Add credential", [<IconPlus key="slot0" />])}
               </Button>
             }
             icon={IconKey}
-            title="No credentials yet"
+            title={ui("No credentials yet")}
           >
-            Keys and tokens for models and connectors are kept here.
+            {ui("Keys and tokens for models and connectors are kept here.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -86,7 +90,7 @@ export function CredentialsPage() {
                     <ItemTitle>{credential.provider}</ItemTitle>
                     <ItemDescription>
                       {credential.kind} · {credential.keyId} ·{" "}
-                      {credential.revokedAt ? "revoked" : "active"}
+                      {credential.revokedAt ? ui("revoked") : ui("active")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -99,7 +103,7 @@ export function CredentialsPage() {
                       size="sm"
                       variant="outline"
                     >
-                      Revoke
+                      {ui("Revoke")}
                     </Button>
                   </ItemActions>
                 </Item>

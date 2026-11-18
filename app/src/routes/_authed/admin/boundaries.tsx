@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconListSearch,
@@ -44,6 +46,7 @@ const DESCRIPTION =
  * (`boundaries_.new.tsx`) and a rule opens to what it has stopped (`boundaries_.$index.tsx`).
  */
 function BoundariesPage() {
+  useLocale();
   const queryClient = useQueryClient();
   const stored = useQuery(actionPolicyQueryOptions());
   const savePolicy = useMutation(saveActionPolicyMutationOptions(queryClient));
@@ -56,18 +59,17 @@ function BoundariesPage() {
       size="sm"
       variant="ghost"
     >
-      <IconPlus />
-      Add rule
+      {uiNodes("{{slot0}}Add rule", [<IconPlus key="slot0" />])}
     </Button>
   );
 
   if (!policy) {
     return (
-      <PageShell description={DESCRIPTION} title="Boundaries">
+      <PageShell description={ui(DESCRIPTION)} title={ui("Boundaries")}>
         {/* Nothing until the policy is known: a rule list that guesses is worse than a blank. */}
         {stored.error ? (
           <p className="text-destructive text-sm" role="alert">
-            {stored.error.message}
+            {<ErrorDetails error={stored.error} />}
           </p>
         ) : null}
       </PageShell>
@@ -79,8 +81,12 @@ function BoundariesPage() {
     policy.allow.length === 1 && policy.allow[0] === "true";
 
   return (
-    <PageShell action={addRule} description={DESCRIPTION} title="Boundaries">
-      <PageSection title="Bots may never">
+    <PageShell
+      action={addRule}
+      description={ui(DESCRIPTION)}
+      title={ui("Boundaries")}
+    >
+      <PageSection title={ui("Bots may never")}>
         {policy.deny.length === 0 ? (
           <PageEmpty
             action={
@@ -91,14 +97,13 @@ function BoundariesPage() {
                 size="sm"
                 variant="outline"
               >
-                <IconPlus />
-                Add rule
+                {uiNodes("{{slot0}}Add rule", [<IconPlus key="slot0" />])}
               </Button>
             }
             icon={IconShieldX}
-            title="No rules yet"
+            title={ui("No rules yet")}
           >
-            Bots can do anything their own permissions allow.
+            {ui("Bots can do anything their own permissions allow.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -140,20 +145,24 @@ function BoundariesPage() {
         )}
       </PageSection>
 
-      <PageSection title="How rules apply">
+      <PageSection title={ui("How rules apply")}>
         <PageRows>
           <Item size="sm">
             <ItemContent>
-              <ItemTitle>Trial mode</ItemTitle>
+              <ItemTitle>{ui("Trial mode")}</ItemTitle>
               <ItemDescription>
                 {trial
-                  ? "On. A matching action goes ahead and is recorded in Audit, so you can see what a rule catches before it stops anything."
-                  : "Off. A matching action is stopped, and the Bot is told which rule stopped it."}
+                  ? ui(
+                      "On. A matching action goes ahead and is recorded in Audit, so you can see what a rule catches before it stops anything.",
+                    )
+                  : ui(
+                      "Off. A matching action is stopped, and the Bot is told which rule stopped it.",
+                    )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
               <Switch
-                aria-label="Trial mode"
+                aria-label={ui("Trial mode")}
                 checked={trial}
                 disabled={savePolicy.isPending}
                 onCheckedChange={(checked) =>
@@ -174,10 +183,11 @@ function BoundariesPage() {
               <IconListSearch />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Stopped actions</ItemTitle>
+              <ItemTitle>{ui("Stopped actions")}</ItemTitle>
               <ItemDescription>
-                In Audit, choose Blocked to see every action a rule stopped and
-                which rule it was.
+                {ui(
+                  "In Audit, choose Blocked to see every action a rule stopped and which rule it was.",
+                )}
               </ItemDescription>
             </ItemContent>
             <IconChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -190,22 +200,26 @@ function BoundariesPage() {
            */}
           <Item size="sm">
             <ItemContent className="min-w-0">
-              <ItemTitle>Everything else</ItemTitle>
+              <ItemTitle>{ui("Everything else")}</ItemTitle>
               <ItemDescription
                 className={allowsEverythingElse ? undefined : "font-mono"}
               >
                 {allowsEverythingElse
-                  ? "Allowed. A Bot can do anything no rule above stops, within its own permissions."
+                  ? ui(
+                      "Allowed. A Bot can do anything no rule above stops, within its own permissions.",
+                    )
                   : policy.allow.length === 0
-                    ? "Nothing else is allowed. Every action is refused."
-                    : `Only what these allow: ${policy.allow.join(" · ")}`}
+                    ? ui("Nothing else is allowed. Every action is refused.")
+                    : ui("Only what these allow: {{value0}}", {
+                        value0: String(policy.allow.join(" · ")),
+                      })}
               </ItemDescription>
             </ItemContent>
           </Item>
         </PageRows>
         {savePolicy.error ? (
           <p className="mt-3 text-destructive text-sm" role="alert">
-            {savePolicy.error.message}
+            {<ErrorDetails error={savePolicy.error} />}
           </p>
         ) : null}
       </PageSection>

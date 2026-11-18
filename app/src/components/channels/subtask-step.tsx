@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useCopilotChatConfiguration } from "@copilotkit/react-core/v2";
 import { humanise, readToolName } from "@openbot/shared/tool-name";
 import { useQuery } from "@tanstack/react-query";
@@ -43,6 +44,7 @@ export function SubtaskStep({
   /** The turn this step belongs to is still in flight. */
   active: boolean;
 }) {
+  useLocale();
   const chat = useCopilotChatConfiguration();
   const [open, setOpen] = useState(false);
   const toolCallId = step.subtask?.toolCallId ?? step.id;
@@ -138,25 +140,34 @@ function SubtaskStatus({
   handedBack: boolean;
   count: number;
 }) {
+  useLocale();
   const steps = count > 0 ? `${count} ${count === 1 ? "step" : "steps"}` : "";
   if (running)
     return (
       <span className="shrink-0 text-muted-foreground">
-        {steps ? `Working · ${steps}` : "Working"}
+        {steps
+          ? ui("Working · {{value0}}", { value0: String(steps) })
+          : ui("Working")}
       </span>
     );
   if (step.pending)
     return (
-      <span className="shrink-0 text-muted-foreground">Not completed</span>
+      <span className="shrink-0 text-muted-foreground">
+        {ui("Not completed")}
+      </span>
     );
   if (step.refused)
-    return <span className="shrink-0 text-destructive">Blocked</span>;
+    return <span className="shrink-0 text-destructive">{ui("Blocked")}</span>;
   if (handedBack)
-    return <span className="shrink-0 text-muted-foreground">Handed back</span>;
+    return (
+      <span className="shrink-0 text-muted-foreground">
+        {ui("Handed back")}
+      </span>
+    );
   if (step.failed)
     return (
       <span className="shrink-0 text-amber-600 dark:text-amber-500">
-        Didn't finish
+        {ui("Didn't finish")}
       </span>
     );
   return steps ? (
@@ -169,22 +180,24 @@ function SubtaskStatus({
  * Bot does it itself if it still needs doing, and the person is asked then, on the Bot's own card.
  */
 function HandedBack({ tool, args }: { tool: string; args: unknown }) {
+  useLocale();
   const { label, detail } = tool.startsWith("mcp__")
-    ? readToolName(tool)
+    ? readToolName(tool, false, ui)
     : { label: humanise(tool.replace(/^computer_/, "")), detail: undefined };
   const inputs =
     args && typeof args === "object" && !Array.isArray(args)
       ? Object.entries(args as Record<string, unknown>)
       : [];
   return (
-    <section aria-label="Handed back" className="space-y-1">
+    <section aria-label={ui("Handed back")} className="space-y-1">
       <p>
-        It stopped before a step that needs your approval. If the step still
-        needs doing, the Bot asks you in this conversation.
+        {ui(
+          "It stopped before a step that needs your approval. If the step still needs doing, the Bot asks you in this conversation.",
+        )}
       </p>
       <p className="font-medium">
         {label}
-        {detail ? ` on ${detail}` : ""}
+        {detail ? ui(" on {{value0}}", { value0: String(detail) }) : ""}
       </p>
       {inputs.length ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-muted-foreground">

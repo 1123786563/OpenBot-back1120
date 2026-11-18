@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { desktopConsentQuery } from "@/lib/desktop/shell";
@@ -36,7 +37,7 @@ export function grantsQueryOptions(serverId: string, enabled: boolean) {
     queryFn: async (): Promise<GrantState[]> => {
       const response = await client(
         `/api/plugins/servers/${encodeURIComponent(serverId)}/grants`,
-        { fallback: "Couldn't read what this account allows." },
+        { fallback: ui("Couldn't read what this account allows.") },
       );
       const body: { actions?: unknown } = await response.json();
       return Array.isArray(body.actions) ? (body.actions as GrantState[]) : [];
@@ -63,7 +64,7 @@ export function authorizeActionMutationOptions(
         {
           method: "POST",
           body: { action: variables.action },
-          fallback: "Couldn't authorize that action.",
+          fallback: ui("Couldn't authorize that action."),
         },
       );
       return authorizationUrl ?? null;

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { WhatIfVocabulary } from "@openbot/shared/what-if";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
@@ -17,7 +18,7 @@ export function whatIfVocabularyQueryOptions() {
     queryFn: async (): Promise<WhatIfVocabulary> =>
       (
         await client("/api/admin/what-if/vocabulary", {
-          fallback: "Couldn't load this OpenBot's Bots and apps",
+          fallback: ui("Couldn't load this OpenBot's Bots and apps"),
         })
       ).json(),
   });

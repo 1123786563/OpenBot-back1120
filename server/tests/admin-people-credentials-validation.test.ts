@@ -67,7 +67,7 @@ describe("GET /api/admin/people search", () => {
       { method: "GET" },
     );
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "A search of at most 200 characters is required.",
     });
     expect(calls.people).toEqual([]);
@@ -167,7 +167,7 @@ describe("POST /api/admin/credentials/:id refusals", () => {
     const response = await post(app, "cred-1/revoke");
 
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "Credential was not found or already revoked",
     });
   });
@@ -185,7 +185,7 @@ describe("POST /api/admin/credentials/:id refusals", () => {
     const response = await post(app, "cred-1/rotate");
 
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "Previous credential is already revoked",
     });
   });

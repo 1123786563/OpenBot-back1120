@@ -1,0 +1,1711 @@
+[
+  {
+    "method": "POST",
+    "path": "/billable_metrics",
+    "request": {
+      "billable_metric": {
+        "name": "Timezone microcredits",
+        "code": "timezone_microcredits",
+        "aggregation_type": "sum_agg",
+        "field_name": "microcredits"
+      }
+    },
+    "status": 200,
+    "response": {
+      "billable_metric": {
+        "lago_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+        "name": "Timezone microcredits",
+        "code": "timezone_microcredits",
+        "description": null,
+        "aggregation_type": "sum_agg",
+        "weighted_interval": null,
+        "recurring": false,
+        "rounding_function": null,
+        "rounding_precision": null,
+        "created_at": "2026-11-16T14:28:41Z",
+        "field_name": "microcredits",
+        "expression": null,
+        "active_subscriptions_count": 0,
+        "draft_invoices_count": 0,
+        "plans_count": 0,
+        "filters": []
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/customers",
+    "request": {
+      "customer": {
+        "external_id": "timezone_customer",
+        "name": "Disposable timezone fixture",
+        "currency": "CNY"
+      }
+    },
+    "status": 200,
+    "response": {
+      "customer": {
+        "lago_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+        "billing_entity_code": "agentic-ai-demo",
+        "external_id": "timezone_customer",
+        "account_type": "customer",
+        "name": "Disposable timezone fixture",
+        "firstname": null,
+        "lastname": null,
+        "customer_type": null,
+        "sequential_id": 1,
+        "slug": "AGE-3188-001",
+        "created_at": "2026-11-16T14:28:41Z",
+        "updated_at": "2026-11-16T14:28:41Z",
+        "country": null,
+        "address_line1": null,
+        "address_line2": null,
+        "state": null,
+        "zipcode": null,
+        "email": null,
+        "city": null,
+        "url": null,
+        "phone": null,
+        "logo_url": null,
+        "legal_name": null,
+        "legal_number": null,
+        "currency": "CNY",
+        "tax_identification_number": null,
+        "timezone": null,
+        "applicable_timezone": "UTC",
+        "net_payment_term": null,
+        "external_salesforce_id": null,
+        "finalize_zero_amount_invoice": "inherit",
+        "billing_configuration": {
+          "invoice_grace_period": null,
+          "payment_provider": null,
+          "payment_provider_code": null,
+          "document_locale": null,
+          "subscription_invoice_issuing_date_anchor": null,
+          "subscription_invoice_issuing_date_adjustment": null
+        },
+        "shipping_address": {
+          "address_line1": null,
+          "address_line2": null,
+          "city": null,
+          "zipcode": null,
+          "state": null,
+          "country": null
+        },
+        "skip_invoice_custom_sections": false,
+        "metadata": [],
+        "taxes": [],
+        "integration_customers": [],
+        "applicable_invoice_custom_sections": [],
+        "error_details": []
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/plans",
+    "request": {
+      "plan": {
+        "name": "Timezone zero price",
+        "code": "timezone_plan",
+        "interval": "monthly",
+        "amount_cents": 0,
+        "amount_currency": "CNY",
+        "pay_in_advance": false,
+        "charges": [
+          {
+            "billable_metric_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+            "charge_model": "standard",
+            "pay_in_advance": false,
+            "properties": {
+              "amount": "0"
+            }
+          }
+        ]
+      }
+    },
+    "status": 200,
+    "response": {
+      "plan": {
+        "lago_id": "acbe110a-8811-4e36-8d6a-b770ccd8ada6",
+        "name": "Timezone zero price",
+        "invoice_display_name": null,
+        "created_at": "2026-11-16T14:28:41Z",
+        "code": "timezone_plan",
+        "interval": "monthly",
+        "description": null,
+        "amount_cents": 0,
+        "amount_currency": "CNY",
+        "trial_period": null,
+        "pay_in_advance": false,
+        "bill_charges_monthly": null,
+        "bill_fixed_charges_monthly": null,
+        "customers_count": 0,
+        "active_subscriptions_count": 0,
+        "draft_invoices_count": 0,
+        "parent_id": null,
+        "pending_deletion": false,
+        "charges": [
+          {
+            "lago_id": "4d97c410-dd08-4453-a431-eca35bde8498",
+            "lago_billable_metric_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+            "code": "timezone_microcredits",
+            "invoice_display_name": null,
+            "billable_metric_code": "timezone_microcredits",
+            "created_at": "2026-11-16T14:28:41Z",
+            "charge_model": "standard",
+            "invoiceable": true,
+            "regroup_paid_fees": null,
+            "pay_in_advance": false,
+            "prorated": false,
+            "min_amount_cents": 0,
+            "accepts_target_wallet": false,
+            "properties": {
+              "amount": "0"
+            },
+            "applied_pricing_unit": null,
+            "lago_parent_id": null,
+            "filters": [],
+            "taxes": []
+          }
+        ],
+        "fixed_charges": [],
+        "entitlements": [],
+        "usage_thresholds": [],
+        "applicable_usage_thresholds": [],
+        "taxes": []
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/subscriptions",
+    "request": {
+      "subscription": {
+        "external_customer_id": "timezone_customer",
+        "plan_code": "timezone_plan",
+        "external_id": "timezone_subscription",
+        "billing_time": "calendar",
+        "subscription_at": "2024-01-01T00:00:00Z"
+      }
+    },
+    "status": 200,
+    "response": {
+      "subscription": {
+        "lago_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+        "external_id": "timezone_subscription",
+        "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+        "external_customer_id": "timezone_customer",
+        "name": "",
+        "plan_code": "timezone_plan",
+        "plan_amount_cents": 0,
+        "plan_amount_currency": "CNY",
+        "status": "active",
+        "billing_time": "calendar",
+        "subscription_at": "2024-01-01T00:00:00Z",
+        "started_at": "2024-01-01T00:00:00.000Z",
+        "trial_ended_at": null,
+        "ending_at": null,
+        "terminated_at": null,
+        "canceled_at": null,
+        "created_at": "2026-11-16T14:28:41Z",
+        "previous_plan_code": null,
+        "next_plan_code": null,
+        "downgrade_plan_date": null,
+        "current_billing_period_started_at": "2026-11-01T00:00:00Z",
+        "current_billing_period_ending_at": "2026-11-30T23:59:59Z",
+        "on_termination_credit_note": null,
+        "on_termination_invoice": "generate",
+        "progressive_billing_disabled": false,
+        "consolidate_invoice": true,
+        "purchase_order_number": null,
+        "cancellation_reason": null,
+        "activated_at": "2024-01-01T00:00:00Z",
+        "entitlements": [],
+        "payment_method": {
+          "payment_method_id": null,
+          "payment_method_type": "provider"
+        },
+        "plan": {
+          "lago_id": "acbe110a-8811-4e36-8d6a-b770ccd8ada6",
+          "name": "Timezone zero price",
+          "invoice_display_name": null,
+          "created_at": "2026-11-16T14:28:41Z",
+          "code": "timezone_plan",
+          "interval": "monthly",
+          "description": null,
+          "amount_cents": 0,
+          "amount_currency": "CNY",
+          "trial_period": null,
+          "pay_in_advance": false,
+          "bill_charges_monthly": null,
+          "bill_fixed_charges_monthly": null,
+          "customers_count": 0,
+          "active_subscriptions_count": 0,
+          "draft_invoices_count": 0,
+          "parent_id": null,
+          "pending_deletion": false,
+          "charges": [
+            {
+              "lago_id": "4d97c410-dd08-4453-a431-eca35bde8498",
+              "lago_billable_metric_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+              "code": "timezone_microcredits",
+              "invoice_display_name": null,
+              "billable_metric_code": "timezone_microcredits",
+              "created_at": "2026-11-16T14:28:41Z",
+              "charge_model": "standard",
+              "invoiceable": true,
+              "regroup_paid_fees": null,
+              "pay_in_advance": false,
+              "prorated": false,
+              "min_amount_cents": 0,
+              "accepts_target_wallet": false,
+              "properties": {
+                "amount": "0"
+              },
+              "applied_pricing_unit": null,
+              "lago_parent_id": null,
+              "filters": [],
+              "taxes": []
+            }
+          ],
+          "usage_thresholds": [],
+          "applicable_usage_thresholds": [],
+          "taxes": []
+        },
+        "applicable_usage_thresholds": [],
+        "applied_invoice_custom_sections": [],
+        "activation_rules": [],
+        "connections": {
+          "payment": {
+            "behavior": "inherit",
+            "code": null
+          },
+          "tax": {
+            "behavior": "inherit",
+            "code": null
+          },
+          "accounting": {
+            "behavior": "inherit",
+            "code": null
+          },
+          "crm": {
+            "behavior": "inherit",
+            "code": null
+          }
+        }
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "before_start",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1706630399,
+        "properties": {
+          "microcredits": 1
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "6ee21305-eeeb-4563-a9b2-50e2ff4924f3",
+        "transaction_id": "before_start",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-01-30T15:59:59.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 1
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "at_start",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1706630400,
+        "properties": {
+          "microcredits": 2
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "2eaf3a36-7034-4901-a0a1-8e670e60222d",
+        "transaction_id": "at_start",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-01-30T16:00:00.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 2
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "step_before_boundary",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1709135999,
+        "properties": {
+          "microcredits": 3
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "d543ad9d-2682-40f5-aef0-d276a9cc69f8",
+        "transaction_id": "step_before_boundary",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-02-28T15:59:59.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 3
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "step_at_boundary",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1709136000,
+        "properties": {
+          "microcredits": 5
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+        "transaction_id": "step_at_boundary",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-02-28T16:00:00.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 5
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "leap_day",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1709179200,
+        "properties": {
+          "microcredits": 7
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "ba251729-dfcb-475c-939e-611f725cdd1f",
+        "transaction_id": "leap_day",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-02-29T04:00:00.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 7
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "before_march_end",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1711814399,
+        "properties": {
+          "microcredits": 11
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "51371c65-408a-4d25-9231-96e4703dd61b",
+        "transaction_id": "before_march_end",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-03-30T15:59:59.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 11
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "at_march_end",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1711814400,
+        "properties": {
+          "microcredits": 13
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "d485fb12-92b2-45bc-bf3a-419451a6a875",
+        "transaction_id": "at_march_end",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-03-30T16:00:00.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 13
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:41Z"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-01-30T16%3A00%3A00Z&timestamp_to=2024-02-28T16%3A00%3A00Z&page=1&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+          "transaction_id": "step_at_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 5
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "d543ad9d-2682-40f5-aef0-d276a9cc69f8",
+          "transaction_id": "step_before_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T15:59:59.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 3
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 3
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-01-30T16%3A00%3A00Z&timestamp_to=2024-02-28T16%3A00%3A00Z&page=2&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "2eaf3a36-7034-4901-a0a1-8e670e60222d",
+          "transaction_id": "at_start",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-01-30T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 2
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 3
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-28T16%3A00%3A00Z&timestamp_to=2024-03-30T16%3A00%3A00Z&page=1&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "d485fb12-92b2-45bc-bf3a-419451a6a875",
+          "transaction_id": "at_march_end",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-03-30T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 13
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "51371c65-408a-4d25-9231-96e4703dd61b",
+          "transaction_id": "before_march_end",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-03-30T15:59:59.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 11
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-28T16%3A00%3A00Z&timestamp_to=2024-03-30T16%3A00%3A00Z&page=2&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "ba251729-dfcb-475c-939e-611f725cdd1f",
+          "transaction_id": "leap_day",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-29T04:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 7
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+          "transaction_id": "step_at_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 5
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/invoices?external_customer_id=timezone_customer",
+    "request": null,
+    "status": 200,
+    "response": {
+      "invoices": [
+        {
+          "lago_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+          "billing_entity_code": "agentic-ai-demo",
+          "sequential_id": 1,
+          "number": "AGE-3188-001-001",
+          "purchase_order_number": null,
+          "issuing_date": "2024-03-01",
+          "payment_due_date": "2024-03-01",
+          "net_payment_term": 0,
+          "invoice_type": "subscription",
+          "status": "finalized",
+          "payment_status": "succeeded",
+          "payment_dispute_lost_at": null,
+          "payment_overdue": false,
+          "currency": "CNY",
+          "fees_amount_cents": 0,
+          "taxes_amount_cents": 0,
+          "progressive_billing_credit_amount_cents": 0,
+          "coupons_amount_cents": 0,
+          "credit_notes_amount_cents": 0,
+          "sub_total_excluding_taxes_amount_cents": 0,
+          "sub_total_including_taxes_amount_cents": 0,
+          "total_amount_cents": 0,
+          "total_due_amount_cents": 0,
+          "total_paid_amount_cents": 0,
+          "total_offsetted_credit_note_amount_cents": 0,
+          "prepaid_credit_amount_cents": 0,
+          "prepaid_granted_credit_amount_cents": null,
+          "prepaid_purchased_credit_amount_cents": null,
+          "file_url": null,
+          "file_url_expires_at": null,
+          "xml_url": null,
+          "xml_url_expires_at": null,
+          "web_url": "http://localhost:19080/agentic-ai-demo/customer/f8dcf73b-142c-4bdf-9f14-05231f89bbfc/invoice/d8b5e02f-d373-4d03-b0fe-36394b824d1c/overview",
+          "version_number": 4,
+          "self_billed": false,
+          "created_at": "2026-11-16T14:28:43Z",
+          "updated_at": "2026-11-16T14:28:43Z",
+          "voided_at": null,
+          "customer": {
+            "lago_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "billing_entity_code": "agentic-ai-demo",
+            "external_id": "timezone_customer",
+            "account_type": "customer",
+            "name": "Disposable timezone fixture",
+            "firstname": null,
+            "lastname": null,
+            "customer_type": null,
+            "sequential_id": 1,
+            "slug": "AGE-3188-001",
+            "created_at": "2026-11-16T14:28:41Z",
+            "updated_at": "2026-11-16T14:28:41Z",
+            "country": null,
+            "address_line1": null,
+            "address_line2": null,
+            "state": null,
+            "zipcode": null,
+            "email": null,
+            "city": null,
+            "url": null,
+            "phone": null,
+            "logo_url": null,
+            "legal_name": null,
+            "legal_number": null,
+            "currency": "CNY",
+            "tax_identification_number": null,
+            "timezone": null,
+            "applicable_timezone": "UTC",
+            "net_payment_term": null,
+            "external_salesforce_id": null,
+            "finalize_zero_amount_invoice": "inherit",
+            "billing_configuration": {
+              "invoice_grace_period": null,
+              "payment_provider": null,
+              "payment_provider_code": null,
+              "document_locale": null,
+              "subscription_invoice_issuing_date_anchor": null,
+              "subscription_invoice_issuing_date_adjustment": null
+            },
+            "shipping_address": {
+              "address_line1": null,
+              "address_line2": null,
+              "city": null,
+              "zipcode": null,
+              "state": null,
+              "country": null
+            },
+            "skip_invoice_custom_sections": false,
+            "metadata": [],
+            "integration_customers": []
+          },
+          "metadata": [],
+          "applied_taxes": []
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": null,
+        "prev_page": null,
+        "total_pages": 1,
+        "total_count": 1
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+    "request": null,
+    "status": 200,
+    "response": {
+      "invoice": {
+        "lago_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+        "billing_entity_code": "agentic-ai-demo",
+        "sequential_id": 1,
+        "number": "AGE-3188-001-001",
+        "purchase_order_number": null,
+        "issuing_date": "2024-03-01",
+        "payment_due_date": "2024-03-01",
+        "net_payment_term": 0,
+        "invoice_type": "subscription",
+        "status": "finalized",
+        "payment_status": "succeeded",
+        "payment_dispute_lost_at": null,
+        "payment_overdue": false,
+        "currency": "CNY",
+        "fees_amount_cents": 0,
+        "taxes_amount_cents": 0,
+        "progressive_billing_credit_amount_cents": 0,
+        "coupons_amount_cents": 0,
+        "credit_notes_amount_cents": 0,
+        "sub_total_excluding_taxes_amount_cents": 0,
+        "sub_total_including_taxes_amount_cents": 0,
+        "total_amount_cents": 0,
+        "total_due_amount_cents": 0,
+        "total_paid_amount_cents": 0,
+        "total_offsetted_credit_note_amount_cents": 0,
+        "prepaid_credit_amount_cents": 0,
+        "prepaid_granted_credit_amount_cents": null,
+        "prepaid_purchased_credit_amount_cents": null,
+        "file_url": null,
+        "file_url_expires_at": null,
+        "xml_url": null,
+        "xml_url_expires_at": null,
+        "web_url": "http://localhost:19080/agentic-ai-demo/customer/f8dcf73b-142c-4bdf-9f14-05231f89bbfc/invoice/d8b5e02f-d373-4d03-b0fe-36394b824d1c/overview",
+        "version_number": 4,
+        "self_billed": false,
+        "created_at": "2026-11-16T14:28:43Z",
+        "updated_at": "2026-11-16T14:28:43Z",
+        "voided_at": null,
+        "customer": {
+          "lago_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+          "billing_entity_code": "agentic-ai-demo",
+          "external_id": "timezone_customer",
+          "account_type": "customer",
+          "name": "Disposable timezone fixture",
+          "firstname": null,
+          "lastname": null,
+          "customer_type": null,
+          "sequential_id": 1,
+          "slug": "AGE-3188-001",
+          "created_at": "2026-11-16T14:28:41Z",
+          "updated_at": "2026-11-16T14:28:41Z",
+          "country": null,
+          "address_line1": null,
+          "address_line2": null,
+          "state": null,
+          "zipcode": null,
+          "email": null,
+          "city": null,
+          "url": null,
+          "phone": null,
+          "logo_url": null,
+          "legal_name": null,
+          "legal_number": null,
+          "currency": "CNY",
+          "tax_identification_number": null,
+          "timezone": null,
+          "applicable_timezone": "UTC",
+          "net_payment_term": null,
+          "external_salesforce_id": null,
+          "finalize_zero_amount_invoice": "inherit",
+          "billing_configuration": {
+            "invoice_grace_period": null,
+            "payment_provider": null,
+            "payment_provider_code": null,
+            "document_locale": null,
+            "subscription_invoice_issuing_date_anchor": null,
+            "subscription_invoice_issuing_date_adjustment": null
+          },
+          "shipping_address": {
+            "address_line1": null,
+            "address_line2": null,
+            "city": null,
+            "zipcode": null,
+            "state": null,
+            "country": null
+          },
+          "skip_invoice_custom_sections": false,
+          "metadata": [],
+          "integration_customers": []
+        },
+        "subscriptions": [
+          {
+            "lago_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "name": "",
+            "plan_code": "timezone_plan",
+            "plan_amount_cents": 0,
+            "plan_amount_currency": "CNY",
+            "status": "active",
+            "billing_time": "calendar",
+            "subscription_at": "2024-01-01T00:00:00Z",
+            "started_at": "2024-01-01T00:00:00.000Z",
+            "trial_ended_at": null,
+            "ending_at": null,
+            "terminated_at": null,
+            "canceled_at": null,
+            "created_at": "2026-11-16T14:28:41Z",
+            "previous_plan_code": null,
+            "next_plan_code": null,
+            "downgrade_plan_date": null,
+            "current_billing_period_started_at": "2026-11-01T00:00:00Z",
+            "current_billing_period_ending_at": "2026-11-30T23:59:59Z",
+            "on_termination_credit_note": null,
+            "on_termination_invoice": "generate",
+            "progressive_billing_disabled": false,
+            "consolidate_invoice": true,
+            "purchase_order_number": null,
+            "cancellation_reason": null,
+            "activated_at": "2024-01-01T00:00:00Z",
+            "payment_method": {
+              "payment_method_id": null,
+              "payment_method_type": "provider"
+            },
+            "activation_rules": [],
+            "connections": {
+              "payment": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "tax": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "accounting": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "crm": {
+                "behavior": "inherit",
+                "code": null
+              }
+            }
+          }
+        ],
+        "billing_periods": [
+          {
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_plan_id": "acbe110a-8811-4e36-8d6a-b770ccd8ada6",
+            "subscription_from_datetime": "2024-02-01T00:00:00Z",
+            "subscription_to_datetime": "2024-02-29T23:59:59Z",
+            "charges_from_datetime": "2024-02-01T00:00:00Z",
+            "charges_to_datetime": "2024-02-29T23:59:59Z",
+            "fixed_charges_from_datetime": "2024-02-01T00:00:00Z",
+            "fixed_charges_to_datetime": "2024-02-29T23:59:59Z",
+            "invoicing_reason": "subscription_periodic"
+          }
+        ],
+        "fees": [
+          {
+            "lago_id": "943b3de8-704d-4d77-8c78-ea332cff347e",
+            "lago_charge_id": null,
+            "lago_charge_filter_id": null,
+            "lago_fixed_charge_id": null,
+            "lago_invoice_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+            "lago_true_up_fee_id": null,
+            "lago_true_up_parent_fee_id": null,
+            "lago_original_fee_id": null,
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "item": {
+              "type": "subscription",
+              "code": "timezone_plan",
+              "name": "Timezone zero price",
+              "description": null,
+              "invoice_display_name": "Timezone zero price",
+              "filters": null,
+              "filter_invoice_display_name": null,
+              "lago_item_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+              "item_type": "Subscription",
+              "grouped_by": {}
+            },
+            "pay_in_advance": false,
+            "invoiceable": true,
+            "amount_cents": 0,
+            "amount_currency": "CNY",
+            "precise_amount": "0.0",
+            "precise_total_amount": "0.0",
+            "taxes_amount_cents": 0,
+            "taxes_precise_amount": "0.0",
+            "taxes_rate": 0.0,
+            "total_aggregated_units": null,
+            "total_amount_cents": 0,
+            "total_amount_currency": "CNY",
+            "units": "1.0",
+            "description": null,
+            "precise_unit_amount": "0.0",
+            "precise_coupons_amount_cents": "0.0",
+            "sub_total_excluding_taxes_amount_cents": 0,
+            "sub_total_excluding_taxes_precise_amount_cents": "0.0",
+            "events_count": null,
+            "payment_status": "pending",
+            "created_at": "2026-11-16T14:28:43Z",
+            "succeeded_at": null,
+            "failed_at": null,
+            "refunded_at": null,
+            "amount_details": {
+              "plan_amount_cents": 0
+            },
+            "self_billed": false,
+            "pricing_unit_details": null,
+            "presentation_breakdowns": [],
+            "from_date": "2024-02-01T00:00:00+00:00",
+            "to_date": "2024-02-29T23:59:59+00:00"
+          },
+          {
+            "lago_id": "c2d4bf7b-df4d-4d90-a57b-96b09a03adfb",
+            "lago_charge_id": "4d97c410-dd08-4453-a431-eca35bde8498",
+            "lago_charge_filter_id": null,
+            "lago_fixed_charge_id": null,
+            "lago_invoice_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+            "lago_true_up_fee_id": null,
+            "lago_true_up_parent_fee_id": null,
+            "lago_original_fee_id": null,
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "item": {
+              "type": "charge",
+              "code": "timezone_microcredits",
+              "name": "Timezone microcredits",
+              "description": null,
+              "invoice_display_name": "Timezone microcredits",
+              "filters": null,
+              "filter_invoice_display_name": null,
+              "lago_item_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+              "item_type": "BillableMetric",
+              "grouped_by": {}
+            },
+            "pay_in_advance": false,
+            "invoiceable": true,
+            "amount_cents": 0,
+            "amount_currency": "CNY",
+            "precise_amount": "0.0",
+            "precise_total_amount": "0.0",
+            "taxes_amount_cents": 0,
+            "taxes_precise_amount": "0.0",
+            "taxes_rate": 0.0,
+            "total_aggregated_units": "15.0",
+            "total_amount_cents": 0,
+            "total_amount_currency": "CNY",
+            "units": "15.0",
+            "description": null,
+            "precise_unit_amount": "0.0",
+            "precise_coupons_amount_cents": "0.0",
+            "sub_total_excluding_taxes_amount_cents": 0,
+            "sub_total_excluding_taxes_precise_amount_cents": "0.0",
+            "events_count": 3,
+            "payment_status": "pending",
+            "created_at": "2026-11-16T14:28:43Z",
+            "succeeded_at": null,
+            "failed_at": null,
+            "refunded_at": null,
+            "amount_details": {},
+            "self_billed": false,
+            "pricing_unit_details": null,
+            "presentation_breakdowns": [],
+            "from_date": "2024-02-01T00:00:00+00:00",
+            "to_date": "2024-02-29T23:59:59+00:00"
+          }
+        ],
+        "credits": [],
+        "metadata": [],
+        "applied_taxes": [],
+        "error_details": [],
+        "applied_invoice_custom_sections": []
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "late_february",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1707969600,
+        "properties": {
+          "microcredits": 17
+        }
+      }
+    },
+    "status": 200,
+    "response": {
+      "event": {
+        "lago_id": "58f929cb-5269-4f6f-af40-b93431787db7",
+        "transaction_id": "late_february",
+        "lago_customer_id": null,
+        "code": "timezone_microcredits",
+        "timestamp": "2024-02-15T04:00:00.000Z",
+        "precise_total_amount_cents": null,
+        "properties": {
+          "microcredits": 17
+        },
+        "lago_subscription_id": null,
+        "external_subscription_id": "timezone_subscription",
+        "created_at": "2026-11-16T14:28:43Z"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/events",
+    "request": {
+      "event": {
+        "transaction_id": "late_february",
+        "external_subscription_id": "timezone_subscription",
+        "code": "timezone_microcredits",
+        "timestamp": 1707969600,
+        "properties": {
+          "microcredits": 17
+        }
+      }
+    },
+    "status": 422,
+    "response": {
+      "status": 422,
+      "error": "Unprocessable Entity",
+      "code": "validation_errors",
+      "error_details": {
+        "transaction_id": [
+          "value_already_exist"
+        ]
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-01-30T16%3A00%3A00Z&timestamp_to=2024-02-28T16%3A00%3A00Z&page=1&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+          "transaction_id": "step_at_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 5
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "d543ad9d-2682-40f5-aef0-d276a9cc69f8",
+          "transaction_id": "step_before_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T15:59:59.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 3
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-01-30T16%3A00%3A00Z&timestamp_to=2024-02-28T16%3A00%3A00Z&page=2&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "58f929cb-5269-4f6f-af40-b93431787db7",
+          "transaction_id": "late_february",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-15T04:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 17
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:43Z"
+        },
+        {
+          "lago_id": "2eaf3a36-7034-4901-a0a1-8e670e60222d",
+          "transaction_id": "at_start",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-01-30T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 2
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-28T16%3A00%3A00Z&timestamp_to=2024-03-30T16%3A00%3A00Z&page=1&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "d485fb12-92b2-45bc-bf3a-419451a6a875",
+          "transaction_id": "at_march_end",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-03-30T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 13
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "51371c65-408a-4d25-9231-96e4703dd61b",
+          "transaction_id": "before_march_end",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-03-30T15:59:59.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 11
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-28T16%3A00%3A00Z&timestamp_to=2024-03-30T16%3A00%3A00Z&page=2&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "ba251729-dfcb-475c-939e-611f725cdd1f",
+          "transaction_id": "leap_day",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-29T04:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 7
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+          "transaction_id": "step_at_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 5
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/invoices/d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+    "request": null,
+    "status": 200,
+    "response": {
+      "invoice": {
+        "lago_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+        "billing_entity_code": "agentic-ai-demo",
+        "sequential_id": 1,
+        "number": "AGE-3188-001-001",
+        "purchase_order_number": null,
+        "issuing_date": "2024-03-01",
+        "payment_due_date": "2024-03-01",
+        "net_payment_term": 0,
+        "invoice_type": "subscription",
+        "status": "finalized",
+        "payment_status": "succeeded",
+        "payment_dispute_lost_at": null,
+        "payment_overdue": false,
+        "currency": "CNY",
+        "fees_amount_cents": 0,
+        "taxes_amount_cents": 0,
+        "progressive_billing_credit_amount_cents": 0,
+        "coupons_amount_cents": 0,
+        "credit_notes_amount_cents": 0,
+        "sub_total_excluding_taxes_amount_cents": 0,
+        "sub_total_including_taxes_amount_cents": 0,
+        "total_amount_cents": 0,
+        "total_due_amount_cents": 0,
+        "total_paid_amount_cents": 0,
+        "total_offsetted_credit_note_amount_cents": 0,
+        "prepaid_credit_amount_cents": 0,
+        "prepaid_granted_credit_amount_cents": null,
+        "prepaid_purchased_credit_amount_cents": null,
+        "file_url": null,
+        "file_url_expires_at": null,
+        "xml_url": null,
+        "xml_url_expires_at": null,
+        "web_url": "http://localhost:19080/agentic-ai-demo/customer/f8dcf73b-142c-4bdf-9f14-05231f89bbfc/invoice/d8b5e02f-d373-4d03-b0fe-36394b824d1c/overview",
+        "version_number": 4,
+        "self_billed": false,
+        "created_at": "2026-11-16T14:28:43Z",
+        "updated_at": "2026-11-16T14:28:43Z",
+        "voided_at": null,
+        "customer": {
+          "lago_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+          "billing_entity_code": "agentic-ai-demo",
+          "external_id": "timezone_customer",
+          "account_type": "customer",
+          "name": "Disposable timezone fixture",
+          "firstname": null,
+          "lastname": null,
+          "customer_type": null,
+          "sequential_id": 1,
+          "slug": "AGE-3188-001",
+          "created_at": "2026-11-16T14:28:41Z",
+          "updated_at": "2026-11-16T14:28:41Z",
+          "country": null,
+          "address_line1": null,
+          "address_line2": null,
+          "state": null,
+          "zipcode": null,
+          "email": null,
+          "city": null,
+          "url": null,
+          "phone": null,
+          "logo_url": null,
+          "legal_name": null,
+          "legal_number": null,
+          "currency": "CNY",
+          "tax_identification_number": null,
+          "timezone": null,
+          "applicable_timezone": "UTC",
+          "net_payment_term": null,
+          "external_salesforce_id": null,
+          "finalize_zero_amount_invoice": "inherit",
+          "billing_configuration": {
+            "invoice_grace_period": null,
+            "payment_provider": null,
+            "payment_provider_code": null,
+            "document_locale": null,
+            "subscription_invoice_issuing_date_anchor": null,
+            "subscription_invoice_issuing_date_adjustment": null
+          },
+          "shipping_address": {
+            "address_line1": null,
+            "address_line2": null,
+            "city": null,
+            "zipcode": null,
+            "state": null,
+            "country": null
+          },
+          "skip_invoice_custom_sections": false,
+          "metadata": [],
+          "integration_customers": []
+        },
+        "subscriptions": [
+          {
+            "lago_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "name": "",
+            "plan_code": "timezone_plan",
+            "plan_amount_cents": 0,
+            "plan_amount_currency": "CNY",
+            "status": "active",
+            "billing_time": "calendar",
+            "subscription_at": "2024-01-01T00:00:00Z",
+            "started_at": "2024-01-01T00:00:00.000Z",
+            "trial_ended_at": null,
+            "ending_at": null,
+            "terminated_at": null,
+            "canceled_at": null,
+            "created_at": "2026-11-16T14:28:41Z",
+            "previous_plan_code": null,
+            "next_plan_code": null,
+            "downgrade_plan_date": null,
+            "current_billing_period_started_at": "2026-11-01T00:00:00Z",
+            "current_billing_period_ending_at": "2026-11-30T23:59:59Z",
+            "on_termination_credit_note": null,
+            "on_termination_invoice": "generate",
+            "progressive_billing_disabled": false,
+            "consolidate_invoice": true,
+            "purchase_order_number": null,
+            "cancellation_reason": null,
+            "activated_at": "2024-01-01T00:00:00Z",
+            "payment_method": {
+              "payment_method_id": null,
+              "payment_method_type": "provider"
+            },
+            "activation_rules": [],
+            "connections": {
+              "payment": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "tax": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "accounting": {
+                "behavior": "inherit",
+                "code": null
+              },
+              "crm": {
+                "behavior": "inherit",
+                "code": null
+              }
+            }
+          }
+        ],
+        "billing_periods": [
+          {
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_plan_id": "acbe110a-8811-4e36-8d6a-b770ccd8ada6",
+            "subscription_from_datetime": "2024-02-01T00:00:00Z",
+            "subscription_to_datetime": "2024-02-29T23:59:59Z",
+            "charges_from_datetime": "2024-02-01T00:00:00Z",
+            "charges_to_datetime": "2024-02-29T23:59:59Z",
+            "fixed_charges_from_datetime": "2024-02-01T00:00:00Z",
+            "fixed_charges_to_datetime": "2024-02-29T23:59:59Z",
+            "invoicing_reason": "subscription_periodic"
+          }
+        ],
+        "fees": [
+          {
+            "lago_id": "943b3de8-704d-4d77-8c78-ea332cff347e",
+            "lago_charge_id": null,
+            "lago_charge_filter_id": null,
+            "lago_fixed_charge_id": null,
+            "lago_invoice_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+            "lago_true_up_fee_id": null,
+            "lago_true_up_parent_fee_id": null,
+            "lago_original_fee_id": null,
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "item": {
+              "type": "subscription",
+              "code": "timezone_plan",
+              "name": "Timezone zero price",
+              "description": null,
+              "invoice_display_name": "Timezone zero price",
+              "filters": null,
+              "filter_invoice_display_name": null,
+              "lago_item_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+              "item_type": "Subscription",
+              "grouped_by": {}
+            },
+            "pay_in_advance": false,
+            "invoiceable": true,
+            "amount_cents": 0,
+            "amount_currency": "CNY",
+            "precise_amount": "0.0",
+            "precise_total_amount": "0.0",
+            "taxes_amount_cents": 0,
+            "taxes_precise_amount": "0.0",
+            "taxes_rate": 0.0,
+            "total_aggregated_units": null,
+            "total_amount_cents": 0,
+            "total_amount_currency": "CNY",
+            "units": "1.0",
+            "description": null,
+            "precise_unit_amount": "0.0",
+            "precise_coupons_amount_cents": "0.0",
+            "sub_total_excluding_taxes_amount_cents": 0,
+            "sub_total_excluding_taxes_precise_amount_cents": "0.0",
+            "events_count": null,
+            "payment_status": "pending",
+            "created_at": "2026-11-16T14:28:43Z",
+            "succeeded_at": null,
+            "failed_at": null,
+            "refunded_at": null,
+            "amount_details": {
+              "plan_amount_cents": 0
+            },
+            "self_billed": false,
+            "pricing_unit_details": null,
+            "presentation_breakdowns": [],
+            "from_date": "2024-02-01T00:00:00+00:00",
+            "to_date": "2024-02-29T23:59:59+00:00"
+          },
+          {
+            "lago_id": "c2d4bf7b-df4d-4d90-a57b-96b09a03adfb",
+            "lago_charge_id": "4d97c410-dd08-4453-a431-eca35bde8498",
+            "lago_charge_filter_id": null,
+            "lago_fixed_charge_id": null,
+            "lago_invoice_id": "d8b5e02f-d373-4d03-b0fe-36394b824d1c",
+            "lago_true_up_fee_id": null,
+            "lago_true_up_parent_fee_id": null,
+            "lago_original_fee_id": null,
+            "lago_subscription_id": "f5d836c5-e119-452e-93c1-52d0149a4e0e",
+            "external_subscription_id": "timezone_subscription",
+            "lago_customer_id": "f8dcf73b-142c-4bdf-9f14-05231f89bbfc",
+            "external_customer_id": "timezone_customer",
+            "item": {
+              "type": "charge",
+              "code": "timezone_microcredits",
+              "name": "Timezone microcredits",
+              "description": null,
+              "invoice_display_name": "Timezone microcredits",
+              "filters": null,
+              "filter_invoice_display_name": null,
+              "lago_item_id": "60bd61be-f578-4012-8ae7-72f52c05f451",
+              "item_type": "BillableMetric",
+              "grouped_by": {}
+            },
+            "pay_in_advance": false,
+            "invoiceable": true,
+            "amount_cents": 0,
+            "amount_currency": "CNY",
+            "precise_amount": "0.0",
+            "precise_total_amount": "0.0",
+            "taxes_amount_cents": 0,
+            "taxes_precise_amount": "0.0",
+            "taxes_rate": 0.0,
+            "total_aggregated_units": "15.0",
+            "total_amount_cents": 0,
+            "total_amount_currency": "CNY",
+            "units": "15.0",
+            "description": null,
+            "precise_unit_amount": "0.0",
+            "precise_coupons_amount_cents": "0.0",
+            "sub_total_excluding_taxes_amount_cents": 0,
+            "sub_total_excluding_taxes_precise_amount_cents": "0.0",
+            "events_count": 3,
+            "payment_status": "pending",
+            "created_at": "2026-11-16T14:28:43Z",
+            "succeeded_at": null,
+            "failed_at": null,
+            "refunded_at": null,
+            "amount_details": {},
+            "self_billed": false,
+            "pricing_unit_details": null,
+            "presentation_breakdowns": [],
+            "from_date": "2024-02-01T00:00:00+00:00",
+            "to_date": "2024-02-29T23:59:59+00:00"
+          }
+        ],
+        "credits": [],
+        "metadata": [],
+        "applied_taxes": [],
+        "error_details": [],
+        "applied_invoice_custom_sections": []
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-01T00%3A00%3A00Z&timestamp_to=2024-03-01T00%3A00%3A00Z&page=1&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "ba251729-dfcb-475c-939e-611f725cdd1f",
+          "transaction_id": "leap_day",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-29T04:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 7
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "50ee8bd1-5b54-43fc-a13b-43a7870bb9d2",
+          "transaction_id": "step_at_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T16:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 5
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        }
+      ],
+      "meta": {
+        "current_page": 1,
+        "next_page": 2,
+        "prev_page": null,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/events?external_subscription_id=timezone_subscription&code=timezone_microcredits&timestamp_from=2024-02-01T00%3A00%3A00Z&timestamp_to=2024-03-01T00%3A00%3A00Z&page=2&per_page=2",
+    "request": null,
+    "status": 200,
+    "response": {
+      "events": [
+        {
+          "lago_id": "d543ad9d-2682-40f5-aef0-d276a9cc69f8",
+          "transaction_id": "step_before_boundary",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-28T15:59:59.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 3
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:41Z"
+        },
+        {
+          "lago_id": "58f929cb-5269-4f6f-af40-b93431787db7",
+          "transaction_id": "late_february",
+          "lago_customer_id": null,
+          "code": "timezone_microcredits",
+          "timestamp": "2024-02-15T04:00:00.000Z",
+          "precise_total_amount_cents": null,
+          "properties": {
+            "microcredits": 17
+          },
+          "lago_subscription_id": null,
+          "external_subscription_id": "timezone_subscription",
+          "created_at": "2026-11-16T14:28:43Z"
+        }
+      ],
+      "meta": {
+        "current_page": 2,
+        "next_page": null,
+        "prev_page": 1,
+        "total_pages": 2,
+        "total_count": 4
+      }
+    }
+  }
+]

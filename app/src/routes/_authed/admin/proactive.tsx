@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes, getLocale } from "@/lib/i18n";
 import {
   IconBellRinging,
   IconChevronRight,
@@ -86,7 +87,7 @@ const SKIPPED_BECAUSE: Record<CheckInSkipReason, string> = {
 };
 
 /** A count as people read it, with the thousands separated. */
-const number = (count: number) => count.toLocaleString();
+const number = (count: number) => count.toLocaleString(getLocale());
 
 const plural = (count: number, one: string, many: string) =>
   `${number(count)} ${count === 1 ? one : many}`;
@@ -108,6 +109,7 @@ const skipped = (bot: BotCheckInMetrics) =>
  * and no people, because what a check-in raised came from somebody's own apps.
  */
 export function CheckInsPage() {
+  useLocale();
   const overview = useQuery(enterpriseOverviewQueryOptions());
   const [days, setDays] = useState<Days>(7);
   /*
@@ -121,12 +123,14 @@ export function CheckInsPage() {
 
   return (
     <PageShell
-      description="Bots check the apps people connected and tell them when something needs them, at most once an hour. They never act without asking."
-      title="Check-ins"
+      description={ui(
+        "Bots check the apps people connected and tell them when something needs them, at most once an hour. They never act without asking.",
+      )}
+      title={ui("Check-ins")}
     >
       {overview.isPending ? null : overview.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load check-in settings. Reload the page.
+          {ui("Couldn't load check-in settings. Reload the page.")}
         </p>
       ) : (
         <CheckInSettings data={overview.data} />
@@ -137,6 +141,7 @@ export function CheckInsPage() {
 }
 
 function CheckInSettings({ data }: { data: EnterpriseOverview }) {
+  useLocale();
   const setCapability = useMutation(setCapabilityMutationOptions(queryClient));
   const setSetting = useMutation(
     setEnterpriseSettingMutationOptions(queryClient),
@@ -159,15 +164,16 @@ function CheckInSettings({ data }: { data: EnterpriseOverview }) {
     <PageSection
       description={
         <>
-          These apply to everybody. To change who gets check-ins by role or
-          group, use{" "}
+          {ui(
+            "These apply to everybody. To change who gets check-ins by role or group, use",
+          )}{" "}
           <Link className="underline" to="/admin/permissions">
-            Permissions
+            {ui("Permissions")}
           </Link>
           .
         </>
       }
-      title="Settings"
+      title={ui("Settings")}
     >
       <PageRows>
         <Item size="sm">
@@ -175,19 +181,27 @@ function CheckInSettings({ data }: { data: EnterpriseOverview }) {
             <IconRadar />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Check-ins</ItemTitle>
+            <ItemTitle>{ui("Check-ins")}</ItemTitle>
             <ItemDescription>
               {on
-                ? "Bots check in for everybody."
-                : "Off. No Bot checks in for anybody."}
+                ? ui("Bots check in for everybody.")
+                : ui("Off. No Bot checks in for anybody.")}
               {overrides > 0
-                ? ` ${plural(overrides, "role or group override", "role or group overrides")} change that for some people.`
+                ? ui(" {{value0}} change that for some people.", {
+                    value0: String(
+                      plural(
+                        overrides,
+                        "role or group override",
+                        "role or group overrides",
+                      ),
+                    ),
+                  })
                 : ""}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
             <Switch
-              aria-label="Check-ins"
+              aria-label={ui("Check-ins")}
               checked={on}
               disabled={saving}
               onCheckedChange={(checked) =>
@@ -210,9 +224,17 @@ function CheckInSettings({ data }: { data: EnterpriseOverview }) {
             <IconGauge />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Daily limit</ItemTitle>
+            <ItemTitle>{ui("Daily limit")}</ItemTitle>
             <ItemDescription>
-              {`Up to ${plural(data.settings.proactiveDailyRuns, "check-in", "check-ins")} a day per Bot for each person`}
+              {ui("Up to {{value0}} a day per Bot for each person", {
+                value0: String(
+                  plural(
+                    data.settings.proactiveDailyRuns,
+                    "check-in",
+                    "check-ins",
+                  ),
+                ),
+              })}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
@@ -250,6 +272,7 @@ function Activity({
   metrics: UseQueryResult<CheckInMetrics>;
   onDays: (days: Days) => void;
 }) {
+  useLocale();
   const [openBot, setOpenBot] = useState<string | undefined>();
   const bot = metrics.data?.bots.find((row) => row.agentId === openBot);
 
@@ -260,7 +283,7 @@ function Activity({
           onValueChange={(value) => onDays(Number(value) === 30 ? 30 : 7)}
           value={String(days)}
         >
-          <SelectTrigger aria-label="Period" size="sm">
+          <SelectTrigger aria-label={ui("Period")} size="sm">
             <SelectValue>{PERIODS[days]}</SelectValue>
           </SelectTrigger>
           <SelectContent align="end">
@@ -271,12 +294,14 @@ function Activity({
           </SelectContent>
         </Select>
       }
-      description="Acceptance is how many items people started, out of the ones they started or hid."
-      title="Activity"
+      description={ui(
+        "Acceptance is how many items people started, out of the ones they started or hid.",
+      )}
+      title={ui("Activity")}
     >
       {metrics.isPending ? null : metrics.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          Couldn't load check-in activity. Reload the page.
+          {ui("Couldn't load check-in activity. Reload the page.")}
         </p>
       ) : (
         <>
@@ -286,11 +311,17 @@ function Activity({
                 <IconBellRinging />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Pings sent</ItemTitle>
+                <ItemTitle>{ui("Pings sent")}</ItemTitle>
                 <ItemDescription>
                   {metrics.data.pings.itemsPerPing === null
-                    ? "Each one folds a person's waiting items from every Bot into one message."
-                    : `${metrics.data.pings.itemsPerPing.toFixed(1)} items in each, on average`}
+                    ? ui(
+                        "Each one folds a person's waiting items from every Bot into one message.",
+                      )
+                    : ui("{{value0}} items in each, on average", {
+                        value0: String(
+                          metrics.data.pings.itemsPerPing.toFixed(1),
+                        ),
+                      })}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -301,8 +332,8 @@ function Activity({
             </Item>
           </PageRows>
           {metrics.data.bots.length === 0 ? (
-            <PageEmpty icon={IconRadar} title="No check-ins yet">
-              A Bot starts checking in once somebody talks to it.
+            <PageEmpty icon={IconRadar} title={ui("No check-ins yet")}>
+              {ui("A Bot starts checking in once somebody talks to it.")}
             </PageEmpty>
           ) : (
             <PageRows>
@@ -334,6 +365,7 @@ function BotRow({
   bot: BotCheckInMetrics;
   onOpen: () => void;
 }) {
+  useLocale();
   return (
     <Item render={<button onClick={onOpen} type="button" />} size="sm">
       <ItemMedia>
@@ -351,10 +383,12 @@ function BotRow({
       </ItemContent>
       <ItemActions>
         {bot.acceptance === null ? (
-          <span className="text-muted-foreground text-sm">No answers yet</span>
+          <span className="text-muted-foreground text-sm">
+            {ui("No answers yet")}
+          </span>
         ) : (
           <span className="text-sm tabular-nums">
-            {percent(bot.acceptance)} started
+            {uiNodes("{{slot0}}started", [percent(bot.acceptance)])}
           </span>
         )}
         <IconChevronRight className="size-4 text-muted-foreground" />
@@ -373,6 +407,7 @@ function BotDialog({
   days: Days;
   onClose: () => void;
 }) {
+  useLocale();
   const reasons = (Object.keys(SKIPPED_BECAUSE) as CheckInSkipReason[]).filter(
     (reason) => bot.runs.skipped[reason] > 0,
   );
@@ -385,7 +420,14 @@ function BotDialog({
             <div className="flex min-w-0 flex-col gap-0.5">
               <DialogTitle>{bot.name}</DialogTitle>
               <DialogDescription>
-                {`${PERIODS[days]}. ${bot.peopleOn === 1 ? "1 person has" : `${bot.peopleOn} people have`} check-ins on now.`}
+                {ui("{{value0}}. {{value1}} check-ins on now.", {
+                  value0: String(PERIODS[days]),
+                  value1: String(
+                    bot.peopleOn === 1
+                      ? "1 person has"
+                      : `${bot.peopleOn} people have`,
+                  ),
+                })}
               </DialogDescription>
             </div>
           </div>
@@ -393,20 +435,22 @@ function BotDialog({
         <DialogBody className="mt-4 gap-6 overflow-y-auto">
           <div className="grid grid-cols-3 gap-4">
             <Stat
-              label="Acceptance"
+              label={ui("Acceptance")}
               value={
-                bot.acceptance === null ? "None yet" : percent(bot.acceptance)
+                bot.acceptance === null
+                  ? ui("None yet")
+                  : percent(bot.acceptance)
               }
             />
-            <Stat label="Items raised" value={number(bot.items.raised)} />
-            <Stat label="Sent in a ping" value={number(bot.pinged)} />
+            <Stat label={ui("Items raised")} value={number(bot.items.raised)} />
+            <Stat label={ui("Sent in a ping")} value={number(bot.pinged)} />
           </div>
           <Breakdown
             rows={[
-              ["Found nothing", bot.runs.quiet],
-              ["Raised something", bot.runs.raised],
-              ["Couldn't finish", bot.runs.failed],
-              ["Skipped before looking", skipped(bot)],
+              [ui("Found nothing"), bot.runs.quiet],
+              [ui("Raised something"), bot.runs.raised],
+              [ui("Couldn't finish"), bot.runs.failed],
+              [ui("Skipped before looking"), skipped(bot)],
               ...reasons.map(
                 (reason) =>
                   [SKIPPED_BECAUSE[reason], bot.runs.skipped[reason], true] as [
@@ -416,21 +460,21 @@ function BotDialog({
                   ],
               ),
             ]}
-            title="Check-ins"
+            title={ui("Check-ins")}
           />
           <Breakdown
             rows={[
               ["Started", bot.items.started],
               ["Hidden", bot.items.hidden],
-              ["Cleared by the Bot", bot.items.cleared],
-              ["Still open", bot.items.open],
+              [ui("Cleared by the Bot"), bot.items.cleared],
+              [ui("Still open"), bot.items.open],
             ]}
-            title="Items"
+            title={ui("Items")}
           />
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button">
-            Done
+            {ui("Done")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -439,6 +483,7 @@ function BotDialog({
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  useLocale();
   return (
     <div className="min-w-0">
       <p className="truncate text-muted-foreground text-xs">{label}</p>
@@ -455,6 +500,7 @@ function Breakdown({
   rows: (readonly [string, number] | readonly [string, number, boolean])[];
   title: string;
 }) {
+  useLocale();
   return (
     <section>
       <h3 className="font-medium text-sm">{title}</h3>
@@ -491,6 +537,7 @@ function DailyLimitDialog({
   open: boolean;
   saving: boolean;
 }) {
+  useLocale();
   const [value, setValue] = useState(String(initial));
   const parsed = Number(value);
   const valid =
@@ -505,11 +552,11 @@ function DailyLimitDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Daily limit</DialogTitle>
+          <DialogTitle>{ui("Daily limit")}</DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 gap-2">
           <Label htmlFor="check-in-daily-limit">
-            Check-ins a day per Bot, for each person
+            {ui("Check-ins a day per Bot, for each person")}
           </Label>
           <Input
             id="check-in-daily-limit"
@@ -518,12 +565,12 @@ function DailyLimitDialog({
             value={value}
           />
           <p className="text-muted-foreground text-xs">
-            24 is once an hour. Skipped check-ins don't count.
+            {ui("24 is once an hour. Skipped check-ins don't count.")}
           </p>
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={!valid || saving}
@@ -531,7 +578,7 @@ function DailyLimitDialog({
             size="sm"
             type="button"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>

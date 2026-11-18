@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes, localeFormatter } from "@/lib/i18n";
 import type { ListedRecorderConnection } from "@openbot/shared/recorder-api";
 import { IconBrowser } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -31,10 +33,13 @@ import { relativeTime } from "@/lib/relative-time";
 import { queryClient } from "@/query-client";
 
 /** When a browser connected, to the minute: two copies with the same name (two Chrome profiles) stay told apart. */
-const connectedAt = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
+const connectedAt = localeFormatter(
+  (locale) =>
+    new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }),
+);
 
 /** The browsers signed in to this OpenBot as you, each with a Disconnect that revokes its sign-in. The row of the copy
  * in this browser (`thisInstallId`, from This browser) says so. */
@@ -43,17 +48,18 @@ export function ConnectedBrowsers({
 }: {
   thisInstallId?: string;
 } = {}) {
+  useLocale();
   const connections = useQuery(
     recorderConnectionsQueryOptions({ listed: true }),
   );
   return (
-    <PageSection title="Connected browsers">
+    <PageSection title={ui("Connected browsers")}>
       {connections.isPending ? null : connections.error ? (
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load your connected browsers. Reload the page.
+          {ui("Couldn't load your connected browsers. Reload the page.")}
         </p>
       ) : connections.data.connections.length === 0 ? (
-        <PageEmpty>No browsers connected yet.</PageEmpty>
+        <PageEmpty>{ui("No browsers connected yet.")}</PageEmpty>
       ) : (
         <PageRows>
           {connections.data.connections.map((connection, index) => (
@@ -87,6 +93,7 @@ function ConnectedBrowserRow({
   /** The copy of the Recorder in the browser this page is open in. */
   here: boolean;
 }) {
+  useLocale();
   const [asking, setAsking] = useState(false);
   const revoke = useMutation(
     revokeRecorderConnectionMutationOptions(queryClient),
@@ -109,26 +116,28 @@ function ConnectedBrowserRow({
           <ItemTitle>{name}</ItemTitle>
           <ItemDescription>
             {connection.via === "openbot-browser"
-              ? "Your OpenBot browser, connected "
-              : "Connected "}
-            {connectedAt.format(new Date(connection.createdAt))}
+              ? ui("Your OpenBot browser, connected ")
+              : ui("Connected ")}
+            {connectedAt().format(new Date(connection.createdAt))}
             {connection.via === "desktop"
-              ? " from OpenBot Desktop"
+              ? ui(" from OpenBot Desktop")
               : connection.via === "web"
-                ? " from OpenBot"
+                ? ui(" from OpenBot")
                 : ""}
             ,{" "}
             {/* A recording streams to the gateway, not to OpenBot, so its last use lags: it says so instead. */}
             {connection.recording
-              ? "recording now"
+              ? ui("recording now")
               : connection.lastUsedAt
-                ? `last used ${relativeTime(connection.lastUsedAt)}`
-                : "never used"}
+                ? ui("last used {{value0}}", {
+                    value0: String(relativeTime(connection.lastUsedAt)),
+                  })
+                : ui("never used")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
           <Button
-            aria-label={`Disconnect ${name}`}
+            aria-label={ui("Disconnect {{value0}}", { value0: String(name) })}
             size="sm"
             variant="ghost"
             disabled={revoke.isPending}
@@ -137,30 +146,33 @@ function ConnectedBrowserRow({
               setAsking(true);
             }}
           >
-            {revoke.isPending ? "Disconnecting…" : "Disconnect"}
+            {revoke.isPending ? ui("Disconnecting…") : ui("Disconnect")}
           </Button>
         </ItemActions>
       </Item>
       <Dialog onOpenChange={setAsking} open={asking}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disconnect {connection.label}?</DialogTitle>
+            <DialogTitle>
+              {ui("Disconnect")} {connection.label}?
+            </DialogTitle>
           </DialogHeader>
           <DialogBody className="mt-4 text-sm">
             <p>
-              OpenBot signs the Recorder in {which} out. It records nothing for
-              you until you connect it again, and a recording running there
-              stops.
+              {uiNodes(
+                "OpenBot signs the Recorder in {{slot0}}out. It records nothing for you until you connect it again, and a recording running there stops.",
+                [which],
+              )}
             </p>
             {revoke.error ? (
               <p className="mt-2 text-destructive" role="alert">
-                {revoke.error.message}
+                {<ErrorDetails error={revoke.error} />}
               </p>
             ) : null}
           </DialogBody>
           <DialogFooter className="mt-4">
             <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               size="sm"
@@ -172,7 +184,7 @@ function ConnectedBrowserRow({
                 })
               }
             >
-              {revoke.isPending ? "Disconnecting…" : "Disconnect"}
+              {revoke.isPending ? ui("Disconnecting…") : ui("Disconnect")}
             </Button>
           </DialogFooter>
         </DialogContent>

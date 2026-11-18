@@ -1,3 +1,4 @@
+import { uiNodes } from "@/lib/i18n";
 import { Component, type ReactNode } from "react";
 import { ArgumentsArrivingContext } from "@/components/gallery/streaming";
 
@@ -69,8 +70,14 @@ export class ToolRenderBoundary extends Component<
     if (this.state.failed) {
       return (
         <p className="my-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          Couldn't show <span className="font-medium">{this.props.name}</span>.
-          The rest of the conversation is fine.
+          {uiNodes(
+            "Couldn't show {{slot0}}. The rest of the conversation is fine.",
+            [
+              <span key="slot0" className="font-medium">
+                {this.props.name}
+              </span>,
+            ],
+          )}
         </p>
       );
     }

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { defaultAgentProfile } from "@/lib/agents/default-agent";
 import type { AgentProfile } from "@/lib/agents/queries";
 import type { ApprovalInboxData } from "@/lib/approvals";
@@ -100,12 +101,16 @@ export function statusLine(input: {
 }): string {
   const { attention, channels, agentId } = input;
   if (attention?.approvals) {
-    return `Ready to review · ${plural(attention.approvals, "approval")}`;
+    return ui("Ready to review · {{value0}}", {
+      value0: String(plural(attention.approvals, "approval")),
+    });
   }
   if (attention?.questions) {
-    return `Needs your input · ${plural(attention.questions, "question")}`;
+    return ui("Needs your input · {{value0}}", {
+      value0: String(plural(attention.questions, "question")),
+    });
   }
-  if (attention?.handoffs) return "Waiting on a hand-off";
+  if (attention?.handoffs) return ui("Waiting on a hand-off");
   const working = agentId
     ? channels?.find(
         (channel) =>
@@ -115,11 +120,13 @@ export function statusLine(input: {
     : undefined;
   if (working) {
     const routine = working.work?.find((work) => work.kind === "routine");
-    if (routine && !working.busy) return "Running a routine…";
-    return `Working on ${working.summary?.trim() || working.name}…`;
+    if (routine && !working.busy) return ui("Running a routine…");
+    return ui("Working on {{value0}}…", {
+      value0: String(working.summary?.trim() || working.name),
+    });
   }
   if (attention?.paused) return "Paused";
-  return "Ready when you are";
+  return ui("Ready when you are");
 }
 
 /** Approvals and questions the person has not answered yet, across every Bot. */

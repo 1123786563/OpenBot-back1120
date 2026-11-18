@@ -1,3 +1,4 @@
+import { useLocale } from "@/lib/i18n";
 import { useFrontendTool, useHumanInTheLoop } from "@copilotkit/react-core/v2";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -61,6 +62,7 @@ const OFFERED: Readonly<Record<string, OfferRule>> = {
 };
 
 export function BotTools() {
+  useLocale();
   useOfferedTo(OFFERED);
 
   /*
@@ -121,6 +123,7 @@ function ProposedBotRender(props: {
   respond?: (result: unknown) => Promise<void>;
   result?: string;
 }) {
+  useLocale();
   const { data: roster } = useQuery(agentListQueryOptions());
   const createAgent = useMutation(createAgentMutationOptions(queryClient));
   const proposed = props.args.name?.trim().toLowerCase();

@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { SkinId, UserPreferences } from "@openbot/shared/user-preferences";
 import {
   mutationOptions,
@@ -16,15 +17,17 @@ export function userPreferencesQueryOptions(userId: string | undefined) {
   return queryOptions({
     queryKey: [...settingsKeys.all, "preferences", userId] as const,
     enabled: Boolean(userId),
+    refetchOnWindowFocus: true,
     queryFn: ({ signal }): Promise<UserPreferences> =>
       client("/api/settings/preferences", "preferences", {
         signal,
-        fallback: "Could not load your preferences",
+        fallback: ui("Could not load your preferences"),
       }),
   });
 }
 
 export function useUserPreferences() {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   return {
     userId: user?.id,
@@ -33,6 +36,7 @@ export function useUserPreferences() {
 }
 
 export function useMessageListEmphasis() {
+  useLocale();
   return useUserPreferences().data?.messageListEmphasis ?? "thread";
 }
 
@@ -54,7 +58,7 @@ export function dismissSelfHostBannerMutationOptions(
       return client("/api/settings/preferences", "preferences", {
         method: "PATCH",
         body: { selfHostBannerDismissed: true },
-        fallback: "Could not save your preferences",
+        fallback: ui("Could not save your preferences"),
       });
     },
     onMutate: () => {
@@ -87,7 +91,7 @@ export function saveUserPreferencesMutationOptions(
       return client("/api/settings/preferences", "preferences", {
         method: "PATCH",
         body: preferences,
-        fallback: "Could not save your preferences",
+        fallback: ui("Could not save your preferences"),
       });
     },
     onSuccess: (preferences) =>
@@ -125,7 +129,7 @@ export function saveSkinMutationOptions(
       return client("/api/settings/preferences", "preferences", {
         method: "PATCH",
         body: { skin },
-        fallback: "Could not save your skin",
+        fallback: ui("Could not save your skin"),
       });
     },
     onMutate: async (skin) => {

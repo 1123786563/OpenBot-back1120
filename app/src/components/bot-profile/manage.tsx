@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconCopy,
@@ -52,6 +54,7 @@ import { queryClient } from "@/query-client";
  * or a conversation with a Bot there, so the rows below say nothing about other people.
  */
 function usePersonal(): boolean {
+  useLocale();
   return (
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal"
   );
@@ -84,6 +87,7 @@ function ResetDialog({
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
+  useLocale();
   const plan = useQuery({
     ...botResetPlanQueryOptions(agent.id),
     enabled: open,
@@ -96,27 +100,37 @@ function ResetDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reset {agent.name}?</DialogTitle>
+          <DialogTitle>
+            {ui("Reset")} {agent.name}?
+          </DialogTitle>
           <DialogDescription>
             {personal
-              ? `This deletes what ${agent.name} has with you. You can't undo this.`
-              : `This deletes what ${agent.name} has with you. Other people's conversations and data stay. You can't undo this.`}
+              ? ui(
+                  "This deletes what {{value0}} has with you. You can't undo this.",
+                  { value0: String(agent.name) },
+                )
+              : ui(
+                  "This deletes what {{value0}} has with you. Other people's conversations and data stay. You can't undo this.",
+                  { value0: String(agent.name) },
+                )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
           {plan.isPending ? null : plan.error ? (
             <p className="text-destructive text-sm" role="alert">
-              Couldn't check what a reset would delete. Try again.
+              {ui("Couldn't check what a reset would delete. Try again.")}
             </p>
           ) : reset.isSuccess ? (
-            <p className="text-sm">Done. {agent.name} starts fresh with you.</p>
+            <p className="text-sm">
+              {uiNodes("Done. {{slot0}}starts fresh with you.", [agent.name])}
+            </p>
           ) : (
             <div className="grid gap-2 text-sm">
               {lines.length === 0 ? (
-                <p>There's nothing of yours to delete.</p>
+                <p>{ui("There's nothing of yours to delete.")}</p>
               ) : (
                 <>
-                  <p>This will delete:</p>
+                  <p>{ui("This will delete:")}</p>
                   <ul className="list-disc pl-5">
                     {lines.map((line) => (
                       <li key={line}>{line}</li>
@@ -126,22 +140,28 @@ function ResetDialog({
               )}
               {plan.data.sharedConversationsKept > 0 ? (
                 <p className="text-muted-foreground">
-                  {plan.data.sharedConversationsKept} conversation
-                  {plan.data.sharedConversationsKept === 1 ? " is" : "s are"}{" "}
-                  shared with other people or Bots and will be kept.
+                  {uiNodes(
+                    "{{slot0}}conversation{{slot1}} shared with other people or Bots and will be kept.",
+                    [
+                      plan.data.sharedConversationsKept,
+                      plan.data.sharedConversationsKept === 1
+                        ? ui(" is")
+                        : ui("s are"),
+                    ],
+                  )}
                 </p>
               ) : null}
               {/* Where memory isn't offered there are no memories to keep (see `offersMemory`). */}
               {memory ? (
                 <p className="text-muted-foreground">
-                  Memories you told a Bot yourself are kept.
+                  {ui("Memories you told a Bot yourself are kept.")}
                 </p>
               ) : null}
             </div>
           )}
           {reset.error ? (
             <p className="mt-2 text-destructive text-sm" role="alert">
-              {reset.error.message}
+              {<ErrorDetails error={reset.error} />}
             </p>
           ) : null}
         </DialogBody>
@@ -151,7 +171,7 @@ function ResetDialog({
             size="sm"
             variant="outline"
           >
-            {reset.isSuccess ? "Close" : "Cancel"}
+            {reset.isSuccess ? ui("Close") : ui("Cancel")}
           </Button>
           {reset.isSuccess ? null : (
             <Button
@@ -160,7 +180,7 @@ function ResetDialog({
               size="sm"
               variant="destructive"
             >
-              {reset.isPending ? "Resetting…" : "Delete and reset"}
+              {reset.isPending ? ui("Resetting…") : ui("Delete and reset")}
             </Button>
           )}
         </DialogFooter>
@@ -187,6 +207,7 @@ export function ManageSection({
   onDuplicated: (copyId: string) => void;
   onDeleted: () => void;
 }) {
+  useLocale();
   const setPinned = useMutation(setAgentPinnedMutationOptions(queryClient));
   const setHidden = useMutation(setAgentHiddenMutationOptions(queryClient));
   const duplicate = useMutation(duplicateAgentMutationOptions(queryClient));
@@ -202,10 +223,10 @@ export function ManageSection({
   const assigned = agent.assignedToMe === true;
 
   return (
-    <PageSection title="Manage">
+    <PageSection title={ui("Manage")}>
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       <PageRows>
@@ -214,18 +235,24 @@ export function ManageSection({
             <IconPin />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Pinned</ItemTitle>
+            <ItemTitle>{ui("Pinned")}</ItemTitle>
             <ItemDescription>
               {assigned
-                ? "An admin assigned it to you. It stays at the top of your Bots list."
+                ? ui(
+                    "An admin assigned it to you. It stays at the top of your Bots list.",
+                  )
                 : agent.pinned
-                  ? `At the top of your Bots list.${onlyYours}`
-                  : `Keep it at the top of your Bots list.${onlyYours}`}
+                  ? ui("At the top of your Bots list.{{value0}}", {
+                      value0: String(onlyYours),
+                    })
+                  : ui("Keep it at the top of your Bots list.{{value0}}", {
+                      value0: String(onlyYours),
+                    })}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
             <Switch
-              aria-label="Pinned"
+              aria-label={ui("Pinned")}
               checked={agent.pinned || assigned}
               disabled={assigned || setPinned.isPending}
               onCheckedChange={(pinned) =>
@@ -240,18 +267,22 @@ export function ManageSection({
             <IconEyeOff />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Hidden</ItemTitle>
+            <ItemTitle>{ui("Hidden")}</ItemTitle>
             <ItemDescription>
               {assigned
-                ? "An admin assigned it to you. You can't hide it."
+                ? ui("An admin assigned it to you. You can't hide it.")
                 : agent.hidden
-                  ? `Under Hidden on your Bots list.${onlyYours}`
-                  : `Take it off your Bots list.${onlyYours}`}
+                  ? ui("Under Hidden on your Bots list.{{value0}}", {
+                      value0: String(onlyYours),
+                    })
+                  : ui("Take it off your Bots list.{{value0}}", {
+                      value0: String(onlyYours),
+                    })}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
             <Switch
-              aria-label="Hidden"
+              aria-label={ui("Hidden")}
               checked={agent.hidden}
               disabled={assigned || setHidden.isPending}
               onCheckedChange={async (hidden) => {
@@ -278,9 +309,11 @@ export function ManageSection({
             <IconCopy />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Duplicate</ItemTitle>
+            <ItemTitle>{ui("Duplicate")}</ItemTitle>
             <ItemDescription>
-              Make your own copy. Its conversations and keys aren't copied.
+              {ui(
+                "Make your own copy. Its conversations and keys aren't copied.",
+              )}
             </ItemDescription>
           </ItemContent>
         </Item>
@@ -293,12 +326,16 @@ export function ManageSection({
             <IconRefresh />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>Reset</ItemTitle>
+            <ItemTitle>{ui("Reset")} </ItemTitle>
             <ItemDescription>
               {/* Where memory isn't offered a Bot remembers nothing to delete (see `offersMemory`). */}
               {memory
-                ? "Delete your conversations with it, what it remembers for you, and its scheduled work. You'll see the list first."
-                : "Delete your conversations with it and its scheduled work. You'll see the list first."}
+                ? ui(
+                    "Delete your conversations with it, what it remembers for you, and its scheduled work. You'll see the list first.",
+                  )
+                : ui(
+                    "Delete your conversations with it and its scheduled work. You'll see the list first.",
+                  )}
             </ItemDescription>
           </ItemContent>
           <ItemActions>
@@ -318,12 +355,14 @@ export function ManageSection({
                 <IconTrash />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Delete</ItemTitle>
+                <ItemTitle>{ui("Delete")} </ItemTitle>
                 <ItemDescription>
                   {/* A deleted Bot's conversations stay readable (channel-chat.tsx says so there). */}
                   {personal
-                    ? "Deletes it. You can still read your conversations with it. You can't undo this."
-                    : "Deletes it for everyone. You can't undo this."}
+                    ? ui(
+                        "Deletes it. You can still read your conversations with it. You can't undo this.",
+                      )
+                    : ui("Deletes it for everyone. You can't undo this.")}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -337,17 +376,21 @@ export function ManageSection({
       <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {agent.name}?</DialogTitle>
+            <DialogTitle>
+              {ui("Delete")} {agent.name}?
+            </DialogTitle>
             <DialogDescription>
               {personal
-                ? "You can still read your conversations with it, but it can't reply. You can't undo this."
-                : "It's deleted for everyone. You can't undo this."}
+                ? ui(
+                    "You can still read your conversations with it, but it can't reply. You can't undo this.",
+                  )
+                : ui("It's deleted for everyone. You can't undo this.")}
             </DialogDescription>
           </DialogHeader>
           {remove.error ? (
             <DialogBody className="mt-4">
               <p className="text-destructive text-sm" role="alert">
-                {remove.error.message}
+                {<ErrorDetails error={remove.error} />}
               </p>
             </DialogBody>
           ) : null}
@@ -357,7 +400,7 @@ export function ManageSection({
               size="sm"
               variant="outline"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={remove.isPending}
@@ -368,7 +411,7 @@ export function ManageSection({
               size="sm"
               variant="destructive"
             >
-              {remove.isPending ? "Deleting…" : "Delete"}
+              {remove.isPending ? ui("Deleting…") : ui("Delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

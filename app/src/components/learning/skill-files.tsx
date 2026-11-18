@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Streamdown } from "streamdown";
 import { readableSkillBody } from "@/lib/learning/display";
 import { markdownComponents } from "@/lib/markdown";
@@ -12,6 +13,7 @@ export function SkillFiles({
 }: {
   files: { path: string; text: string | null }[];
 }) {
+  useLocale();
   const skill = files.find((file) => file.path === "SKILL.md");
   // A SKILL.md that is binary has no text to render, so it is listed like any other binary file.
   const others = files.filter(
@@ -30,7 +32,7 @@ export function SkillFiles({
       )}
       {others.length > 0 && (
         <section className="grid gap-1.5">
-          <h3 className="font-medium text-sm">Other files</h3>
+          <h3 className="font-medium text-sm">{ui("Other files")}</h3>
           {others.map((file) =>
             file.text === null ? (
               <div className="rounded-md border p-3 text-sm" key={file.path}>

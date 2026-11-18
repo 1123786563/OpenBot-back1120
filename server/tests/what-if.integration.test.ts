@@ -467,7 +467,7 @@ describe("asking what would happen", () => {
 
     const response = await askOf(app, recording.text);
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error:
         "Couldn't turn that into one action. Ask it another way, or set the action yourself.",
     });
@@ -663,7 +663,7 @@ describe("checking an action the admin set", () => {
     const { app } = appFor({});
     const { status, body } = await checkOf(app, action({ bot: "" }));
     expect(status).toBe(400);
-    expect(body as unknown).toEqual({ error: "Choose a Bot." });
+    expect(body as unknown).toMatchObject({ error: "Choose a Bot." });
   });
 });
 

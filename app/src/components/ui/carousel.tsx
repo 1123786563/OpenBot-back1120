@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
@@ -34,6 +35,7 @@ type CarouselContextProps = {
 const CarouselContext = React.createContext<CarouselContextProps | null>(null);
 
 function useCarousel() {
+  useLocale();
   const context = React.useContext(CarouselContext);
 
   if (!context) {
@@ -72,6 +74,7 @@ function Carousel({
   children,
   ...props
 }: React.ComponentProps<"div"> & CarouselProps) {
+  useLocale();
   const [carouselRef, api] = useEmblaCarousel(
     {
       ...opts,
@@ -157,6 +160,7 @@ function Carousel({
 }
 
 function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
+  useLocale();
   const { carouselRef, orientation } = useCarousel();
 
   return (
@@ -178,6 +182,7 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function CarouselItem({ className, ...props }: React.ComponentProps<"div">) {
+  useLocale();
   const { orientation } = useCarousel();
 
   return (
@@ -201,6 +206,7 @@ function CarouselPrevious({
   size = "icon-sm",
   ...props
 }: React.ComponentProps<typeof Button>) {
+  useLocale();
   const { orientation, scrollPrev, canScrollPrev } = useCarousel();
 
   return (
@@ -220,7 +226,7 @@ function CarouselPrevious({
       {...props}
     >
       <IconChevronLeft />
-      <span className="sr-only">Previous slide</span>
+      <span className="sr-only">{ui("Previous slide")}</span>
     </Button>
   );
 }
@@ -231,6 +237,7 @@ function CarouselNext({
   size = "icon-sm",
   ...props
 }: React.ComponentProps<typeof Button>) {
+  useLocale();
   const { orientation, scrollNext, canScrollNext } = useCarousel();
 
   return (
@@ -250,7 +257,7 @@ function CarouselNext({
       {...props}
     >
       <IconChevronRight />
-      <span className="sr-only">Next slide</span>
+      <span className="sr-only">{ui("Next slide")}</span>
     </Button>
   );
 }

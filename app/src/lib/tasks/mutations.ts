@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { botLifecycleKeys } from "@/lib/bot-lifecycle/queries";
 import { client } from "@/lib/client";
@@ -23,8 +24,8 @@ export const resolveTaskMutationOptions = (queryClient: QueryClient) =>
         {
           method: "POST",
           fallback: done
-            ? "Couldn't mark this task done. Try again."
-            : "Couldn't reopen this task. Try again.",
+            ? ui("Couldn't mark this task done. Try again.")
+            : ui("Couldn't reopen this task. Try again."),
         },
       ),
     onSuccess: () => invalidateTasks(queryClient),
@@ -39,7 +40,7 @@ export const tryTaskAgainMutationOptions = (queryClient: QueryClient) =>
     mutationFn: (id: string) =>
       client<BotTask>(`${taskPath(id)}/again`, "task", {
         method: "POST",
-        fallback: "Couldn't run this task again. Try again in a moment.",
+        fallback: ui("Couldn't run this task again. Try again in a moment."),
       }),
     onSuccess: () => invalidateTasks(queryClient),
   });

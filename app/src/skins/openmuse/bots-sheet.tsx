@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBolt,
   IconCheck,
@@ -28,6 +29,7 @@ import { Divider, ErrorNotice, LinkRow, MuseSheet, museText } from "./ui";
  * one place the difference shows, and it stays a sheet behind the name rather than a fixture.
  */
 export function BotsSheet({ onClose }: { onClose: () => void }) {
+  useLocale();
   const { bot: centre, userId } = useMuse();
   const agents = useQuery(agentListQueryOptions());
   const attention = useQuery(botAttentionQueryOptions());
@@ -52,13 +54,15 @@ export function BotsSheet({ onClose }: { onClose: () => void }) {
     <MuseSheet
       onClose={onClose}
       subtitle={`Choose who is at the centre of ${appConfig.brand.productName}.`}
-      title="Your Bots"
+      title={ui("Your Bots")}
     >
       <div className="flex flex-col gap-3.5">
         {agents.isPending ? null : agents.error ? (
-          <ErrorNotice error="Couldn't load your Bots. Reload the page." />
+          <ErrorNotice
+            error={ui("Couldn't load your Bots. Reload the page.")}
+          />
         ) : agents.data.length === 0 ? (
-          <p className={museText.muted}>You don't have a Bot yet.</p>
+          <p className={museText.muted}>{ui("You don't have a Bot yet.")}</p>
         ) : (
           <div className="flex flex-col">
             {agents.data.map((agent) => {
@@ -92,7 +96,9 @@ export function BotsSheet({ onClose }: { onClose: () => void }) {
                     </ItemTitle>
                     <span className={cn(museText.small, "line-clamp-1")}>
                       {asks
-                        ? `Needs you · ${summary}`
+                        ? ui("Needs you · {{value0}}", {
+                            value0: String(summary),
+                          })
                         : summary ||
                           (agent.title && shownSubtitle(agent.title)) ||
                           agent.roleDescription}
@@ -118,7 +124,7 @@ export function BotsSheet({ onClose }: { onClose: () => void }) {
         <div>
           {centre ? (
             <LinkRow
-              detail="Setup, access, sharing and activity"
+              detail={ui("Setup, access, sharing and activity")}
               icon={IconUserCircle}
               render={
                 <Link
@@ -127,24 +133,24 @@ export function BotsSheet({ onClose }: { onClose: () => void }) {
                   to="/bots/$agentId"
                 />
               }
-              title={`${centre.name}'s page`}
+              title={ui("{{value0}}'s page", { value0: String(centre.name) })}
             />
           ) : null}
           <LinkRow
-            detail="Yours, shared with you, and your team's"
+            detail={ui("Yours, shared with you, and your team's")}
             icon={IconBolt}
             render={<Link onClick={onClose} to="/bots" />}
             tint="plain"
-            title="All Bots"
+            title={ui("All Bots")}
           />
           <LinkRow
-            detail="Describe what it should do"
+            detail={ui("Describe what it should do")}
             icon={IconPlus}
             render={
               <Link onClick={onClose} search={{ new: true }} to="/bots" />
             }
             tint="plain"
-            title="New Bot"
+            title={ui("New Bot")}
           />
         </div>
       </div>

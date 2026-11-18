@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useCopilotKit, useFrontendTool } from "@copilotkit/react-core/v2";
 import { NOT_SHOWN, NOT_SHOWN_TAIL } from "@openbot/shared/component-markers";
 import {
@@ -201,6 +202,8 @@ export function makeGalleryRender(spec: GalleryComponent, store: GrantStore) {
     result?: string;
     status?: string;
   }) {
+    useLocale();
+
     const snapshot = useSyncExternalStore(
       store.subscribe,
       store.get,
@@ -240,7 +243,9 @@ export function makeGalleryRender(spec: GalleryComponent, store: GrantStore) {
       return (
         <FailedCard
           reason={
-            argumentsFit(spec, props.args) === false ? UNREADABLE : WENT_WRONG
+            argumentsFit(spec, props.args) === false
+              ? ui(UNREADABLE)
+              : ui(WENT_WRONG)
           }
           title={spec.title}
         />
@@ -416,6 +421,8 @@ export function makeDecisionRender(
 ) {
   const Component = spec.Component;
   return function DecisionRender(props: Record<string, unknown>) {
+    useLocale();
+
     const snapshot = useSyncExternalStore(
       store.subscribe,
       store.get,
@@ -443,7 +450,7 @@ export function makeDecisionRender(
       ) &&
       argumentsFit(spec, props.args) === false
     ) {
-      return <FailedCard reason={UNREADABLE} title={spec.title} />;
+      return <FailedCard reason={ui(UNREADABLE)} title={spec.title} />;
     }
     const state = cardState(snapshot, spec.name, spec.title);
     if (state === "draw") return <Component {...props} respond={answer} />;
@@ -476,6 +483,8 @@ function RefusedDecision({
   respond?: (result: unknown) => Promise<void>;
   reason?: string;
 }) {
+  useLocale();
+
   useEffect(() => {
     if (!respond) return;
     void respond(reason).catch(() => {

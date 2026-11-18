@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconChevronRight, IconFileText, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -38,6 +39,7 @@ import { pluginsPageQueryOptions } from "@/lib/plugins/queries";
  * (`new-skill-page.tsx`).
  */
 export function SkillsPage() {
+  useLocale();
   const paths = useManagePaths();
   const plugins = useQuery(pluginsPageQueryOptions());
   const { data: agents } = useQuery(agentListQueryOptions());
@@ -53,8 +55,7 @@ export function SkillsPage() {
       size={size}
       variant={size === "lg" ? "default" : "outline"}
     >
-      <IconPlus />
-      New skill
+      {uiNodes("{{slot0}}New skill", [<IconPlus key="slot0" />])}
     </Button>
   );
 
@@ -63,27 +64,31 @@ export function SkillsPage() {
       action={newSkill("lg")}
       description={
         personal
-          ? "Write instructions your Bots follow when you pick a skill from the / menu. A skill only uses what a Bot can already do."
-          : "Write instructions a Bot follows when someone picks a skill from the / menu. A skill only uses what a Bot can already do, and you choose which Bots offer it."
+          ? ui(
+              "Write instructions your Bots follow when you pick a skill from the / menu. A skill only uses what a Bot can already do.",
+            )
+          : ui(
+              "Write instructions a Bot follows when someone picks a skill from the / menu. A skill only uses what a Bot can already do, and you choose which Bots offer it.",
+            )
       }
-      title="Skills"
+      title={ui("Skills")}
     >
       {/* One section, so no title: the page title already names it. */}
       <PageSection>
         {/* A read that failed says so; `isPending` goes false on it too, and it is not "none". */}
         {plugins.isPending ? null : !plugins.data ? (
           <p className="mt-4 text-destructive text-sm" role="alert">
-            Couldn't load skills. Reload the page.
+            {ui("Couldn't load skills. Reload the page.")}
           </p>
         ) : skills.length === 0 ? (
           <PageEmpty
             action={newSkill("sm")}
             icon={IconFileText}
-            title="No skills yet"
+            title={ui("No skills yet")}
           >
             {personal
-              ? "Write one. Your Bots offer it as soon as you save."
-              : "Write one, then choose which Bots offer it."}
+              ? ui("Write one. Your Bots offer it as soon as you save.")
+              : ui("Write one, then choose which Bots offer it.")}
           </PageEmpty>
         ) : (
           <PageRows>

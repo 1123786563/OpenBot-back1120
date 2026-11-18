@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { outcomeForPerson } from "@openbot/shared/approval-outcomes";
 import { ownToolLabel } from "@openbot/shared/tool-name";
 import { readOutcome } from "@/lib/computers/activity";
@@ -94,7 +95,7 @@ export function browserStepDetails(step: BrowserStep) {
     step.result?.startsWith("Error:") === true ||
     sentence?.ok === false;
   return {
-    label: ownToolLabel(step.toolCall.function.name) ?? undefined,
+    label: ownToolLabel(step.toolCall.function.name, false, ui) ?? undefined,
     href: url?.href,
     title:
       navigation && typeof result.title === "string" && result.title.trim()
@@ -105,7 +106,7 @@ export function browserStepDetails(step: BrowserStep) {
       typeof result.reason === "string"
         ? result.reason
         : sentence?.ok === false && typeof sentence.reason === "string"
-          ? outcomeForPerson(sentence.reason)
+          ? outcomeForPerson(sentence.reason, ui)
           : undefined,
     visited: navigation && result.ok === true,
     pending: step.result === undefined,

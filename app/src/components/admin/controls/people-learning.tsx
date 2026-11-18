@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import type { LearningPersonalReview } from "@openbot/shared/learning";
 import {
   IconCheck,
@@ -55,23 +57,38 @@ const CHOICES: {
 }[] = [
   {
     value: "admins",
-    title: "Admins",
-    description:
-      "A skill learned from a person's recordings waits for an admin.",
+    get title() {
+      return ui("Admins");
+    },
+    get description() {
+      return ui(
+        "A skill learned from a person's recordings waits for an admin.",
+      );
+    },
   },
   {
     value: "people",
-    title: "Each person, for their own Bots",
-    description:
-      "Each person approves the skills learned from their own recordings. Those skills reach only that person's Bots until an admin shares them.",
+    get title() {
+      return ui("Each person, for their own Bots");
+    },
+    get description() {
+      return ui(
+        "Each person approves the skills learned from their own recordings. Those skills reach only that person's Bots until an admin shares them.",
+      );
+    },
   },
 ];
 
 /** What a section says when the settings it depends on did not load. */
 function SettingsError({ message }: { message?: string }) {
+  useLocale();
   return (
     <p className="mt-4 text-destructive text-sm" role="alert">
-      {message ?? "Couldn't load Learning settings. Reload the page."}
+      {message ? (
+        <ErrorDetails error={message} />
+      ) : (
+        ui("Couldn't load Learning settings. Reload the page.")
+      )}
     </p>
   );
 }
@@ -80,18 +97,19 @@ const LABEL = "Who approves skills learned from people's recordings";
 
 /** Admin, Automatic learning: who approves the skills learned from a person's own recordings. */
 export function WhoApprovesSection() {
+  useLocale();
   const [open, setOpen] = useState(false);
   const settings = useQuery(learningSettingsQueryOptions());
   if (settings.isPending) return null;
   if (settings.error || !settings.data)
     return (
-      <PageSection title="Approval">
+      <PageSection title={ui("Approval")}>
         <SettingsError message={settings.error?.message} />
       </PageSection>
     );
   const current = settings.data.personalReview ?? "admins";
   return (
-    <PageSection title="Approval">
+    <PageSection title={ui("Approval")}>
       <PageRows>
         <Item
           render={<button onClick={() => setOpen(true)} type="button" />}
@@ -101,7 +119,7 @@ export function WhoApprovesSection() {
             <IconUserCheck />
           </ItemMedia>
           <ItemContent>
-            <ItemTitle>{LABEL}</ItemTitle>
+            <ItemTitle>{ui(LABEL)}</ItemTitle>
             <ItemDescription>
               {CHOICES.find((choice) => choice.value === current)?.title}
             </ItemDescription>
@@ -125,6 +143,7 @@ function WhoApprovesDialog({
   current: LearningPersonalReview;
   onClose: () => void;
 }) {
+  useLocale();
   const [draft, setDraft] = useState(current);
   const save = useMutation(savePersonalReviewMutationOptions(queryClient));
   return (
@@ -135,7 +154,7 @@ function WhoApprovesDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{LABEL}</DialogTitle>
+          <DialogTitle>{ui(LABEL)}</DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
           <PageRows>
@@ -173,7 +192,7 @@ function WhoApprovesDialog({
           </PageRows>
           {save.error ? (
             <p className="mt-3 text-destructive text-sm" role="alert">
-              {save.error.message}
+              {<ErrorDetails error={save.error} />}
             </p>
           ) : null}
         </DialogBody>
@@ -184,14 +203,14 @@ function WhoApprovesDialog({
             size="sm"
             variant="outline"
           >
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={save.isPending}
             onClick={() => save.mutate(draft, { onSuccess: onClose })}
             size="sm"
           >
-            {save.isPending ? "Saving…" : "Save"}
+            {save.isPending ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -204,6 +223,7 @@ function WhoApprovesDialog({
  * are the ones who approve them. Hidden once each person approves their own.
  */
 export function PeopleProposalsSection() {
+  useLocale();
   const settings = useQuery(learningSettingsQueryOptions());
   const admins = (settings.data?.personalReview ?? "admins") === "admins";
   const people = useQuery({
@@ -218,7 +238,7 @@ export function PeopleProposalsSection() {
   if (settings.isPending) return null;
   if (settings.error)
     return (
-      <PageSection title="From people's recordings">
+      <PageSection title={ui("From people's recordings")}>
         <SettingsError message={settings.error.message} />
       </PageSection>
     );
@@ -233,12 +253,14 @@ export function PeopleProposalsSection() {
   );
   return (
     <PageSection
-      title="From people's recordings"
-      description="Approve a skill to publish it to the Bots of the person who taught it."
+      title={ui("From people's recordings")}
+      description={ui(
+        "Approve a skill to publish it to the Bots of the person who taught it.",
+      )}
     >
       {people.isPending ? null : people.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {people.error.message}
+          {<ErrorDetails error={people.error} />}
         </p>
       ) : (
         <>
@@ -248,14 +270,18 @@ export function PeopleProposalsSection() {
               key={person.userId}
               role="alert"
             >
-              {`Couldn't read ${person.name}'s skills. Reload the page to try again.`}
+              {ui(
+                "Couldn't read {{value0}}'s skills. Reload the page to try again.",
+                { value0: String(person.name) },
+              )}
             </p>
           ))}
           {rows.length === 0 ? (
             unreadable.length > 0 ? null : (
-              <PageEmpty icon={IconSparkles} title="Nothing to review">
-                Skills learned from people's recordings appear here when they
-                are ready.
+              <PageEmpty icon={IconSparkles} title={ui("Nothing to review")}>
+                {ui(
+                  "Skills learned from people's recordings appear here when they are ready.",
+                )}
               </PageEmpty>
             )
           ) : (
@@ -307,7 +333,9 @@ export function PeopleProposalsSection() {
             review.reset();
           }}
           onDecide={(decision) => review.mutate({ ...open, decision })}
-          publishedNote="Published. Their Bots use it from their next conversation."
+          publishedNote={ui(
+            "Published. Their Bots use it from their next conversation.",
+          )}
         />
       ) : null}
     </PageSection>
@@ -319,6 +347,7 @@ export function PeopleProposalsSection() {
  * while each person approves their own skills, and whenever a request is waiting.
  */
 export function SharingRequestsSection() {
+  useLocale();
   const settings = useQuery(learningSettingsQueryOptions());
   const requests = useQuery(sharingRequestsQueryOptions());
   const decide = useMutation(decideSharingMutationOptions(queryClient));
@@ -355,19 +384,19 @@ export function SharingRequestsSection() {
   };
   return (
     <PageSection
-      title="Sharing requests"
-      description="Approve a request to open a skill to every Bot."
+      title={ui("Sharing requests")}
+      description={ui("Approve a request to open a skill to every Bot.")}
     >
       {settings.error ? (
         <SettingsError message={settings.error.message} />
       ) : null}
       {requests.isPending ? null : requests.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {requests.error.message}
+          {<ErrorDetails error={requests.error} />}
         </p>
       ) : rows.length === 0 ? (
-        <PageEmpty icon={IconShare} title="No requests to share">
-          Requests to share a skill appear here when people send them.
+        <PageEmpty icon={IconShare} title={ui("No requests to share")}>
+          {ui("Requests to share a skill appear here when people send them.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -410,7 +439,7 @@ export function SharingRequestsSection() {
             <>
               {decide.error ? (
                 <p className="mr-auto text-destructive text-sm" role="alert">
-                  {decide.error.message}
+                  {<ErrorDetails error={decide.error} />}
                 </p>
               ) : null}
               <Button
@@ -428,7 +457,7 @@ export function SharingRequestsSection() {
                 size="sm"
                 variant="outline"
               >
-                Decline
+                {ui("Decline")}
               </Button>
               <Button
                 disabled={cannotDecide}
@@ -444,7 +473,7 @@ export function SharingRequestsSection() {
                 }
                 size="sm"
               >
-                {decide.isPending ? "Saving…" : "Approve sharing"}
+                {decide.isPending ? ui("Saving…") : ui("Approve sharing")}
               </Button>
             </>
           ) : undefined

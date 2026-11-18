@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -22,16 +23,21 @@ export const Route = createFileRoute("/_authed/admin/providers")({
  * to allow and no allowlist is shown. A team picks among the models an admin allows here.
  */
 export function ProvidersPage() {
+  useLocale();
   const available = useQuery(availableModelsQueryOptions());
   const team = available.data?.exposure === "allowed";
   return (
     <PageShell
       description={
         team
-          ? "See which provider serves your Bots' models, and choose which models people may pick. All changes appear in Audit."
-          : "See which provider serves your Bots' models and what they ran on."
+          ? ui(
+              "See which provider serves your Bots' models, and choose which models people may pick. All changes appear in Audit.",
+            )
+          : ui(
+              "See which provider serves your Bots' models and what they ran on.",
+            )
       }
-      title="Providers"
+      title={ui("Providers")}
     >
       <ProviderSection />
       <ModelChoiceSection />

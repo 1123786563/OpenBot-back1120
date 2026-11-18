@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { BotBrowserApiState } from "@openbot/shared/bot-browser";
 import { IconLock, IconWorld, IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -177,6 +178,7 @@ function NothingToSee({
   /** The page that turn opened, named when there is no picture of it. */
   page?: { url?: string; title?: string } | undefined;
 }) {
+  useLocale();
   return (
     <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-4 text-center text-muted-foreground text-sm">
       {settled ? (
@@ -197,36 +199,44 @@ function NothingToSee({
           {/* A turn that opened no page never gets here: it draws no card at all (see `nothingOpened`). */}
           {page?.url ? (
             <>
-              <span className="font-medium">{page.title || "A page"}</span>
+              <span className="font-medium">{page.title || ui("A page")}</span>
               <span className="break-all">{hostOf(page.url)}</span>
               <span>
-                Opened during this turn. The screen has moved on since.
+                {ui("Opened during this turn. The screen has moved on since.")}
               </span>
             </>
           ) : null}
         </>
       ) : problem ? (
         <>
-          <span className="font-medium">Can't show the screen right now</span>
+          <span className="font-medium">
+            {ui("Can't show the screen right now")}
+          </span>
           <span>{problem}</span>
           <span>
-            The Bot may still be working. If this keeps happening, ask an admin
-            to check its Computer.
+            {ui(
+              "The Bot may still be working. If this keeps happening, ask an admin to check its Computer.",
+            )}
           </span>
         </>
       ) : waiting === "starting" ? (
         <span role="status">
-          Starting {owner} computer. The first start takes about a minute.
+          {uiNodes(
+            "Starting {{slot0}}computer. The first start takes about a minute.",
+            [owner],
+          )}
         </span>
       ) : waiting === "asleep" ? (
         <span role="status">
-          {capitalise(owner)} computer is off. It starts when the Bot next uses
-          it.
+          {uiNodes(
+            "{{slot0}}computer is off. It starts when the Bot next uses it.",
+            [capitalise(owner)],
+          )}
         </span>
       ) : blankBrowser ? (
-        <span>Nothing is open in the Bot's browser right now.</span>
+        <span>{ui("Nothing is open in the Bot's browser right now.")}</span>
       ) : (
-        <span>Waiting for the Bot's screen…</span>
+        <span>{ui("Waiting for the Bot's screen…")}</span>
       )}
     </span>
   );
@@ -258,6 +268,7 @@ function BrowserWindow({
   onNavigated: () => void;
   children: ReactNode;
 }) {
+  useLocale();
   const space = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const width = useFittedWidth(space, frame, aspectRatio, { shown: live });
@@ -295,6 +306,7 @@ function WheelColumn({
   live: boolean;
   children: ReactNode;
 }) {
+  useLocale();
   if (!live) return children;
   return (
     <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:w-96 lg:shrink-0 lg:overflow-y-auto lg:pt-10">
@@ -356,6 +368,7 @@ export function ComputerView({
   toolCallId,
   startupGraceMs = STARTUP_GRACE_MS,
 }: Props) {
+  useLocale();
   const [shot, setShot] = useState<Screenshot | null>(null);
   /**
    * The last screenshot that was attempted and failed. Held, not shown: see `shownProblem` below.
@@ -700,7 +713,7 @@ export function ComputerView({
   const polledScreen = showScreen ? (
     <img
       src={`data:image/png;base64,${drawn.base64}`}
-      alt="What the Bot is looking at"
+      alt={ui("What the Bot is looking at")}
       // Keep unexpected screenshot dimensions inside the reserved frame.
       className="absolute inset-0 h-full w-full object-contain opacity-100 transition-opacity duration-300 starting:opacity-0"
     />
@@ -792,14 +805,14 @@ export function ComputerView({
              */
             className="relative block w-full cursor-pointer bg-muted"
             style={frameStyle}
-            aria-label="Open the Bot's screen full size"
+            aria-label={ui("Open the Bot's screen full size")}
           >
             {polledScreen}
 
             {/* Whose hands are on it, said on the picture itself. Whose computer it is, the frame above says. */}
             {wheelHere ? (
               <span className="absolute right-2 bottom-2 rounded-full border bg-popover px-2.5 py-1 font-medium text-popover-foreground text-xs shadow-sm">
-                You have control
+                {ui("You have control")}
               </span>
             ) : null}
 
@@ -828,13 +841,15 @@ export function ComputerView({
                 ) : null}
                 <span className="min-w-0 truncate">
                   {!control
-                    ? "Checking who has control…"
+                    ? ui("Checking who has control…")
                     : control.transitioning
-                      ? "Finishing the current action…"
+                      ? ui("Finishing the current action…")
                       : someoneElse
-                        ? "Someone else has control."
+                        ? ui("Someone else has control.")
                         : // Who holds the wheel, which is always true; whether it is acting right now, the page shows.
-                          `${name ?? "The Bot"} has control`}
+                          ui("{{value0}} has control", {
+                            value0: String(name ?? "The Bot"),
+                          })}
                 </span>
               </span>
               <ComputerControlButton
@@ -850,7 +865,9 @@ export function ComputerView({
         {!driving && !settled && control?.requested ? (
           <div className="flex items-start justify-between gap-3 border-t bg-amber-500/10 px-3 py-2 text-sm">
             <span>
-              <strong className="font-medium">The Bot needs you.</strong>{" "}
+              <strong className="font-medium">
+                {ui("The Bot needs you.")}
+              </strong>{" "}
               {reason}
             </span>
           </div>
@@ -864,15 +881,17 @@ export function ComputerView({
               disabled={changingControl}
               onClick={() => void changeControl?.("cancel")}
             >
-              Cancel request
+              {ui("Cancel request")}
             </button>
           </div>
         ) : null}
         {!settled && control?.transitioning ? (
           <p className="px-3 py-2 text-sm">
             {someoneElse
-              ? "Finishing the Bot's current action…"
-              : "Finishing the Bot's current action before giving you control…"}
+              ? ui("Finishing the Bot's current action…")
+              : ui(
+                  "Finishing the Bot's current action before giving you control…",
+                )}
           </p>
         ) : null}
         {/*
@@ -881,13 +900,15 @@ export function ComputerView({
         */}
         {!settled && control?.recoveryRequired ? (
           <p className="px-3 py-2 text-sm">
-            The Computer stopped while you had control. Take control to check
-            the page, then hand it back to the Bot.
+            {ui(
+              "The Computer stopped while you had control. Take control to check the page, then hand it back to the Bot.",
+            )}
           </p>
         ) : !settled && control?.request?.status === "interrupted" ? (
           <p className="px-3 py-2 text-sm text-muted-foreground">
-            The Computer stopped before anyone took control. The Bot will ask
-            again if it still needs you.
+            {ui(
+              "The Computer stopped before anyone took control. The Bot will ask again if it still needs you.",
+            )}
           </p>
         ) : null}
         {/*
@@ -911,7 +932,7 @@ export function ComputerView({
             }}
           >
             <label className="block" htmlFor="openbot-secret">
-              <span className="font-medium">The Bot needs </span>
+              <span className="font-medium">{ui("The Bot needs")} </span>
               <span>{control.secretWanted}</span>
             </label>
             <div className="mt-1.5 flex gap-2">
@@ -923,7 +944,7 @@ export function ComputerView({
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder="Never shown to the Bot"
+                placeholder={ui("Never shown to the Bot")}
                 className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-sm"
               />
               <button
@@ -931,12 +952,13 @@ export function ComputerView({
                 disabled={!secret || sendingSecret}
                 className="shrink-0 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
               >
-                {sendingSecret ? "Sending…" : "Send to the page"}
+                {sendingSecret ? ui("Sending…") : ui("Send to the page")}
               </button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              This goes straight to the page. It isn't shown in the
-              conversation, and the Bot never sees it.
+              {ui(
+                "This goes straight to the page. It isn't shown in the conversation, and the Bot never sees it.",
+              )}
             </p>
             {secretProblem ? (
               <p className="mt-1 text-xs text-destructive">{secretProblem}</p>
@@ -953,8 +975,14 @@ export function ComputerView({
         {!settled && driving && !control?.transitioning ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-amber-500/10 px-3 py-2">
             <span className="text-sm">
-              <strong className="font-medium">You have control.</strong> The Bot
-              waits until you hand it back. Open the screen to click and type.
+              {uiNodes(
+                "{{slot0}}The Bot waits until you hand it back. Open the screen to click and type.",
+                [
+                  <strong key="slot0" className="font-medium">
+                    {ui("You have control.")}
+                  </strong>,
+                ],
+              )}
             </span>
             <ComputerControlButton
               computerId={computerId}
@@ -977,7 +1005,7 @@ export function ComputerView({
             <div
               role="dialog"
               aria-modal="true"
-              aria-label="The Bot's screen"
+              aria-label={ui("The Bot's screen")}
               className={`fixed inset-0 z-50 flex flex-col overflow-y-auto ${settled ? "p-4 sm:p-8" : "p-2 sm:p-4"}`}
             >
               {/*
@@ -1020,8 +1048,8 @@ export function ComputerView({
                   <button
                     type="button"
                     onClick={() => setExpanded(false)}
-                    aria-label="Close the Bot's screen"
-                    title="Close (Esc)"
+                    aria-label={ui("Close the Bot's screen")}
+                    title={ui("Close (Esc)")}
                     className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <IconX className="size-5" aria-hidden />
@@ -1053,7 +1081,7 @@ export function ComputerView({
                        */
                       <div className="relative w-full" style={{ aspectRatio }}>
                         <img
-                          alt="What this turn had open"
+                          alt={ui("What this turn had open")}
                           className="absolute inset-0 h-full w-full object-contain"
                           src={`data:image/png;base64,${drawn.base64}`}
                         />
@@ -1081,7 +1109,7 @@ export function ComputerView({
                             role="status"
                             className="absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 font-medium text-white text-xs backdrop-blur-sm"
                           >
-                            Reconnecting…
+                            {ui("Reconnecting…")}
                           </span>
                         ) : null}
                         {/*
@@ -1101,7 +1129,7 @@ export function ComputerView({
                                 setRetryKey((value) => value + 1);
                               }}
                             >
-                              Retry
+                              {ui("Retry")}
                             </button>
                           </div>
                         ) : null}
@@ -1134,8 +1162,10 @@ export function ComputerView({
                       }
                     >
                       {someoneElse
-                        ? "Finishing the current action…"
-                        : "Finishing the current action before giving you control…"}
+                        ? ui("Finishing the current action…")
+                        : ui(
+                            "Finishing the current action before giving you control…",
+                          )}
                     </p>
                   ) : null}
                   {settled ? null : (
@@ -1152,17 +1182,19 @@ export function ComputerView({
                         ) : null}
                         {driving ? (
                           <span className="truncate text-muted-foreground lg:whitespace-normal">
-                            You have control. Click and type on the page.
-                            {reason ? ` ${reason}` : null}
+                            {uiNodes(
+                              "You have control. Click and type on the page.{{slot0}}",
+                              [reason ? ` ${reason}` : null],
+                            )}
                           </span>
                         ) : someoneElse ? (
                           <span className="truncate text-muted-foreground lg:whitespace-normal">
-                            Someone else has control.
+                            {ui("Someone else has control.")}
                           </span>
                         ) : control?.requested ? (
                           <span className="truncate text-muted-foreground lg:whitespace-normal">
                             <strong className="font-medium text-foreground">
-                              The Bot needs you.
+                              {ui("The Bot needs you.")}
                             </strong>{" "}
                             {reason}
                           </span>
@@ -1182,8 +1214,9 @@ export function ComputerView({
                     />
                   ) : botBrowser.error ? (
                     <p className="text-destructive text-sm" role="alert">
-                      Couldn't load the Bot's browser. Close this and open it
-                      again.
+                      {ui(
+                        "Couldn't load the Bot's browser. Close this and open it again.",
+                      )}
                     </p>
                   ) : null}
                 </WheelColumn>

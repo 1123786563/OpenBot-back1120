@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronRight, IconSparkles } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -38,12 +39,15 @@ import { desktopShell } from "@/lib/desktop/shell";
  * older desktop app that can't say draws nothing either.
  */
 export function AiModelSection() {
+  useLocale();
   const connection = useQuery(desktopAiConnectionQueryOptions());
   if (desktopShell() === null || !connection.data) return null;
   return (
     <PageSection
-      description="Choose the AI provider your Bots use and how OpenBot signs in to it."
-      title="AI model"
+      description={ui(
+        "Choose the AI provider your Bots use and how OpenBot signs in to it.",
+      )}
+      title={ui("AI model")}
     >
       <PageRows>
         <AiConnectionRow connection={connection.data} />
@@ -53,6 +57,7 @@ export function AiModelSection() {
 }
 
 function AiConnectionRow({ connection }: { connection: DesktopAiConnection }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const change = useMutation(changeAiConnectionMutationOptions());
   const described = describeAiConnection(connection);
@@ -68,9 +73,9 @@ function AiConnectionRow({ connection }: { connection: DesktopAiConnection }) {
           <IconSparkles />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>{described?.provider ?? "Not chosen yet"}</ItemTitle>
+          <ItemTitle>{described?.provider ?? ui("Not chosen yet")}</ItemTitle>
           <ItemDescription>
-            {described?.summary ?? "Choose the AI your Bots use."}
+            {described?.summary ?? ui("Choose the AI your Bots use.")}
           </ItemDescription>
         </ItemContent>
         <ItemActions>
@@ -80,11 +85,14 @@ function AiConnectionRow({ connection }: { connection: DesktopAiConnection }) {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>AI connection</DialogTitle>
+            <DialogTitle>{ui("AI connection")}</DialogTitle>
             <DialogDescription>
               {described
-                ? `Your Bots use ${described.provider}. Your key or sign-in stays on this computer.`
-                : "Your Bots don't have an AI provider yet."}
+                ? ui(
+                    "Your Bots use {{value0}}. Your key or sign-in stays on this computer.",
+                    { value0: String(described.provider) },
+                  )
+                : ui("Your Bots don't have an AI provider yet.")}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4 flex flex-col gap-3 text-sm">
@@ -112,25 +120,26 @@ function AiConnectionRow({ connection }: { connection: DesktopAiConnection }) {
               </ItemGroup>
             )}
             <p className="text-muted-foreground">
-              To change it, OpenBot stops and the setup window opens. OpenBot
-              starts again with the connection you choose there.
+              {ui(
+                "To change it, OpenBot stops and the setup window opens. OpenBot starts again with the connection you choose there.",
+              )}
             </p>
             {change.error ? (
               <p className="text-destructive" role="alert">
-                Couldn't open the setup window. Try again.
+                {ui("Couldn't open the setup window. Try again.")}
               </p>
             ) : null}
           </DialogBody>
           <DialogFooter className="mt-4">
             <Button onClick={() => setOpen(false)} size="sm" variant="ghost">
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={stopping}
               onClick={() => change.mutate()}
               size="sm"
             >
-              {stopping ? "Stopping OpenBot…" : "Change AI connection"}
+              {stopping ? ui("Stopping OpenBot…") : ui("Change AI connection")}
             </Button>
           </DialogFooter>
         </DialogContent>

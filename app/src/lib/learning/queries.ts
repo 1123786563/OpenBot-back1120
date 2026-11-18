@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type {
   LearnedSkillDetail,
   LearningAutoAssignState,
@@ -56,7 +57,9 @@ export function personalLearningQueryOptions() {
     queryFn: async (): Promise<PersonalLearningSharing> =>
       (
         await client("/api/settings/learning", {
-          fallback: "Couldn't load your Learning settings. Reload the page.",
+          fallback: ui(
+            "Couldn't load your Learning settings. Reload the page.",
+          ),
         })
       ).json(),
   });
@@ -66,7 +69,7 @@ export function learningSettingsQueryOptions() {
     queryKey: learningKeys.settings,
     queryFn: (): Promise<LearningSettings> =>
       client("/api/admin/learning/settings", "settings", {
-        fallback: "Learning settings could not be loaded.",
+        fallback: ui("Learning settings could not be loaded."),
       }),
   });
 }
@@ -79,7 +82,7 @@ export function learningAutomaticQueryOptions() {
       (await client<LearningAutoAssignState | undefined>(
         "/api/admin/learning/settings",
         "automatic",
-        { fallback: "Learning settings could not be loaded." },
+        { fallback: ui("Learning settings could not be loaded.") },
       )) ?? null,
   });
 }
@@ -91,7 +94,7 @@ export function learningOverviewQueryOptions(agentId?: string) {
       client(
         `/api/admin/learning/overview${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
         "overview",
-        { fallback: "Learning status could not be loaded." },
+        { fallback: ui("Learning status could not be loaded.") },
       ),
   });
 }
@@ -104,7 +107,7 @@ export function learningDeliveryQueryOptions(agentId: string) {
       client(
         `/api/admin/learning/status/${encodeURIComponent(agentId)}`,
         "status",
-        { fallback: "Skill delivery status could not be loaded." },
+        { fallback: ui("Skill delivery status could not be loaded.") },
       ),
   });
 }
@@ -113,7 +116,7 @@ export function createLearningContainer(): Promise<LearningAutoAssignState> {
   return client("/api/admin/learning/container", "automatic", {
     method: "POST",
     body: {},
-    fallback: "The Learning container could not be created.",
+    fallback: ui("The Learning container could not be created."),
   });
 }
 export function saveLearningSettings(
@@ -122,7 +125,7 @@ export function saveLearningSettings(
   return client("/api/admin/learning/settings", "settings", {
     method: "PUT",
     body: settings,
-    fallback: "Learning settings could not be saved.",
+    fallback: ui("Learning settings could not be saved."),
   });
 }
 
@@ -140,7 +143,7 @@ export function learningProposalsQueryOptions(agentId?: string) {
     queryFn: async (): Promise<LearningProposals> =>
       (
         await client(`/api/admin/learning/proposals${forBot(agentId)}`, {
-          fallback: "Couldn't load proposed skills. Try again.",
+          fallback: ui("Couldn't load proposed skills. Try again."),
         })
       ).json(),
   });
@@ -158,7 +161,7 @@ export function learningProposalQueryOptions(
       client(
         `/api/admin/learning/proposals/${encodeURIComponent(proposalId)}${forBot(agentId)}`,
         "proposal",
-        { fallback: "Couldn't load this skill. Try again." },
+        { fallback: ui("Couldn't load this skill. Try again.") },
       ),
   });
 }
@@ -174,7 +177,7 @@ export function learningRunsQueryOptions(agentId?: string) {
     }> =>
       (
         await client(`/api/admin/learning/runs${forBot(agentId)}`, {
-          fallback: "Couldn't load analysis runs. Try again.",
+          fallback: ui("Couldn't load analysis runs. Try again."),
         })
       ).json(),
   });
@@ -191,7 +194,7 @@ export function learnedSkillsQueryOptions(agentId?: string) {
     }> =>
       (
         await client(`/api/admin/learning/skills${forBot(agentId)}`, {
-          fallback: "Couldn't load published skills. Try again.",
+          fallback: ui("Couldn't load published skills. Try again."),
         })
       ).json(),
   });
@@ -225,7 +228,7 @@ export function learnedSkillQueryOptions(
     retry: false,
     queryFn: (): Promise<LearnedSkillDetail> =>
       client(learnedSkillPath(source, name), "skill", {
-        fallback: "Couldn't load this skill. Try again.",
+        fallback: ui("Couldn't load this skill. Try again."),
       }),
   });
 }
@@ -247,7 +250,7 @@ export function personalReviewQueryOptions() {
     queryFn: async (): Promise<PersonalReview> =>
       (
         await client("/api/settings/learning/review", {
-          fallback: "Couldn't load your skills to review. Reload the page.",
+          fallback: ui("Couldn't load your skills to review. Reload the page."),
         })
       ).json(),
   });
@@ -265,7 +268,7 @@ export function personalProposalQueryOptions(
       client(
         `/api/settings/learning/proposals/${encodeURIComponent(proposalId)}?container=${encodeURIComponent(container)}`,
         "proposal",
-        { fallback: "Couldn't load this skill. Try again." },
+        { fallback: ui("Couldn't load this skill. Try again.") },
       ),
   });
 }
@@ -278,7 +281,7 @@ export function peopleProposalsQueryOptions() {
     queryFn: async (): Promise<PeopleProposals> =>
       (
         await client("/api/admin/learning/people/proposals", {
-          fallback: "Couldn't load people's skills to review. Try again.",
+          fallback: ui("Couldn't load people's skills to review. Try again."),
         })
       ).json(),
   });
@@ -293,7 +296,7 @@ export function personProposalQueryOptions(userId: string, proposalId: string) {
       client(
         `/api/admin/learning/people/${encodeURIComponent(userId)}/proposals/${encodeURIComponent(proposalId)}`,
         "proposal",
-        { fallback: "Couldn't load this skill. Try again." },
+        { fallback: ui("Couldn't load this skill. Try again.") },
       ),
   });
 }
@@ -305,7 +308,7 @@ export function sharingRequestsQueryOptions() {
     retry: false,
     queryFn: (): Promise<SharingRequest[]> =>
       client("/api/admin/learning/sharing-requests", "requests", {
-        fallback: "Couldn't load sharing requests. Try again.",
+        fallback: ui("Couldn't load sharing requests. Try again."),
       }),
   });
 }
@@ -327,7 +330,7 @@ export function recordingSkillsQueryOptions(
       (
         await client(
           `/api/settings/learning/recording-skills?title=${encodeURIComponent(title)}&since=${since}`,
-          { fallback: "Couldn't read your skills just now. Try again." },
+          { fallback: ui("Couldn't read your skills just now. Try again.") },
         )
       ).json(),
   });

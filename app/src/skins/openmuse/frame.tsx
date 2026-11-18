@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBell,
   IconBulb,
@@ -47,11 +48,41 @@ import { type MuseIcon, RoundButton } from "./ui";
 const PRODUCT = appConfig.brand.productName;
 
 const TABS: { id: MuseTab; label: string; icon: MuseIcon }[] = [
-  { id: "chat", label: "Chat", icon: IconMessageCircle },
-  { id: "activity", label: "Activity", icon: IconTable },
-  { id: "ideas", label: "Ideas", icon: IconBulb },
-  { id: "goals", label: "Goals", icon: IconSquareCheck },
-  { id: "apps", label: "Apps", icon: IconTriangleSquareCircle },
+  {
+    id: "chat",
+    get label() {
+      return ui("Chat");
+    },
+    icon: IconMessageCircle,
+  },
+  {
+    id: "activity",
+    get label() {
+      return ui("Activity");
+    },
+    icon: IconTable,
+  },
+  {
+    id: "ideas",
+    get label() {
+      return ui("Ideas");
+    },
+    icon: IconBulb,
+  },
+  {
+    id: "goals",
+    get label() {
+      return ui("Goals");
+    },
+    icon: IconSquareCheck,
+  },
+  {
+    id: "apps",
+    get label() {
+      return ui("Apps");
+    },
+    icon: IconTriangleSquareCircle,
+  },
 ];
 
 /**
@@ -60,6 +91,7 @@ const TABS: { id: MuseTab; label: string; icon: MuseIcon }[] = [
  * conversations are OpenBot's own chat routes, rendered as `children`.
  */
 export function OpenMuseFrame({ children }: { children: ReactNode }) {
+  useLocale();
   // The roster's socket. OpenBot opens it in its sidebar, which this frame replaces.
   useChannelEvents();
   const pathname = useRouterState({
@@ -144,7 +176,7 @@ export function OpenMuseFrame({ children }: { children: ReactNode }) {
             <div className="absolute top-4 left-0">
               <RoundButton
                 icon={IconMenu2}
-                label="Open conversations and menu"
+                label={ui("Open conversations and menu")}
                 onClick={() => setSheet("menu")}
               >
                 {/* OpenBot's own "a Bot needs you" mark, worn as OpenMuse's dot. */}
@@ -156,7 +188,12 @@ export function OpenMuseFrame({ children }: { children: ReactNode }) {
             <div className="pointer-events-none flex flex-col items-center">
               <button
                 aria-label={
-                  bot ? `${bot.name}, ${status}. Switch Bot` : "Choose a Bot"
+                  bot
+                    ? ui("{{value0}}, {{value1}}. Switch Bot", {
+                        value0: String(bot.name),
+                        value1: String(status),
+                      })
+                    : ui("Choose a Bot")
                 }
                 className="group pointer-events-auto flex max-w-[70%] flex-col items-center gap-px rounded-2xl outline-none transition-opacity active:opacity-65 focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none"
                 onClick={() => setSheet("bots")}
@@ -189,14 +226,16 @@ export function OpenMuseFrame({ children }: { children: ReactNode }) {
                   className="mb-1.5 max-w-full truncate text-[11px] text-muted-foreground"
                   data-testid="openmuse-status"
                 >
-                  {bot ? status : agents.isPending ? "" : "No Bots yet"}
+                  {bot ? status : agents.isPending ? "" : ui("No Bots yet")}
                 </span>
               </button>
             </div>
             <div className="absolute top-4 right-0">
               <RoundButton
                 icon={IconBell}
-                label={`Needs you, ${waiting} waiting`}
+                label={ui("Needs you, {{value0}} waiting", {
+                  value0: String(waiting),
+                })}
                 onClick={() => setSheet("notifications")}
               >
                 {waiting > 0 ? (
@@ -285,6 +324,7 @@ function TabLink({
   className: string;
   children: ReactNode;
 }) {
+  useLocale();
   const shared = {
     "aria-current": active ? ("page" as const) : undefined,
     "aria-label": label,

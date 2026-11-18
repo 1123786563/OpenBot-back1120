@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, getLocale } from "@/lib/i18n";
 import { IconDeviceMobile, IconDevices, IconSend } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
@@ -67,23 +69,26 @@ const STATE: Record<Delivery["state"], string> = {
 
 /** The phones that receive push notifications for every one of the person's Bots. */
 export function NativeDevices() {
+  useLocale();
   const reach = useQuery(deliveryQueryOptions());
   const remove = useMutation(removePushDeviceMutationOptions(queryClient));
   const error = reach.error ?? remove.error;
   return (
     <PageSection
-      description="Sign in to the OpenBot app on your phone and turn on notifications to add it here."
-      title="Your devices"
+      description={ui(
+        "Sign in to the OpenBot app on your phone and turn on notifications to add it here.",
+      )}
+      title={ui("Your devices")}
     >
       {error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {error.message}
+          {<ErrorDetails error={error} />}
         </p>
       ) : null}
       {reach.isPending || !reach.data ? null : reach.data.devices.length ===
         0 ? (
-        <PageEmpty icon={IconDevices} title="No devices yet">
-          Phones and computers you sign in on show up here.
+        <PageEmpty icon={IconDevices} title={ui("No devices yet")}>
+          {ui("Phones and computers you sign in on show up here.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -104,7 +109,7 @@ export function NativeDevices() {
                     size="sm"
                     variant="outline"
                   >
-                    Remove
+                    {ui("Remove")}
                   </Button>
                 </ItemActions>
               </Item>
@@ -118,18 +123,19 @@ export function NativeDevices() {
 
 /** What was sent to the person outside the web app, most recent first, with any failure. */
 export function RecentDeliveries() {
+  useLocale();
   const reach = useQuery(deliveryQueryOptions());
   return (
-    <PageSection title="Recent deliveries">
+    <PageSection title={ui("Recent deliveries")}>
       {reach.error ? (
         <p className="mt-4 text-destructive text-sm" role="alert">
-          {reach.error.message}
+          {<ErrorDetails error={reach.error} />}
         </p>
       ) : null}
       {reach.isPending || !reach.data ? null : reach.data.deliveries.length ===
         0 ? (
-        <PageEmpty icon={IconSend} title="No deliveries yet">
-          Notifications sent to your devices show up here.
+        <PageEmpty icon={IconSend} title={ui("No deliveries yet")}>
+          {ui("Notifications sent to your devices show up here.")}
         </PageEmpty>
       ) : (
         <PageRows>
@@ -144,7 +150,7 @@ export function RecentDeliveries() {
                   <ItemTitle>{KIND[delivery.kind]}</ItemTitle>
                   <ItemDescription>
                     {CHANNEL[delivery.transport]} · {STATE[delivery.state]} ·{" "}
-                    {new Date(delivery.createdAt).toLocaleString()}
+                    {new Date(delivery.createdAt).toLocaleString(getLocale())}
                   </ItemDescription>
                   {delivery.error ? (
                     <ItemDescription className="line-clamp-none text-destructive">

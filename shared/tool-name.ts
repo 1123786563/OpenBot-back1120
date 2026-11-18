@@ -4,6 +4,8 @@ import { RESEARCH_ROLE_LABELS, researchRoleOfTool } from "./research";
 import { SUBAGENT_TOOL } from "./subagent";
 import { lowerFirst, nameInWords } from "./tool-name-words";
 import { SEARCH_TOOLS } from "./tool-search";
+import { z } from "zod";
+import { englishInterface, type InterfaceTranslator } from "./interface-copy";
 
 /**
  * A tool call, named the way the person watching would name it.
@@ -27,8 +29,12 @@ export type ToolName = {
   detail?: string;
 };
 
-export function readToolName(name: string, running = false): ToolName {
-  const own = ownToolLabel(name, running);
+export function readToolName(
+  name: string,
+  running = false,
+  translate: InterfaceTranslator = englishInterface,
+): ToolName {
+  const own = ownToolLabel(name, running, translate);
   if (own) return { label: own };
   const parts = name.split("__");
   if (parts.length < 3 || parts[0] !== "mcp")
@@ -37,8 +43,8 @@ export function readToolName(name: string, running = false): ToolName {
         wordsOf(name).length > 0
           ? humanise(name)
           : running
-            ? "Using a tool"
-            : "Used a tool",
+            ? translate("Using a tool")
+            : translate("Used a tool"),
     };
 
   const [, rawServer, ...rest] = parts;
@@ -48,10 +54,10 @@ export function readToolName(name: string, running = false): ToolName {
    * "routines".
    */
   if (rawServer === ROUTINES_APP) {
-    const goal = ownToolLabel(rest.join("__"), running);
+    const goal = ownToolLabel(rest.join("__"), running, translate);
     if (goal) return { label: goal };
   }
-  return appToolName(rawServer ?? "", rest.join("__"));
+  return appToolName(rawServer ?? "", rest.join("__"), translate);
 }
 
 /** The key of OpenBot's own Routines app (`ALWAYS_ON_APP` on the server). */
@@ -61,7 +67,11 @@ const ROUTINES_APP = "routines";
  * One app's tool, from its server key and the tool's own name: what `readToolName` reads out of an
  * `mcp__server__tool` name, and what an approval is asked about as `server/tool`.
  */
-export function appToolName(server: string, tool: string): ToolName {
+export function appToolName(
+  server: string,
+  tool: string,
+  translate: InterfaceTranslator = englishInterface,
+): ToolName {
   const broker = brokeredApp(server);
   /*
    * Research is named for what it did, not for who did it. `web_search_exa` would read "Web search
@@ -69,7 +79,7 @@ export function appToolName(server: string, tool: string): ToolName {
    * their answer. Which provider is granted is an administrator's fact, on the Bot's access page.
    */
   const role = researchRoleOfTool(server, tool);
-  if (role) return { label: RESEARCH_ROLE_LABELS[role] };
+  if (role) return { label: translate(RESEARCH_ROLE_LABELS[role]) };
   /*
    * A BROKERED APP IS NAMED ONCE, AS THE APP, BESIDE THE ACTION. Composio publishes
    * `<APP>_<VERB>_<NOUN>`, so its app leads every action and reads as a vendor's prefix
@@ -138,7 +148,11 @@ export function appToolName(server: string, tool: string): ToolName {
  * The connector a server key names, the way a person would say it: "google-drive" as "Google
  * Drive", and a broker's "composio-airtable" or "arcade-Gmail" as the app alone.
  */
-export function connectorName(server: string): string {
+export function connectorName(
+  server: string,
+  translate: InterfaceTranslator = englishInterface,
+): string {
+  if (server === ROUTINES_APP) return translate("Routines");
   return wordsOf(brokeredApp(server) ?? server)
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
@@ -155,18 +169,21 @@ export function connectorName(server: string): string {
  * action keeps the words it had: a computer's on the site or folder it acts on, a command on the
  * computer it runs on.
  */
-export function approvalWords(action: {
-  toolRef: string;
-  scope: string;
-  /** What the action is aimed at, as the server resolved it. A folder's carries its name. */
-  target?: unknown;
-  /** Which of the person's accounts at the app, where they hold several: "from dana@work.example". */
-  account?: string;
-}): {
+export function approvalWords(
+  action: {
+    toolRef: string;
+    scope: string;
+    /** What the action is aimed at, as the server resolved it. A folder's carries its name. */
+    target?: unknown;
+    /** Which of the person's accounts at the app, where they hold several: "from dana@work.example". */
+    account?: string;
+  },
+  translate: InterfaceTranslator = englishInterface,
+): {
   action: string;
   place: string;
 } {
-  const { action: words, place } = approvalParts(action);
+  const { action: words, place } = approvalParts(action, translate);
   return { action: words, place };
 }
 
@@ -175,31 +192,53 @@ export function approvalWords(action: {
  * email on Gmail", "click on example.com", and a file as its step and its Activity row name it,
  * "save a file todo.txt in share". A step on a whole folder is "in" it.
  */
-export function approvalPhrase(action: {
-  toolRef: string;
-  scope: string;
-  target?: unknown;
-  /** Which of the person's accounts at the app, where they hold several: "from dana@work.example". */
-  account?: string;
-}): string {
-  const { action: words, place, joiner } = approvalParts(action);
-  return joiner ? `${words} ${joiner} ${place}` : `${words} ${place}`;
+export function approvalPhrase(
+  action: {
+    toolRef: string;
+    scope: string;
+    target?: unknown;
+    /** Which of the person's accounts at the app, where they hold several: "from dana@work.example". */
+    account?: string;
+  },
+  translate: InterfaceTranslator = englishInterface,
+): string {
+  const { action: words, place, joiner } = approvalParts(action, translate);
+  return translate(
+    joiner === "on"
+      ? "{{action}} on {{place}}"
+      : joiner === "in"
+        ? "{{action}} in {{place}}"
+        : "{{action}} {{place}}",
+    { action: words, place },
+  );
 }
 
-function approvalParts(action: {
-  toolRef: string;
-  scope: string;
-  target?: unknown;
-  account?: string;
-}): { action: string; place: string; joiner: "on" | "in" | "" } {
+function approvalParts(
+  action: {
+    toolRef: string;
+    scope: string;
+    target?: unknown;
+    account?: string;
+  },
+  translate: InterfaceTranslator,
+): { action: string; place: string; joiner: "on" | "in" | "" } {
   const slash = action.toolRef.indexOf("/");
   const app = action.toolRef.slice(0, slash);
   if (slash > 0 && app === action.scope) {
-    const { label } = appToolName(app, action.toolRef.slice(slash + 1));
+    const { label } = appToolName(
+      app,
+      action.toolRef.slice(slash + 1),
+      translate,
+    );
     const words = lowerFirst(label);
     return {
-      action: action.account ? `${words} from ${action.account}` : words,
-      place: connectorName(app),
+      action: action.account
+        ? translate("{{action}} from {{account}}", {
+            action: words,
+            account: action.account,
+          })
+        : words,
+      place: connectorName(app, translate),
       joiner: "on",
     };
   }
@@ -207,13 +246,16 @@ function approvalParts(action: {
    * A browser action on the site it acts on, with the control it presses when the page named one:
    * "click the link “Python” on en.wikipedia.org". Activity said "Approve computer_click".
    */
-  const browser = browserAction(action.toolRef, action.target);
+  const browser = browserAction(action.toolRef, action.target, translate);
   if (browser) return { action: browser, place: action.scope, joiner: "on" };
   /*
    * A computer's or a folder's own action in the words its step and its Activity row use. The card
    * said "write file on todo.txt in share" above a step that read "Save a file todo.txt in share".
    */
-  const own = ownToolAttempt(action.toolRef.replace(/^host\//, "host_"));
+  const own = ownToolAttempt(
+    action.toolRef.replace(/^host\//, "host_"),
+    translate,
+  );
   const words = own
     ? lowerFirst(own)
     : action.toolRef.replace(/^computer_|^host\//, "").replaceAll("_", " ");
@@ -229,7 +271,7 @@ function approvalParts(action: {
     if (file)
       return {
         action: words,
-        place: inFolder(file, folder) ?? file,
+        place: inFolder(file, folder, translate) ?? file,
         joiner: "",
       };
     if (folder) return { action: words, place: folder, joiner: "in" };
@@ -251,6 +293,7 @@ const INTERNAL_ARGS = new Set(["ref", "snapshotId", "toolCallId", "signal"]);
  */
 export function approvalDetails(
   args: unknown,
+  translate: InterfaceTranslator = englishInterface,
 ): { label: string; value: string }[] {
   if (!args || typeof args !== "object" || Array.isArray(args)) return [];
   return Object.entries(args).flatMap(([key, value]) => {
@@ -261,8 +304,8 @@ export function approvalDetails(
         ? value
         : typeof value === "boolean"
           ? value
-            ? "Yes"
-            : "No"
+            ? translate("Yes")
+            : translate("No")
           : typeof value === "number"
             ? String(value)
             : Array.isArray(value) &&
@@ -273,7 +316,7 @@ export function approvalDetails(
       .map((word) => ACRONYMS[word] ?? word)
       .join(" ");
     const label = words ? words.charAt(0).toUpperCase() + words.slice(1) : key;
-    return [{ label, value: text }];
+    return [{ label: translate(label, { context: "argument" }), value: text }];
   });
 }
 
@@ -287,14 +330,18 @@ const ACRONYMS: Record<string, string> = { url: "URL", id: "ID" };
  * applies, so the line under it need not say "on composio-gmail" again. A pattern a person typed
  * that matches several actions some other way is kept as they wrote it.
  */
-export function ruleTitle(rule: { toolRef: string; scope: string }): {
+export function ruleTitle(
+  rule: { toolRef: string; scope: string },
+  translate: InterfaceTranslator = englishInterface,
+): {
   title: string;
   place: boolean;
 } {
   const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-  if (rule.toolRef === "*") return { title: "Any action", place: false };
+  if (rule.toolRef === "*")
+    return { title: translate("Any action"), place: false };
   if (rule.toolRef === "host/*")
-    return { title: "Any action in your folders", place: false };
+    return { title: translate("Any action in your folders"), place: false };
   const ref = rule.toolRef.replace(/^mcp\//, "");
   const slash = ref.indexOf("/");
   if (slash > 0 && !ref.startsWith("host/")) {
@@ -303,14 +350,30 @@ export function ruleTitle(rule: { toolRef: string; scope: string }): {
     if (app.includes("*")) return { title: rule.toolRef, place: false };
     const named = rule.scope === "*" || rule.scope === app;
     if (tool === "*")
-      return { title: `Any action on ${connectorName(app)}`, place: named };
+      return {
+        title: translate("Any action on {{app}}", {
+          app: connectorName(app, translate),
+        }),
+        place: named,
+      };
     if (tool.includes("*")) return { title: rule.toolRef, place: false };
-    const { action, place } = approvalWords({ toolRef: ref, scope: app });
-    return { title: `${upper(action)} on ${place}`, place: named };
+    const { action, place } = approvalWords(
+      { toolRef: ref, scope: app },
+      translate,
+    );
+    return {
+      title: translate("{{action}} on {{place}}", {
+        action: upper(action),
+        place,
+      }),
+      place: named,
+    };
   }
   if (ref.includes("*")) return { title: rule.toolRef, place: false };
   return {
-    title: upper(approvalWords({ toolRef: ref, scope: rule.scope }).action),
+    title: upper(
+      approvalWords({ toolRef: ref, scope: rule.scope }, translate).action,
+    ),
     place: false,
   };
 }
@@ -339,11 +402,52 @@ const CONTROL_WORDS: Record<string, string> = {
   combobox: "list",
 };
 
+const displayText = z.string().optional().catch(undefined);
+const approvalDisplaySchema = z.object({
+  toolRef: z.string(),
+  scope: z.string(),
+  account: displayText,
+  target: z
+    .object({
+      element: z
+        .object({
+          role: z
+            .string()
+            .refine((role) => Object.hasOwn(CONTROL_WORDS, role))
+            .optional()
+            .catch(undefined),
+          name: z
+            .string()
+            .transform((name) => clipName(name.replace(/\s+/g, " ").trim()))
+            .optional()
+            .catch(undefined),
+        })
+        .optional()
+        .catch(undefined),
+      filePath: displayText,
+      relativePath: displayText,
+      displayName: displayText,
+    })
+    .optional()
+    .catch(undefined),
+});
+export type ApprovalDisplay = z.infer<typeof approvalDisplaySchema>;
+/** Only fields already used by an approval's visible title; no arguments or credentials. */
+export function approvalDisplay(
+  action: Parameters<typeof approvalPhrase>[0],
+): ApprovalDisplay {
+  return approvalDisplaySchema.parse(action);
+}
+
 /**
  * A browser action in words, naming the control it presses from the label the server resolved
  * (`target.element`), never the ref and snapshot the model cited. Undefined for any other action.
  */
-function browserAction(toolRef: string, target: unknown): string | undefined {
+function browserAction(
+  toolRef: string,
+  target: unknown,
+  translate: InterfaceTranslator,
+): string | undefined {
   const base = BROWSER_ACTIONS[toolRef];
   if (!base) return undefined;
   const element =
@@ -357,11 +461,23 @@ function browserAction(toolRef: string, target: unknown): string | undefined {
   const role =
     typeof element?.role === "string" ? CONTROL_WORDS[element.role] : undefined;
   if (toolRef === "computer_click") {
-    if (name) return `click ${role ? `the ${role} ` : ""}“${clipName(name)}”`;
-    return role ? `click ${/^[aeiou]/.test(role) ? "an" : "a"} ${role}` : base;
+    if (name)
+      return translate("click {{control}}“{{name}}”", {
+        control: role
+          ? translate("the {{role}} ", { role: translate(role) })
+          : "",
+        name: clipName(name),
+      });
+    return role
+      ? translate(
+          /^[aeiou]/.test(role) ? "click an {{role}}" : "click a {{role}}",
+          { role: translate(role) },
+        )
+      : translate(base);
   }
-  if (toolRef === "computer_type" && name) return `fill in “${clipName(name)}”`;
-  return base;
+  if (toolRef === "computer_type" && name)
+    return translate("fill in “{{name}}”", { name: clipName(name) });
+  return translate(base);
 }
 
 /** A control's label, short enough for a title. */
@@ -385,9 +501,11 @@ function computerFile(target: unknown): string | undefined {
 export function inFolder(
   file: string | undefined,
   folder: string | undefined,
+  translate: InterfaceTranslator = englishInterface,
 ): string | undefined {
-  if (file && folder) return `${file} in ${folder}`;
-  if (folder) return `in ${folder}`;
+  if (file && folder)
+    return translate("{{file}} in {{folder}}", { file, folder });
+  if (folder) return translate("in {{folder}}", { folder });
   return file || undefined;
 }
 
@@ -689,19 +807,26 @@ const OWN_TOOLS: Record<string, OwnTool> = {
 };
 
 /** One of OpenBot's own tools in words, or null for any other name. */
-export function ownToolLabel(name: string, running = false): string | null {
+export function ownToolLabel(
+  name: string,
+  running = false,
+  translate: InterfaceTranslator = englishInterface,
+): string | null {
   const own = Object.hasOwn(OWN_TOOLS, name) ? OWN_TOOLS[name] : undefined;
   if (!own) return null;
-  return running ? own.running : own.done;
+  return translate(running ? own.running : own.done);
 }
 
 /**
  * What one of OpenBot's own steps asked for, for a step that was blocked and so did not happen, or
  * null when it has no words of its own for that.
  */
-export function ownToolAttempt(name: string): string | null {
+export function ownToolAttempt(
+  name: string,
+  translate: InterfaceTranslator = englishInterface,
+): string | null {
   const own = Object.hasOwn(OWN_TOOLS, name) ? OWN_TOOLS[name] : undefined;
-  return own?.attempted ?? null;
+  return own?.attempted ? translate(own.attempted) : null;
 }
 
 /**

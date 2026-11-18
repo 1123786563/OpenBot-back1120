@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { AbstractAvatar } from "@/components/agents/abstract-avatar";
 import type { ChannelWork } from "@/lib/channels/queries";
 import { ProgressRow } from "./progress-row";
@@ -24,6 +25,8 @@ export function ChannelWorkRows({
   /** The Bot this person knows by that id, when they know it at all. */
   botOf?: (botId: string) => KnownBot | undefined;
 }) {
+  useLocale();
+
   if (!work || work.length === 0) return null;
   return (
     <div className="flex flex-col gap-1" data-testid="channel-work">
@@ -52,7 +55,11 @@ export function ChannelWorkRows({
 
 function labelFor(entry: ChannelWork, name: string | null): string {
   if (entry.kind === "handoff") {
-    return name ? `Asking ${name}…` : "Asking another Bot…";
+    return name
+      ? ui("Asking {{value0}}…", { value0: String(name) })
+      : ui("Asking another Bot…");
   }
-  return name ? `${name} is running a routine…` : "A routine is running…";
+  return name
+    ? ui("{{value0}} is running a routine…", { value0: String(name) })
+    : ui("A routine is running…");
 }

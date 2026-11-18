@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconShieldLock } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -46,7 +48,9 @@ export const Route = createFileRoute("/_authed/admin/approvals_/guidance")({
 });
 
 const BACK = {
-  label: "Approvals",
+  get label() {
+    return ui("Approvals");
+  },
   linkProps: { to: "/admin/approvals" as const },
 };
 
@@ -60,6 +64,7 @@ const BACK = {
  * guidance that still reads as guidance is saved, on the trail, with the words.
  */
 function ReviewerGuidancePage() {
+  useLocale();
   const navigate = Route.useNavigate();
   const saved = useQuery(reviewerGuidanceQueryOptions());
   const preview = useQuery(guidanceBacktestPreviewQueryOptions());
@@ -95,12 +100,14 @@ function ReviewerGuidancePage() {
   return (
     <PageShell
       backButton={BACK}
-      description="Tell the reviewer what your organization needs a person for, or what is routine. It reads your guidance with every action it checks. Nothing changes until you save."
-      title="Guidance for auto-review"
+      description={ui(
+        "Tell the reviewer what your organization needs a person for, or what is routine. It reads your guidance with every action it checks. Nothing changes until you save.",
+      )}
+      title={ui("Guidance for auto-review")}
     >
       {saved.isPending ? null : saved.error ? (
         <p className="text-destructive text-sm" role="alert">
-          {saved.error.message}
+          {<ErrorDetails error={saved.error} />}
         </p>
       ) : (
         <form
@@ -117,38 +124,40 @@ function ReviewerGuidancePage() {
                   render={(props) => <Link {...props} to="/admin/approvals" />}
                   variant="outline"
                 >
-                  Cancel
+                  {ui("Cancel")}
                 </Button>
                 <Button disabled={!ready || save.isPending} type="submit">
-                  {save.isPending ? "Saving…" : "Save guidance"}
+                  {save.isPending ? ui("Saving…") : ui("Save guidance")}
                 </Button>
               </>
             }
           >
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="reviewer-guidance">Guidance</FieldLabel>
+                <FieldLabel htmlFor="reviewer-guidance">
+                  {ui("Guidance")}
+                </FieldLabel>
                 <FieldDescription>
-                  Write it the way you'd brief a colleague. A second reading
-                  that sees only your words says what they change.
+                  {ui(
+                    "Write it the way you'd brief a colleague. A second reading that sees only your words says what they change.",
+                  )}
                 </FieldDescription>
                 <Textarea
                   id="reviewer-guidance"
                   maxLength={GUIDANCE_LIMIT}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Anything that emails someone outside the company needs a person"
+                  placeholder={ui(
+                    "Anything that emails someone outside the company needs a person",
+                  )}
                   rows={4}
                   value={draft ?? saved.data ?? ""}
                 />
                 <p className="flex gap-1.5 text-muted-foreground text-sm">
                   <IconShieldLock className="mt-0.5 size-4 shrink-0" />
                   <span>
-                    Built-in safety always comes first. Deleting, sending,
-                    sharing, posting, paying and changing account settings ask
-                    first. Members can allow each once, for a conversation, or
-                    always, unless you set it to ask every time. Changing a
-                    password on a website is always left to the person. Guidance
-                    can't change that.
+                    {ui(
+                      "Built-in safety always comes first. Deleting, sending, sharing, posting, paying and changing account settings ask first. Members can allow each once, for a conversation, or always, unless you set it to ask every time. Changing a password on a website is always left to the person. Guidance can't change that.",
+                    )}
                   </span>
                 </p>
                 <div>
@@ -159,12 +168,12 @@ function ReviewerGuidancePage() {
                     type="button"
                     variant="outline"
                   >
-                    {check.isPending ? "Checking…" : "Check guidance"}
+                    {check.isPending ? ui("Checking…") : ui("Check guidance")}
                   </Button>
                 </div>
                 {check.error ? (
                   <p className="text-destructive text-sm" role="alert">
-                    {check.error.message}
+                    {<ErrorDetails error={check.error} />}
                   </p>
                 ) : null}
               </Field>
@@ -173,13 +182,17 @@ function ReviewerGuidancePage() {
                   check={checked.reading.check}
                   edited={
                     checked.text !== text
-                      ? "You've changed the guidance since it was checked. Check it again before you save."
+                      ? ui(
+                          "You've changed the guidance since it was checked. Check it again before you save.",
+                        )
                       : null
                   }
                   explanation={checked.reading.explanation}
-                  failed="OpenBot won't save this."
-                  heading="What this changes"
-                  passed="Reads as guidance. Built-in safety still comes first."
+                  failed={ui("OpenBot won't save this.")}
+                  heading={ui("What this changes")}
+                  passed={ui(
+                    "Reads as guidance. Built-in safety still comes first.",
+                  )}
                   warning={null}
                 />
               ) : null}
@@ -193,7 +206,7 @@ function ReviewerGuidancePage() {
             </FieldGroup>
             {save.error ? (
               <p className="mt-5 text-destructive text-sm" role="alert">
-                {save.error.message}
+                {<ErrorDetails error={save.error} />}
               </p>
             ) : null}
           </PageCard>
@@ -201,8 +214,10 @@ function ReviewerGuidancePage() {
       )}
       {saved.data ? (
         <PageSection
-          description="The reviewer goes back to its own instructions from the next action it checks."
-          title="Remove"
+          description={ui(
+            "The reviewer goes back to its own instructions from the next action it checks.",
+          )}
+          title={ui("Remove")}
         >
           <Button
             className="mt-4"
@@ -212,22 +227,23 @@ function ReviewerGuidancePage() {
             }}
             variant="destructive"
           >
-            Remove guidance
+            {ui("Remove guidance")}
           </Button>
         </PageSection>
       ) : null}
       <Dialog onOpenChange={setRemoving} open={removing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove the guidance?</DialogTitle>
+            <DialogTitle>{ui("Remove the guidance?")}</DialogTitle>
             <DialogDescription>
-              The reviewer goes back to its own instructions from the next
-              action it checks.
+              {ui(
+                "The reviewer goes back to its own instructions from the next action it checks.",
+              )}
             </DialogDescription>
           </DialogHeader>
           {remove.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {remove.error.message}
+              {<ErrorDetails error={remove.error} />}
             </p>
           ) : null}
           <DialogFooter>
@@ -236,7 +252,7 @@ function ReviewerGuidancePage() {
               size="sm"
               variant="ghost"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={remove.isPending}
@@ -244,7 +260,7 @@ function ReviewerGuidancePage() {
               size="sm"
               variant="destructive"
             >
-              {remove.isPending ? "Removing…" : "Remove"}
+              {remove.isPending ? ui("Removing…") : ui("Remove")}
             </Button>
           </DialogFooter>
         </DialogContent>

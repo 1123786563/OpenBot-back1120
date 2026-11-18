@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { Link } from "@tanstack/react-router";
 
 /**
@@ -6,14 +7,17 @@ import { Link } from "@tanstack/react-router";
  * means "do this on a schedule".
  */
 export function RoutinesAppHint() {
+  useLocale();
   return (
     <span className="ml-auto flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
-      <span className="truncate">e.g. “every weekday at 9, send me…”</span>
+      <span className="truncate">
+        {ui("e.g. “every weekday at 9, send me…”")}
+      </span>
       <Link
         className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
         to="/routines"
       >
-        Open Routines
+        {ui("Open Routines")}
       </Link>
     </span>
   );

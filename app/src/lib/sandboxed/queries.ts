@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -44,7 +45,7 @@ export function sandboxedListQueryOptions() {
     queryFn: async (): Promise<SandboxedRecord[]> => {
       return (
         (await client("/api/sandboxed", "components", {
-          fallback: "The playground's components could not be loaded.",
+          fallback: ui("The playground's components could not be loaded."),
         })) ?? []
       );
     },
@@ -65,7 +66,7 @@ export function publishedSandboxedQueryOptions() {
     queryFn: async (): Promise<PublishedSandboxed[]> => {
       return (
         (await client("/api/sandboxed/published", "components", {
-          fallback: "The published components could not be loaded.",
+          fallback: ui("The published components could not be loaded."),
         })) ?? []
       );
     },

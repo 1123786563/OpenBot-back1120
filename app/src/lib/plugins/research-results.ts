@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import {
   type ResearchRole,
   researchRoleOfTool,
@@ -13,7 +14,14 @@ export function researchRoleOfCall(name: string): ResearchRole | null {
 
 /** What a list of research results is, for a screen reader. */
 export const RESEARCH_RESULTS_LABELS: Readonly<Record<ResearchRole, string>> =
-  Object.freeze({ search: "Search results", fetch: "Pages read" });
+  Object.freeze({
+    get search() {
+      return ui("Search results");
+    },
+    get fetch() {
+      return ui("Pages read");
+    },
+  });
 
 /** One page a research call found or read, as a person would want to see it. */
 export type ResearchSource = {

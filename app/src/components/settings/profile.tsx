@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { IconChevronRight, IconUserCircle } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
@@ -28,6 +30,7 @@ import { queryClient } from "@/query-client";
  * and onboarding's name step, which draws its own button.
  */
 export function useSaveProfileName(onSaved?: () => void | Promise<void>) {
+  useLocale();
   const options = updateProfileNameMutationOptions(queryClient);
   return useMutation({
     ...options,
@@ -48,6 +51,7 @@ export function ProfileNameForm({
   initialName?: string;
   onSaved?: () => void | Promise<void>;
 }) {
+  useLocale();
   const id = useId();
   const [draft, setDraft] = useState<string | null>(null);
   const name = draft ?? initialName;
@@ -60,7 +64,7 @@ export function ProfileNameForm({
         if (name.trim() && !save.isPending) save.mutate(name.trim());
       }}
     >
-      <label htmlFor={id}>Name</label>
+      <label htmlFor={id}>{ui("profile.name")}</label>
       <Input
         id={id}
         autoComplete="name"
@@ -75,12 +79,12 @@ export function ProfileNameForm({
       />
       {save.error && (
         <p role="alert" className="text-sm text-destructive">
-          {save.error.message}
+          {<ErrorDetails error={save.error} />}
         </p>
       )}
       {save.isSuccess && (
         <p role="status" className="text-sm text-muted-foreground">
-          Your name has been saved.
+          {ui("Your name has been saved.")}
         </p>
       )}
       <Button
@@ -88,7 +92,7 @@ export function ProfileNameForm({
         className="self-end"
         disabled={!name.trim() || save.isPending}
       >
-        {save.isPending ? "Saving…" : "Save name"}
+        {save.isPending ? ui("Saving…") : ui("Save name")}
       </Button>
     </form>
   );
@@ -99,6 +103,7 @@ export function ProfileNameForm({
  * and a dialog on these screens, so the page reads as a list of answers rather than a form.
  */
 export function NameRow() {
+  useLocale();
   const { data: user } = useQuery(currentUserQueryOptions());
   const [open, setOpen] = useState(false);
   const name = user && !user.needsName ? (user.name ?? "") : "";
@@ -112,8 +117,8 @@ export function NameRow() {
           <IconUserCircle />
         </ItemMedia>
         <ItemContent>
-          <ItemTitle>Name</ItemTitle>
-          <ItemDescription>{name || "Not set yet."}</ItemDescription>
+          <ItemTitle>{ui("profile.name")}</ItemTitle>
+          <ItemDescription>{name || ui("Not set yet.")}</ItemDescription>
         </ItemContent>
         <ItemActions>
           <IconChevronRight className="size-4 text-muted-foreground" />
@@ -122,9 +127,9 @@ export function NameRow() {
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Your name</DialogTitle>
+            <DialogTitle>{ui("Your name")}</DialogTitle>
             <DialogDescription>
-              Choose the name OpenBot shows for you.
+              {ui("Choose the name OpenBot shows for you.")}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4">

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import type { AuditFilters } from "@openbot/shared/audit-filters";
 import { client } from "@/lib/client";
 
@@ -37,7 +38,9 @@ export async function askAuditTrail(question: string): Promise<AuditAnswer> {
       // So "yesterday" is the admin's yesterday.
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     },
-    fallback: "Couldn't answer that. Try again, or set the filters yourself.",
+    fallback: ui(
+      "Couldn't answer that. Try again, or set the filters yourself.",
+    ),
   });
   return (await response.json()) as AuditAnswer;
 }

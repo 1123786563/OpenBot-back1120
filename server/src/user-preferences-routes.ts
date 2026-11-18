@@ -1,4 +1,7 @@
-import { SKIN_IDS } from "@openbot/shared/user-preferences";
+import {
+  LANGUAGE_PREFERENCES,
+  SKIN_IDS,
+} from "@openbot/shared/user-preferences";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { AppVariables } from "./auth/guards";
@@ -11,6 +14,7 @@ import type { UserPreferencesStore } from "./user-preferences";
  */
 const preferencesPatch = z
   .strictObject({
+    language: z.enum(LANGUAGE_PREFERENCES).optional(),
     messageListEmphasis: z.enum(["agent", "thread"]).optional(),
     selfHostBannerDismissed: z.boolean().optional(),
     narration: z.enum(["on", "off"]).optional(),

@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconBolt,
   IconChevronRight,
@@ -55,6 +57,7 @@ import { pluginsPageQueryOptions } from "@/lib/plugins/queries";
  * leaves the owner alone, so the command is fixed here (`slugLocked`).
  */
 export function SkillPage({ slug }: { slug: string }) {
+  useLocale();
   const paths = useManagePaths();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -72,7 +75,7 @@ export function SkillPage({ slug }: { slug: string }) {
   const saveSkill = useMutation(saveSkillMutationOptions(queryClient));
   const removeSkill = useMutation(removeSkillMutationOptions(queryClient));
 
-  const back = { label: "Skills", linkProps: paths.skills() };
+  const back = { label: ui("Skills"), linkProps: paths.skills() };
   const skill = plugins.data?.skills.find(
     (candidate) => candidate.slug === slug,
   );
@@ -80,7 +83,7 @@ export function SkillPage({ slug }: { slug: string }) {
   /* Nothing rather than a placeholder, so no sentence asserts anything while the fetch is open. */
   if (plugins.isPending) {
     return (
-      <PageShell backButton={back} title="Skill">
+      <PageShell backButton={back} title={ui("Skill")}>
         {null}
       </PageShell>
     );
@@ -89,9 +92,9 @@ export function SkillPage({ slug }: { slug: string }) {
   /* A list that could not be read is not a missing skill: `isPending` goes false on a failure too. */
   if (!plugins.data) {
     return (
-      <PageShell backButton={back} title="Skill">
+      <PageShell backButton={back} title={ui("Skill")}>
         <p className="text-destructive text-sm" role="alert">
-          Couldn't load this skill. Reload the page.
+          {ui("Couldn't load this skill. Reload the page.")}
         </p>
       </PageShell>
     );
@@ -99,9 +102,11 @@ export function SkillPage({ slug }: { slug: string }) {
 
   if (!skill) {
     return (
-      <PageShell backButton={back} title="Skill">
-        <PageEmpty icon={IconFileOff} title="Skill not found">
-          It may have been deleted. Go back to Skills to see the ones there are.
+      <PageShell backButton={back} title={ui("Skill")}>
+        <PageEmpty icon={IconFileOff} title={ui("Skill not found")}>
+          {ui(
+            "It may have been deleted. Go back to Skills to see the ones there are.",
+          )}
         </PageEmpty>
       </PageShell>
     );
@@ -128,15 +133,16 @@ export function SkillPage({ slug }: { slug: string }) {
       <PageSection
         description={
           <>
-            Bots with their switch on offer {skill.title} when someone types{" "}
-            <code>/</code>. It takes effect at once.
+            {ui("Bots with their switch on offer")} {skill.title}{" "}
+            {ui("when someone types")} <code>/</code>
+            {ui(". It takes effect at once.")}
           </>
         }
-        title="Bots"
+        title={ui("Bots")}
       >
         {bots.length === 0 ? (
-          <PageEmpty icon={IconBolt} title="No Bots yet">
-            Create a Bot to offer this skill.
+          <PageEmpty icon={IconBolt} title={ui("No Bots yet")}>
+            {ui("Create a Bot to offer this skill.")}
           </PageEmpty>
         ) : (
           <PageRows>
@@ -148,10 +154,10 @@ export function SkillPage({ slug }: { slug: string }) {
                     <ItemContent>
                       <ItemTitle>{bot.name}</ItemTitle>
                       <ItemDescription>
-                        {bot.hidden ? "Hidden from your roster. " : ""}
+                        {bot.hidden ? ui("Hidden from your roster. ") : ""}
                         {held
-                          ? "Offers this skill."
-                          : "Doesn't offer this skill."}
+                          ? ui("Offers this skill.")
+                          : ui("Doesn't offer this skill.")}
                       </ItemDescription>
                     </ItemContent>
                     <ItemActions>
@@ -161,7 +167,10 @@ export function SkillPage({ slug }: { slug: string }) {
                        * not freeze the rest of the list.
                        */}
                       <Switch
-                        aria-label={`${bot.name} offers ${skill.title}`}
+                        aria-label={ui("{{value0}} offers {{value1}}", {
+                          value0: String(bot.name),
+                          value1: String(skill.title),
+                        })}
                         checked={held}
                         disabled={
                           setGrant.isPending &&
@@ -203,14 +212,14 @@ export function SkillPage({ slug }: { slug: string }) {
         key={`${skill.title}\u0000${skill.summary}\u0000${skill.instructions}`}
         onSubmit={async (values) => {
           await saveSkill.mutateAsync({ ...values, global: true });
-          toast.add({ title: "Skill saved", type: "success" });
+          toast.add({ title: ui("Skill saved"), type: "success" });
         }}
         slugLocked
-        submitLabel="Save changes"
+        submitLabel={ui("Save changes")}
       />
 
       {/* A row that opens the confirmation, as deleting a Bot is on its own page. */}
-      <PageSection title="Manage">
+      <PageSection title={ui("Manage")}>
         <PageRows>
           <Item
             render={<button onClick={() => setRemoving(true)} type="button" />}
@@ -220,10 +229,11 @@ export function SkillPage({ slug }: { slug: string }) {
               <IconTrash />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle>Delete</ItemTitle>
+              <ItemTitle>{ui("Delete")} </ItemTitle>
               <ItemDescription>
-                People can't run it any more, and no Bot offers it. You can't
-                undo this.
+                {ui(
+                  "People can't run it any more, and no Bot offers it. You can't undo this.",
+                )}
               </ItemDescription>
             </ItemContent>
             <ItemActions>
@@ -236,15 +246,18 @@ export function SkillPage({ slug }: { slug: string }) {
       <Dialog onOpenChange={setRemoving} open={removing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {skill.title}?</DialogTitle>
+            <DialogTitle>
+              {ui("Delete")} {skill.title}?
+            </DialogTitle>
             <DialogDescription>
-              People can't run it any more, and no Bot offers it. You can't undo
-              this.
+              {ui(
+                "People can't run it any more, and no Bot offers it. You can't undo this.",
+              )}
             </DialogDescription>
           </DialogHeader>
           {removeSkill.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {removeSkill.error.message}
+              {<ErrorDetails error={removeSkill.error} />}
             </p>
           ) : null}
           <DialogFooter>
@@ -253,7 +266,7 @@ export function SkillPage({ slug }: { slug: string }) {
               size="sm"
               variant="ghost"
             >
-              Cancel
+              {ui("Cancel")}
             </Button>
             <Button
               disabled={removeSkill.isPending}
@@ -265,7 +278,7 @@ export function SkillPage({ slug }: { slug: string }) {
               size="sm"
               variant="destructive"
             >
-              {removeSkill.isPending ? "Deleting…" : "Delete"}
+              {removeSkill.isPending ? ui("Deleting…") : ui("Delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

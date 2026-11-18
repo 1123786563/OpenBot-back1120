@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconDeviceDesktop,
@@ -64,9 +66,15 @@ import {
 } from "./network-describe";
 
 const MODE_NAMES: Record<NetworkMode, string> = {
-  allow_all: "Allow all network access",
-  defaults_plus_allowlist: "Defaults plus team allowlist",
-  allowlist_only: "Team allowlist only",
+  get allow_all() {
+    return ui("Allow all network access");
+  },
+  get defaults_plus_allowlist() {
+    return ui("Defaults plus team allowlist");
+  },
+  get allowlist_only() {
+    return ui("Team allowlist only");
+  },
 };
 
 /**
@@ -100,18 +108,21 @@ function rulesToText(rules: EgressRule[]): string {
 
 function summarizePolicy(policy: NetworkPolicy | undefined): string {
   if (!policy)
-    return "No policy. Bot computers can reach anything the cluster allows";
+    return ui("No policy. Bot computers can reach anything the cluster allows");
   const count = policy.rules.length;
   return `${MODE_NAMES[policy.mode]} · ${count} ${count === 1 ? "rule" : "rules"}${policy.locked ? " · locked" : ""}`;
 }
 
 /** Admin, Computers: when an idle computer is stopped, and stopping them now. */
 export function InactiveComputersSection() {
+  useLocale();
   const [daysOpen, setDaysOpen] = useState(false);
   return (
     <ControlsSection
-      description="Stopping a computer ends its running Bots and keeps its disk. The Bot gets a fresh computer next session. To stop one person's computers, go to People."
-      title="Idle computers"
+      description={ui(
+        "Stopping a computer ends its running Bots and keeps its disk. The Bot gets a fresh computer next session. To stop one person's computers, go to People.",
+      )}
+      title={ui("Idle computers")}
     >
       {({ data, setSetting }) => (
         <>
@@ -126,11 +137,13 @@ export function InactiveComputersSection() {
                 <IconDeviceDesktop />
               </ItemMedia>
               <ItemContent>
-                <ItemTitle>Stop inactive computers</ItemTitle>
+                <ItemTitle>{ui("Stop inactive computers")}</ItemTitle>
                 <ItemDescription>
                   {data.settings.inactiveComputerDays === 0
-                    ? "Off"
-                    : `After ${data.settings.inactiveComputerDays} days without use`}
+                    ? ui("Off")
+                    : ui("After {{value0}} days without use", {
+                        value0: String(data.settings.inactiveComputerDays),
+                      })}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -153,13 +166,16 @@ export function InactiveComputersSection() {
 
 /** Admin, Computers: where Bot computers may connect, for the organization and per group. */
 export function NetworkSection() {
+  useLocale();
   const [networkScope, setNetworkScope] = useState<
     { scopeKind: "organization" | "group"; scopeId: string } | undefined
   >();
   return (
     <ControlsSection
-      description="Control where Bot computers can connect. Changes apply within seconds without a restart. Group policies override the organization’s policy unless it is locked."
-      title="Network"
+      description={ui(
+        "Control where Bot computers can connect. Changes apply within seconds without a restart. Group policies override the organization’s policy unless it is locked.",
+      )}
+      title={ui("Network")}
     >
       {({ data }) => {
         const organizationPolicy = data.network.find(
@@ -189,7 +205,7 @@ export function NetworkSection() {
                   <IconWorld />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Organization</ItemTitle>
+                  <ItemTitle>{ui("Organization")}</ItemTitle>
                   <ItemDescription>
                     {summarizePolicy(organizationPolicy)}
                   </ItemDescription>
@@ -219,7 +235,9 @@ export function NetworkSection() {
                       <IconNetwork />
                     </ItemMedia>
                     <ItemContent>
-                      <ItemTitle>Group: {policy.scopeId}</ItemTitle>
+                      <ItemTitle>
+                        {uiNodes("Group: {{slot0}}", [policy.scopeId])}
+                      </ItemTitle>
                       <ItemDescription>
                         {summarizePolicy(policy)}
                       </ItemDescription>
@@ -240,7 +258,7 @@ export function NetworkSection() {
                 size="sm"
                 variant="outline"
               >
-                Add a group policy
+                {ui("Add a group policy")}
               </Button>
             ) : null}
             {networkScope ? (
@@ -258,6 +276,7 @@ export function NetworkSection() {
 }
 
 function SweepNow() {
+  useLocale();
   const sweep = useMutation(terminateInactiveComputersMutationOptions());
   return (
     <div className="mt-4 flex items-center gap-3">
@@ -267,16 +286,16 @@ function SweepNow() {
         size="sm"
         variant="outline"
       >
-        {sweep.isPending ? "Stopping…" : "Stop inactive computers now"}
+        {sweep.isPending ? ui("Stopping…") : ui("Stop inactive computers now")}
       </Button>
       {sweep.data ? (
         <span className="text-muted-foreground text-sm">
-          Stopped {sweep.data.stopped.length}.
+          {ui("Stopped")} {sweep.data.stopped.length}.
         </span>
       ) : null}
       {sweep.error ? (
         <span className="text-destructive text-sm" role="alert">
-          {sweep.error.message}
+          {<ErrorDetails error={sweep.error} />}
         </span>
       ) : null}
     </div>
@@ -292,6 +311,7 @@ function NetworkDialog({
   initial: { scopeKind: "organization" | "group"; scopeId: string };
   onClose: () => void;
 }) {
+  useLocale();
   const existing = data.network.find(
     (row) =>
       row.scopeKind === initial.scopeKind && row.scopeId === initial.scopeId,
@@ -344,8 +364,8 @@ function NetworkDialog({
         <DialogHeader>
           <DialogTitle>
             {initial.scopeKind === "organization"
-              ? "Organization network policy"
-              : "Group network policy"}
+              ? ui("Organization network policy")
+              : ui("Group network policy")}
           </DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 space-y-4 overflow-y-auto">
@@ -379,12 +399,12 @@ function NetworkDialog({
             <FieldGroup>
               {initial.scopeKind === "group" && !initial.scopeId ? (
                 <Field>
-                  <FieldLabel>Group</FieldLabel>
+                  <FieldLabel>{ui("Group")}</FieldLabel>
                   <Select
                     onValueChange={(value) => setGroup(String(value))}
                     value={group}
                   >
-                    <SelectTrigger aria-label="Group">
+                    <SelectTrigger aria-label={ui("Group")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -401,12 +421,12 @@ function NetworkDialog({
               ) : null}
               <DescribeAllowlist onWritten={takeWritten} />
               <Field>
-                <FieldLabel>Mode</FieldLabel>
+                <FieldLabel>{ui("Mode")}</FieldLabel>
                 <Select
                   onValueChange={(value) => setMode(value as NetworkMode)}
                   value={mode}
                 >
-                  <SelectTrigger aria-label="Mode">
+                  <SelectTrigger aria-label={ui("Mode")}>
                     <SelectValue>{MODE_NAMES[mode]}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -423,21 +443,24 @@ function NetworkDialog({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel htmlFor="network-rules">Allowlist</FieldLabel>
+                <FieldLabel htmlFor="network-rules">
+                  {ui("Allowlist")}
+                </FieldLabel>
                 <FieldDescription>
-                  One per line. A domain covers its subdomains. *.name covers
-                  only subdomains. Either can list ports. Defaults are{" "}
-                  {data.defaultDestinations.slice(0, 4).join(", ")} and{" "}
-                  {data.defaultDestinations.length - 4} more package and source
-                  hosts.
+                  {ui(
+                    "One per line. A domain covers its subdomains. *.name covers only subdomains. Either can list ports. Defaults are",
+                  )}{" "}
+                  {data.defaultDestinations.slice(0, 4).join(", ")} {ui("and")}{" "}
+                  {data.defaultDestinations.length - 4}{" "}
+                  {ui("more package and source hosts.")}
                 </FieldDescription>
                 <Textarea
                   className="font-mono text-xs"
                   id="network-rules"
                   onChange={(event) => setRules(event.target.value)}
-                  placeholder={
-                    "example.com\n*.corp.example\n10.0.0.0/8 443,5432"
-                  }
+                  placeholder={ui(
+                    "example.com\n*.corp.example\n10.0.0.0/8 443,5432",
+                  )}
                   rows={8}
                   value={rules}
                 />
@@ -449,7 +472,7 @@ function NetworkDialog({
               {initial.scopeKind === "organization" ? (
                 <div className="flex items-center justify-between gap-4">
                   <Label htmlFor="network-locked">
-                    Lock so groups can't replace this policy
+                    {ui("Lock so groups can't replace this policy")}
                   </Label>
                   <Switch
                     checked={locked}
@@ -462,7 +485,7 @@ function NetworkDialog({
           </form>
           {(save.error ?? remove.error) ? (
             <p className="text-destructive text-sm" role="alert">
-              {(save.error ?? remove.error)?.message}
+              {<ErrorDetails error={save.error ?? remove.error} />}
             </p>
           ) : null}
         </DialogBody>
@@ -480,11 +503,11 @@ function NetworkDialog({
               type="button"
               variant="destructive"
             >
-              Remove policy
+              {ui("Remove policy")}
             </Button>
           ) : null}
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={
@@ -496,7 +519,7 @@ function NetworkDialog({
             size="sm"
             type="submit"
           >
-            {save.isPending ? "Saving…" : "Save"}
+            {save.isPending ? ui("Saving…") : ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -515,6 +538,7 @@ function DaysDialog({
   onSave: (days: number) => void;
   onClose: () => void;
 }) {
+  useLocale();
   const [days, setDays] = useState(String(initial));
   const parsed = Number(days);
   const valid = Number.isInteger(parsed) && parsed >= 0 && parsed <= 3650;
@@ -525,10 +549,10 @@ function DaysDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Stop inactive computers</DialogTitle>
+          <DialogTitle>{ui("Stop inactive computers")}</DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 space-y-2">
-          <Label htmlFor="inactive-days">Days without use</Label>
+          <Label htmlFor="inactive-days">{ui("Days without use")}</Label>
           <Input
             id="inactive-days"
             inputMode="numeric"
@@ -536,12 +560,12 @@ function DaysDialog({
             value={days}
           />
           <p className="text-muted-foreground text-xs">
-            0 turns it off. Checked hourly.
+            {ui("0 turns it off. Checked hourly.")}
           </p>
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={!valid}
@@ -552,7 +576,7 @@ function DaysDialog({
             size="sm"
             type="button"
           >
-            Save
+            {ui("Save")}
           </Button>
         </DialogFooter>
       </DialogContent>

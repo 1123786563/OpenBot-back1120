@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "@/lib/channels/queries";
 import { client } from "@/lib/client";
@@ -46,7 +47,7 @@ export function createRoutineMutationOptions(queryClient: QueryClient) {
         const response = await client("/api/channels", {
           method: "POST",
           body: { agentIds: [input.agentId] },
-          fallback: "Couldn't start a conversation for this routine.",
+          fallback: ui("Couldn't start a conversation for this routine."),
         });
         started = ((await response.json()) as { channel: { id: string } })
           .channel.id;
@@ -55,20 +56,20 @@ export function createRoutineMutationOptions(queryClient: QueryClient) {
         await client(`/api/channels/${started}/title`, {
           method: "PUT",
           body: { title: Array.from(name).slice(0, 60).join("") },
-          fallback: "Couldn't name the conversation.",
+          fallback: ui("Couldn't name the conversation."),
         }).catch(() => undefined);
       }
       try {
         return await client<{ id: string }>("/api/routines", "routine", {
           method: "POST",
           body: { ...input, channelId: started ?? input.channelId },
-          fallback: "Couldn't set up that routine. Try again.",
+          fallback: ui("Couldn't set up that routine. Try again."),
         });
       } catch (error) {
         if (started) {
           await client(`/api/channels/${started}`, {
             method: "DELETE",
-            fallback: "Couldn't remove the conversation.",
+            fallback: ui("Couldn't remove the conversation."),
           }).catch(() => undefined);
         }
         throw error;
@@ -115,7 +116,7 @@ export function runRoutineNowMutationOptions(queryClient: QueryClient) {
     mutationFn: (id: string) =>
       client(`/api/routines/${encodeURIComponent(id)}/run`, {
         method: "POST",
-        fallback: "That routine could not be started.",
+        fallback: ui("That routine could not be started."),
       }),
     onSuccess: () => invalidateRoutines(queryClient),
   });

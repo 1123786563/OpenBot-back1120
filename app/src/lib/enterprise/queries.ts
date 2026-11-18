@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -222,7 +223,7 @@ export function networkReplayQueryOptions(candidate: NetworkCandidate) {
       client("/api/admin/enterprise/network/replay", "report", {
         method: "POST",
         body: candidate,
-        fallback: "Couldn't check this list against recent page visits.",
+        fallback: ui("Couldn't check this list against recent page visits."),
       }),
   });
 }
@@ -233,7 +234,7 @@ export function enterpriseOverviewQueryOptions() {
     queryFn: async (): Promise<EnterpriseOverview> =>
       (
         await client("/api/admin/enterprise", {
-          fallback: "Could not load enterprise controls",
+          fallback: ui("Could not load enterprise controls"),
         })
       ).json(),
   });
@@ -248,7 +249,7 @@ export function modelUsageQueryOptions(days = 30) {
     }> =>
       (
         await client(`/api/admin/enterprise/models/usage?days=${days}`, {
-          fallback: "Could not load model usage",
+          fallback: ui("Could not load model usage"),
         })
       ).json(),
   });
@@ -260,7 +261,7 @@ export function checkInMetricsQueryOptions(days: 7 | 30) {
     queryFn: async (): Promise<CheckInMetrics> =>
       (
         await client(`/api/admin/proactive?days=${days}`, {
-          fallback: "Couldn't load check-ins",
+          fallback: ui("Couldn't load check-ins"),
         })
       ).json(),
   });
@@ -271,7 +272,7 @@ export function actionRecordsQueryOptions() {
     queryKey: enterpriseKeys.actions(),
     queryFn: (): Promise<ActionRecord[]> =>
       client("/api/admin/enterprise/actions?limit=50", "actions", {
-        fallback: "Could not load recorded actions",
+        fallback: ui("Could not load recorded actions"),
       }),
   });
 }
@@ -296,7 +297,7 @@ export function myCapabilitiesQueryOptions() {
     queryFn: async (): Promise<MyCapabilities> =>
       (
         await client("/api/admin/enterprise/me", {
-          fallback: "Couldn't load what OpenBot allows.",
+          fallback: ui("Couldn't load what OpenBot allows."),
         })
       ).json(),
   });

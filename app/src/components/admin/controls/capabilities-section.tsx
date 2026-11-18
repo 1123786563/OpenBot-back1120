@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import {
   IconChevronRight,
   IconSparkles,
@@ -46,6 +48,7 @@ import { ControlsSection } from "./controls-section";
  * overrides for roles and directory groups. The page's only section, so it has no title of its own.
  */
 export function CapabilitiesSection() {
+  useLocale();
   const [overridesOpen, setOverridesOpen] = useState(false);
   return (
     <ControlsSection>
@@ -73,7 +76,9 @@ export function CapabilitiesSection() {
                         <ItemDescription>
                           {effective
                             ? capability.description
-                            : "Off for everybody, unless a role or group turns it on."}
+                            : ui(
+                                "Off for everybody, unless a role or group turns it on.",
+                              )}
                         </ItemDescription>
                       </ItemContent>
                       <ItemActions>
@@ -104,11 +109,11 @@ export function CapabilitiesSection() {
                   <IconUsersGroup />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Role and group overrides</ItemTitle>
+                  <ItemTitle>{ui("Role and group overrides")}</ItemTitle>
                   <ItemDescription>
                     {overrideCount === 0
-                      ? "None. Everybody gets the switches above"
-                      : `${overrideCount} set`}
+                      ? ui("None. Everybody gets the switches above")
+                      : ui("{{value0}} set", { value0: String(overrideCount) })}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -124,9 +129,11 @@ export function CapabilitiesSection() {
                   <IconSparkles />
                 </ItemMedia>
                 <ItemContent>
-                  <ItemTitle>Describe it in words</ItemTitle>
+                  <ItemTitle>{ui("Describe it in words")}</ItemTitle>
                   <ItemDescription>
-                    Say who may use what, and your model writes the changes.
+                    {ui(
+                      "Say who may use what, and your model writes the changes.",
+                    )}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
@@ -157,14 +164,15 @@ function OverridesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  useLocale();
   const setCapability = useMutation(setCapabilityMutationOptions(queryClient));
   const scopes: { kind: "role" | "group"; id: string; label: string }[] = [
-    { kind: "role", id: "admin", label: "Admins" },
-    { kind: "role", id: "user", label: "Members" },
+    { kind: "role", id: "admin", label: ui("Admins") },
+    { kind: "role", id: "user", label: ui("Members") },
     ...data.groups.map((group) => ({
       kind: "group" as const,
       id: group,
-      label: `Group: ${group}`,
+      label: ui("Group: {{value0}}", { value0: String(group) }),
     })),
   ];
   const [scopeIndex, setScopeIndex] = useState(0);
@@ -174,14 +182,14 @@ function OverridesDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Role and group overrides</DialogTitle>
+          <DialogTitle>{ui("Role and group overrides")}</DialogTitle>
         </DialogHeader>
         <DialogBody className="mt-4 space-y-4 overflow-y-auto">
           <Select
             onValueChange={(value) => setScopeIndex(Number(value))}
             value={String(scopeIndex)}
           >
-            <SelectTrigger aria-label="Scope">
+            <SelectTrigger aria-label={ui("Scope")}>
               <SelectValue>{scope?.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -199,8 +207,12 @@ function OverridesDialog({
           </Select>
           <p className="text-muted-foreground text-xs">
             {scope?.kind === "group"
-              ? "A group can only add. Grant gives its members the capability even when the organization has it off."
-              : "A role's setting replaces the organization switch for everybody with that role."}
+              ? ui(
+                  "A group can only add. Grant gives its members the capability even when the organization has it off.",
+                )
+              : ui(
+                  "A role's setting replaces the organization switch for everybody with that role.",
+                )}
           </p>
           {scope
             ? data.capabilities.map((capability) => {
@@ -228,19 +240,24 @@ function OverridesDialog({
                       value={value}
                     >
                       <SelectTrigger
-                        aria-label={`${capability.title} for ${scope.label}`}
+                        aria-label={ui("{{value0}} for {{value1}}", {
+                          value0: String(capability.title),
+                          value1: String(scope.label),
+                        })}
                         className="w-36"
                       >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="inherit">Inherit</SelectItem>
+                          <SelectItem value="inherit">
+                            {ui("Inherit")}
+                          </SelectItem>
                           <SelectItem value="on">
-                            {scope.kind === "group" ? "Grant" : "On"}
+                            {scope.kind === "group" ? ui("Grant") : ui("On")}
                           </SelectItem>
                           {scope.kind === "role" ? (
-                            <SelectItem value="off">Off</SelectItem>
+                            <SelectItem value="off">{ui("Off")}</SelectItem>
                           ) : null}
                         </SelectGroup>
                       </SelectContent>
@@ -251,13 +268,13 @@ function OverridesDialog({
             : null}
           {setCapability.error ? (
             <p className="text-destructive text-sm" role="alert">
-              {setCapability.error.message}
+              {<ErrorDetails error={setCapability.error} />}
             </p>
           ) : null}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={() => onOpenChange(false)} size="sm" type="button">
-            Done
+            {ui("Done")}
           </Button>
         </DialogFooter>
       </DialogContent>

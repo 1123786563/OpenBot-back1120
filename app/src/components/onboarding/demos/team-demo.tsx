@@ -1,3 +1,4 @@
+import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { DemoOrb } from "@/components/onboarding/demo-orb";
 import { type AgentProfile, agentListQueryOptions } from "@/lib/agents/queries";
@@ -63,6 +64,7 @@ export function teamCards(agents: AgentProfile[] | undefined): TeamCard[] {
  * One at a time, a Bot picks something up and works on it, so the cards read as a team.
  */
 export function TeamDemo() {
+  useLocale();
   const { data: agents } = useQuery(agentListQueryOptions());
   const cards = teamCards(agents);
   return (
@@ -70,11 +72,16 @@ export function TeamDemo() {
       beats={cards.length}
       className="flex flex-col gap-2.5 p-4 sm:p-6"
       kind="team"
-      label={`Bots you can work with: ${cards
-        .map(
-          (card) => `${card.name} (${card.example ? "example" : "available"})`,
-        )
-        .join(", ")}, and one of your own`}
+      label={ui("Bots you can work with: {{value0}}, and one of your own", {
+        value0: String(
+          cards
+            .map(
+              (card) =>
+                `${card.name} (${card.example ? "example" : "available"})`,
+            )
+            .join(", "),
+        ),
+      })}
       rest={-1}
     >
       {({ beat, playing }) => (
@@ -102,7 +109,7 @@ export function TeamDemo() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm truncate font-medium">{card.name}</p>
                   <p className="text-xs truncate text-muted-foreground">
-                    {card.example ? "Example" : card.role || "Ready"}
+                    {card.example ? ui("Example") : card.role || ui("Ready")}
                   </p>
                 </div>
                 <span
@@ -111,8 +118,12 @@ export function TeamDemo() {
                     working ? "opacity-100" : "opacity-0",
                   )}
                 >
-                  <span className="size-1.5 rounded-full bg-blue-500" />
-                  Working
+                  {uiNodes("{{slot0}}Working", [
+                    <span
+                      key="slot0"
+                      className="size-1.5 rounded-full bg-blue-500"
+                    />,
+                  ])}
                 </span>
               </div>
             );
@@ -120,7 +131,7 @@ export function TeamDemo() {
           <div className="flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-foreground/25 p-3">
             <span className="size-11 shrink-0 rounded-full border border-dashed border-foreground/30" />
             <p className="text-sm truncate font-medium text-foreground/70">
-              Your own Bot
+              {ui("Your own Bot")}
             </p>
           </div>
         </>

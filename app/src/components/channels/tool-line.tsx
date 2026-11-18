@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import type { ReactNode } from "react";
 
 /**
@@ -62,6 +63,8 @@ export function ToolLine({
    */
   bare?: boolean;
 }) {
+  useLocale();
+
   const tone = refused
     ? "text-destructive"
     : failed
@@ -88,13 +91,13 @@ export function ToolLine({
         }
       >
         {refused
-          ? `Blocked: ${attempted ?? label}`
+          ? ui("Blocked: {{value0}}", { value0: String(attempted ?? label) })
           : failed
-            ? `${label}, didn't work`
+            ? ui("{{value0}}, didn't work", { value0: String(label) })
             : notYet
-              ? `${label}, not done yet`
+              ? ui("{{value0}}, not done yet", { value0: String(label) })
               : byYou
-                ? `${label}, done by you`
+                ? ui("{{value0}}, done by you", { value0: String(label) })
                 : label}
       </span>
       {detail ? (

@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { readConnectPrompt } from "@openbot/shared/connect-prompt";
 
 /**
@@ -21,6 +22,11 @@ export function toolsListError(
   if (!prompt) return lastError;
   if (!reader.personal) return prompt.message || null;
   return prompt.reason === "reconnect"
-    ? `Your ${reader.title} access was withdrawn. Reconnect it above to list its tools.`
-    : `Connect your ${reader.title} account above to list its tools.`;
+    ? ui(
+        "Your {{value0}} access was withdrawn. Reconnect it above to list its tools.",
+        { value0: String(reader.title) },
+      )
+    : ui("Connect your {{value0}} account above to list its tools.", {
+        value0: String(reader.title),
+      });
 }

@@ -1,3 +1,4 @@
+import { englishInterface, type InterfaceTranslator } from "./interface-copy";
 /**
  * What a Bot is told when a step it asked for was not carried out by it, and what the person sees
  * for the same step.
@@ -112,9 +113,12 @@ const FOR_PERSON = new Map<string, string>([
  * the Bot's next step ("Ask the person again if it is still needed."). Anything else is a boundary
  * or the computer speaking, already written for a person, and is returned as it is.
  */
-export function outcomeForPerson(text: string): string {
+export function outcomeForPerson(
+  text: string,
+  translate: InterfaceTranslator = englishInterface,
+): string {
   const known = FOR_PERSON.get(text.trim());
-  if (known) return known;
+  if (known) return translate(known);
   if (!text.startsWith("Not done:") && !text.startsWith("Not run:"))
     return text;
   const end = firstSentenceEnd(text);

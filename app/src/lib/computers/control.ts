@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { tryClient } from "@/lib/client";
 
 /**
@@ -103,12 +104,12 @@ export async function supplySecret(
     } | null;
     return {
       ok: false,
-      error: body?.error ?? "Couldn't type that into the page. Try again.",
+      error: body?.error ?? ui("Couldn't type that into the page. Try again."),
     };
   } catch {
     return {
       ok: false,
-      error: "Couldn't reach the Bot's computer. Try again.",
+      error: ui("Couldn't reach the Bot's computer. Try again."),
     };
   }
 }

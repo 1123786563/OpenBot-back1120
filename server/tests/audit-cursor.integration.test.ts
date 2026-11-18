@@ -61,7 +61,7 @@ describe("a cursor the trail's own columns have to parse", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "cursor must be a valid audit page cursor",
     });
   });

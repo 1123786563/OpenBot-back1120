@@ -1,3 +1,5 @@
+import { ErrorDetails } from "@/lib/i18n/errors";
+import { ui, useLocale } from "@/lib/i18n";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -57,6 +59,7 @@ export function NewResponsibilityDialog({
   agentId?: string;
   onClose: () => void;
 }) {
+  useLocale();
   const formId = useId();
   const bots = useQuery(agentListQueryOptions());
   const channels = useInfiniteQuery(channelListQueryOptions());
@@ -85,9 +88,11 @@ export function NewResponsibilityDialog({
     <Dialog onOpenChange={(next) => !next && onClose()} open>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New goal</DialogTitle>
+          <DialogTitle>{ui("New goal")}</DialogTitle>
           <DialogDescription>
-            An ongoing goal. The Bot works on it in the conversation you pick.
+            {ui(
+              "An ongoing goal. The Bot works on it in the conversation you pick.",
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="mt-4 overflow-y-auto">
@@ -115,7 +120,7 @@ export function NewResponsibilityDialog({
               <FieldGroup className="sm:grid sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor={`${formId}-conversation`}>
-                    Conversation
+                    {ui("Conversation")}
                   </FieldLabel>
                   <Select
                     items={Object.fromEntries(
@@ -135,7 +140,7 @@ export function NewResponsibilityDialog({
                       className="w-full"
                       id={`${formId}-conversation`}
                     >
-                      <SelectValue placeholder="Choose a conversation" />
+                      <SelectValue placeholder={ui("Choose a conversation")} />
                     </SelectTrigger>
                     <SelectContent>
                       {offered.map((channel) => (
@@ -148,7 +153,9 @@ export function NewResponsibilityDialog({
                 </Field>
                 {fixedBot === undefined ? (
                   <Field>
-                    <FieldLabel htmlFor={`${formId}-bot`}>Bot</FieldLabel>
+                    <FieldLabel htmlFor={`${formId}-bot`}>
+                      {ui("Bot")}
+                    </FieldLabel>
                     <Select
                       items={Object.fromEntries(
                         availableBots.map((bot) => [bot.id, bot.name]),
@@ -158,7 +165,7 @@ export function NewResponsibilityDialog({
                       value={agentId || null}
                     >
                       <SelectTrigger className="w-full" id={`${formId}-bot`}>
-                        <SelectValue placeholder="Choose a Bot" />
+                        <SelectValue placeholder={ui("Choose a Bot")} />
                       </SelectTrigger>
                       <SelectContent>
                         {availableBots.map((bot) => (
@@ -179,7 +186,7 @@ export function NewResponsibilityDialog({
                   type="button"
                   variant="outline"
                 >
-                  Load more conversations
+                  {ui("Load more conversations")}
                 </Button>
               )}
               {(channels.error || bots.error) && (
@@ -188,19 +195,21 @@ export function NewResponsibilityDialog({
                 </p>
               )}
               <Field>
-                <FieldLabel htmlFor={`${formId}-title`}>Title</FieldLabel>
+                <FieldLabel htmlFor={`${formId}-title`}>
+                  {ui("Title")}
+                </FieldLabel>
                 <Input
                   id={`${formId}-title`}
                   required
                   maxLength={160}
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Keep the customer report up to date"
+                  placeholder={ui("Keep the customer report up to date")}
                 />
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${formId}-instruction`}>
-                  Instruction
+                  {ui("Instruction")}
                 </FieldLabel>
                 <Textarea
                   id={`${formId}-instruction`}
@@ -212,7 +221,7 @@ export function NewResponsibilityDialog({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`${formId}-criteria`}>
-                  Success criteria
+                  {ui("Success criteria")}
                 </FieldLabel>
                 <Textarea
                   id={`${formId}-criteria`}
@@ -220,13 +229,15 @@ export function NewResponsibilityDialog({
                   maxLength={3000}
                   value={successCriteria}
                   onChange={(event) => setSuccessCriteria(event.target.value)}
-                  placeholder="The report contains the current quarter's graph and a source link."
+                  placeholder={ui(
+                    "The report contains the current quarter's graph and a source link.",
+                  )}
                 />
               </Field>
               <FieldGroup className="sm:grid sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor={`${formId}-source`}>
-                    Event source
+                    {ui("Event source")}
                   </FieldLabel>
                   <Select
                     items={SOURCES}
@@ -250,15 +261,15 @@ export function NewResponsibilityDialog({
                   </Select>
                   {source === "github" && (
                     <FieldDescription>
-                      Events come from the repositories you connected in{" "}
-                      <Link to="/connections">Connections</Link>.
+                      {ui("Events come from the repositories you connected in")}{" "}
+                      <Link to="/connections">{ui("Connections")}</Link>.
                     </FieldDescription>
                   )}
                 </Field>
                 {source !== "none" && (
                   <Field>
                     <FieldLabel htmlFor={`${formId}-event`}>
-                      Event type
+                      {ui("Event type")}
                     </FieldLabel>
                     <Input
                       id={`${formId}-event`}
@@ -267,7 +278,9 @@ export function NewResponsibilityDialog({
                       value={eventType}
                       onChange={(event) => setEventType(event.target.value)}
                       placeholder={
-                        source === "github" ? "issues.opened" : "Event type"
+                        source === "github"
+                          ? ui("issues.opened")
+                          : ui("Event type")
                       }
                     />
                   </Field>
@@ -277,13 +290,13 @@ export function NewResponsibilityDialog({
           </form>
           {create.error && (
             <p role="alert" className="text-destructive text-sm">
-              {create.error.message}
+              {<ErrorDetails error={create.error} />}
             </p>
           )}
         </DialogBody>
         <DialogFooter className="mt-4">
           <Button onClick={onClose} size="sm" type="button" variant="outline">
-            Cancel
+            {ui("Cancel")}
           </Button>
           <Button
             disabled={create.isPending}
@@ -291,7 +304,7 @@ export function NewResponsibilityDialog({
             size="sm"
             type="submit"
           >
-            {create.isPending ? "Creating…" : "Create goal"}
+            {create.isPending ? ui("Creating…") : ui("Create goal")}
           </Button>
         </DialogFooter>
       </DialogContent>

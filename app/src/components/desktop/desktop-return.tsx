@@ -1,3 +1,4 @@
+import { ui, useLocale } from "@/lib/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
@@ -34,6 +35,7 @@ export function DesktopReturn({
   /** Follows the `openbot://` link. Replaced in tests, which cannot follow one. */
   openDesktop?: (link: string) => void;
 }) {
+  useLocale();
   const navigate = useNavigate();
   const { mutate: confirm } = useMutation(
     confirmBrokeredConnectionMutationOptions(useQueryClient()),
@@ -63,13 +65,13 @@ export function DesktopReturn({
   return (
     <main className="grid min-h-svh place-items-center bg-background p-6 text-foreground">
       <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-        <h1 className="text-xl font-semibold">Back to OpenBot</h1>
+        <h1 className="text-xl font-semibold">{ui("Back to OpenBot")}</h1>
         <p className="text-sm text-muted-foreground">
-          OpenBot opens on its own. You can close this tab.
+          {ui("OpenBot opens on its own. You can close this tab.")}
         </p>
         {/* An anchor rather than Button: Base UI gives a rendered anchor role="button", and this is a link. */}
         <a className={buttonVariants()} href={DESKTOP_LINK}>
-          Open OpenBot
+          {ui("Open OpenBot")}
         </a>
       </div>
     </main>

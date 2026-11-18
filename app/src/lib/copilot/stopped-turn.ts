@@ -1,3 +1,4 @@
+import { ui } from "@/lib/i18n";
 import { type AbstractAgent, useAgent } from "@copilotkit/react-core/v2";
 import { useEffect, useState } from "react";
 
@@ -31,7 +32,7 @@ export function stoppedReason(reported: unknown): string {
         : "";
   const unreachable = backEndUnreachable(said);
   if (unreachable) return unreachable;
-  return said.trim() || "The Bot stopped without saying why.";
+  return said.trim() || ui("The Bot stopped without saying why.");
 }
 
 /**
@@ -49,8 +50,12 @@ function backEndUnreachable(said: string): string | null {
   if (!match) return null;
   console.warn("OpenBot couldn't reach its backend.", said);
   return match[1] === "run"
-    ? "OpenBot couldn't reach its backend, so your message wasn't sent. Try again, or quit and reopen OpenBot."
-    : "OpenBot couldn't reach its backend. Try again, or quit and reopen OpenBot.";
+    ? ui(
+        "OpenBot couldn't reach its backend, so your message wasn't sent. Try again, or quit and reopen OpenBot.",
+      )
+    : ui(
+        "OpenBot couldn't reach its backend. Try again, or quit and reopen OpenBot.",
+      );
 }
 
 /**

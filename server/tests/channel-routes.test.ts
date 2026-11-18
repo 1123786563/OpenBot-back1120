@@ -309,7 +309,7 @@ describe("channel list limit", () => {
       );
 
       expect(response.status).toBe(400);
-      await expect(response.json()).resolves.toEqual({
+      await expect(response.json()).resolves.toMatchObject({
         error: 'Query parameter "limit" must be a positive integer.',
       });
       expect(calls.queries).toEqual([]);
