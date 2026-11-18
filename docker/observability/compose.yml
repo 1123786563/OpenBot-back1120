@@ -1,0 +1,45 @@
+name: openbot-observability
+
+services:
+  openobserve:
+    platform: ${OO_PLATFORM:-linux/amd64}
+    image: ${OO_IMAGE:-openobserve/openobserve:v1.1.2-amd64@sha256:26618f379c86b253c0d91624c487dd14b71293699845ecbc8457c94dca14819f}
+    ports:
+      - "127.0.0.1:${OO_QUERY_PORT:-5080}:5080"
+    environment:
+      ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD}
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_COMPACT_DATA_RETENTION_DAYS: ${ZO_COMPACT_DATA_RETENTION_DAYS:-30}
+      ZO_MEMORY_CACHE_MAX_SIZE: "512"
+    volumes:
+      - openobserve-data:/data
+    networks: [query]
+    restart: unless-stopped
+
+  otel-collector:
+    platform: ${OO_PLATFORM:-linux/amd64}
+    image: ${OO_COLLECTOR_IMAGE:-otel/opentelemetry-collector-contrib:0.165.0-amd64@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea}
+    command: ["--config=/etc/otelcol/openbot.yaml"]
+    user: "0"
+    ports:
+      - "127.0.0.1:${OO_FORWARD_PORT:-24224}:24224"
+    environment:
+      OO_ENVIRONMENT_LABEL: ${OO_ENVIRONMENT_LABEL:-production}
+      OO_INGEST_BASIC: ${OO_INGEST_BASIC:-}
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/openbot.yaml:ro
+      - collector-state:/var/lib/otelcol
+    networks: [query, data]
+    restart: unless-stopped
+
+volumes:
+  openobserve-data:
+  collector-state:
+
+networks:
+  query:
+  data:
+    external: true
+    name: ${OO_NETWORK:-openbot_data}

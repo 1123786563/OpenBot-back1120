@@ -1,0 +1,53 @@
+x-logging: &logging
+  driver: fluentd
+  options: &forward
+    fluentd-address: "127.0.0.1:${OO_FORWARD_PORT:-24224}"
+    fluentd-async: "true"
+    fluentd-request-ack: "true"
+    fluentd-buffer-limit: "4096"
+    fluentd-max-retries: "12"
+    fluentd-retry-wait: "1s"
+    fluentd-write-timeout: "3s"
+    mode: non-blocking
+    max-buffer-size: 1m
+
+services:
+  postgres:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.postgres }
+  migrate:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.migrate }
+  server:
+    environment:
+      OTEL_SERVICE_NAME: server
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://otel-collector:4318/v1/logs
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.server }
+  worker:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.worker }
+  agent-bot:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.agent-bot }
+  agent-computer:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.agent-computer }
+  agent-langgraph:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.agent-langgraph }
+  agent-harness:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.agent-harness }
+  supervisor:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.supervisor }
