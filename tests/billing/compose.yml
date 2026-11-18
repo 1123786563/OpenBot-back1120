@@ -140,10 +140,11 @@ services:
     depends_on:
       lago-migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      # the v1.57 api image ships curl, not wget
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 60
 
   lago-clock:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa

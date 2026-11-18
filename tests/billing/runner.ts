@@ -554,7 +554,7 @@ async function runFull(): Promise<number> {
     const lagoHealth = composeArgs(project, [
       "exec", "-T", appContainer,
       "bun", "-e",
-      `const r = await fetch("http://lago-api:3000/healthz", {signal: AbortSignal.timeout(120000)}); console.log("lago healthz", r.status, (await r.text()).slice(0,120));`,
+      `const r = await fetch("http://lago-api:3000/health", {signal: AbortSignal.timeout(120000)}); console.log("lago healthz", r.status, (await r.text()).slice(0,120));`,
     ]);
     if (lagoHealth.code !== 0 || !lagoHealth.out.includes("lago healthz 2")) {
       console.error(`  FAIL Lago health check did not pass: ${lagoHealth.out.slice(-500)}`);
