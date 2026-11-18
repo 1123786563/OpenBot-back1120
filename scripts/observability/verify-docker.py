@@ -1446,8 +1446,8 @@ services:
         # The successful dispatch, bounded to this delivery on both ends of the evidence: the
         # server's responsibility sweep picks the goal up within seconds, carries the goal's turn
         # end to end, and records the dispatch on its real Info path. The authoritative result is
-        # the responsibility run row finishing `succeeded`; the runtime stream must show the
-        # matching Info event in the same window, and no dispatch error after the delivery.
+        # the responsibility run row finishing `succeeded` with none of the goal's runs failed;
+        # the runtime stream must show the matching Info event in the same window.
         def goal_dispatch_succeeded():
             rows = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
                           "-tAc", f"SELECT id, status FROM responsibility_runs "
@@ -1458,18 +1458,32 @@ services:
         goal_run_id, goal_status = goal_row.split("|", 1)
         require(goal_status == "succeeded",
                 "the goal's dispatch run finished succeeded in the authoritative row")
+        # The goal's dispatch did not fail: every run row the goal owns reads succeeded. (The
+        # engine's sweep error line is engine-wide and cannot name a goal — bodies are replaced —
+        # so the goal's own result is taken from its authoritative rows, not from the sweep's
+        # log level.)
+        def no_goal_failure():
+            rows = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
+                          "-tAc", f"SELECT count(*) FROM responsibility_runs "
+                          f"WHERE responsibility_id = '{goal_id}' AND status = 'failed'",
+                          check=False).stdout.strip()
+            return rows == "0" or None
+        retry(no_goal_failure, "no responsibility run of the goal ended failed", timeout=60)
         retry(lambda: [h for h in hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
                                        "AND openbot_log_type = 'responsibility-dispatch' "
                                        "AND severity = 'Info'", start_time=trigger_time)] or None,
               "the runtime stream stores the goal's real dispatch as the server's Info event")
-        require(not hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
-                         "AND openbot_log_type = 'responsibility-dispatch-error' "
-                         "AND severity = 'Error'", start_time=trigger_time),
-                "no dispatch error after the delivery: the goal's dispatch did not fail")
+        sweep_errors = hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
+                            "AND openbot_log_type = 'responsibility-dispatch-error' "
+                            "AND severity = 'Error'", start_time=trigger_time)
         goal_dispatch = {"responsibility_id": goal_id, "responsibility_run_id": goal_run_id,
                          "status": goal_status, "delivered_trigger": trigger["trigger"]["id"],
                          "runtime_event": "responsibility-dispatch (Info, windowed)",
-                         "window_start_us": trigger_time}
+                         "goal_failed_runs": 0, "window_start_us": trigger_time,
+                         "engine_sweep_error_records_in_window": len(sweep_errors),
+                         "boundary": "the sweep's error line is engine-wide (the body is replaced, "
+                                     "so it cannot name a goal); the goal's own result is its "
+                                     "authoritative rows, all succeeded"}
         record("goal-dispatch.json", goal_dispatch)
 
         # Every required source must show queryable evidence from the real services.
