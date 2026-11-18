@@ -186,7 +186,13 @@ export function startHttpServer(deps: {
   config: DeploymentConfig;
   resolveRequestActor: (
     request: Request,
-  ) => Promise<{ id: string; name: string; role: OpenBotRole }>;
+  ) => Promise<{
+    id: string;
+    name: string;
+    role: OpenBotRole;
+    /** The actor's personal workspace, when the deployment has workspaces at all. */
+    workspaceId?: string;
+  }>;
   agentProfileStore: AgentProfileStore;
   computerGateway: ComputerGateway | undefined;
   app: {
@@ -342,7 +348,12 @@ export function startHttpServer(deps: {
         // own OpenBot browser is that person's alone, an administrator's neither: the same check says so.
         if (
           !(await computerAccessCheck(agentProfileStore)(
-            { id: actor.id, role: actor.role },
+            // The workspace travels with the actor: dropping it here sent the store's access
+            // filter down the no-workspace branch, whose terms can never match a Bot created in
+            // a personal space — and whose NULL-organization terms would admit a stray
+            // unowned Bot to this socket. The routes answer the same question with the full
+            // actor; this socket does too.
+            { id: actor.id, role: actor.role, workspaceId: actor.workspaceId },
             streamBotId,
           ))
         ) {

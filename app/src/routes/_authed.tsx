@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BotLookProvider } from "../components/agents/bot-look";
 import { TeamFeaturesDialog } from "../components/edition/team-features-dialog";
 import { currentUserQueryOptions, needsOnboarding } from "../lib/auth/queries";
+import { resumeIdentity } from "../lib/auth/identity";
 import { CopilotProvider } from "../lib/copilot/provider";
 import { AppHotkeys } from "../lib/hotkeys/app-hotkeys";
 import { SkinAccountSync } from "../skins/account-sync";
@@ -16,6 +17,12 @@ export const Route = createFileRoute("/_authed")({
     if (!user) {
       throw redirect({ to: "/sign" });
     }
+    /*
+     * A proven identity lifts the post-sign-out write freeze. Reaching here means the user object
+     * is the signed-in person's own, freshly fetched past an emptied cache — after a switch that
+     * can only be the new identity, since the old one's cache and storage no longer exist.
+     */
+    resumeIdentity();
     /*
      * Somebody who has not finished onboarding goes there and nowhere else. Here rather than in
      * `_app`, so admin and settings are behind the same gate; checked against the destination so

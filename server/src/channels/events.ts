@@ -1,4 +1,6 @@
 import postgres from "postgres";
+import { sql } from "drizzle-orm";
+import type { Database } from "../db/client";
 import type { ChannelWorkWire } from "./working";
 
 /**
@@ -71,6 +73,14 @@ export type ChannelActivityEvent = {
    * can arrive out of order across replicas, so a browser keeps the list with the latest stamp.
    */
   workAt?: string;
+  /**
+   * Not a business event: the named members' sessions have ended, so their connections lose the
+   * qualification to receive anything. The hub closes the connections instead of delivering —
+   * nothing here is meant to reach a browser, and it carries no payload worth reading. Published
+   * by the sign-out path so every instance ends its own sockets for that person, not only the one
+   * that handled the POST.
+   */
+  sessionRevoked?: true;
 };
 
 /** "The roster you hold may be wrong." Carries no delta, because what was lost is not recoverable. */
@@ -81,24 +91,53 @@ const RESYNC_PAYLOAD = JSON.stringify({
 } satisfies ChannelResyncEvent);
 
 type Send = (payload: string) => void;
+/** Close one connection, not just silence it. A revoked connection must stop, not pause. */
+type Close = () => void;
 
 export type ChannelEventHub = {
-  /** Attach a connection for a person. Returns the detach. */
-  register(userId: string, send: Send): () => void;
+  /**
+   * Attach a connection for a person. Returns the detach. `close` ends the connection for real;
+   * a revoked identity's registration is dropped by the hub, not merely muted.
+   */
+  register(userId: string, send: Send, close?: Close): () => void;
   /** Fan one event out to this instance's own connections. */
   deliver(event: ChannelActivityEvent): void;
   /** Tell every connection to refetch. Everybody, because the lost events named their own members. */
   resyncAll(): void;
+  /**
+   * End every connection of one person on this instance: the identity the connections spoke for
+   * no longer holds a session. Used by the sign-out path, which knows the person, not the socket.
+   */
+  revokeUser(userId: string): void;
   connectionCount(userId: string): number;
 };
 
 export function createChannelEventHub(): ChannelEventHub {
-  const connections = new Map<string, Set<Send>>();
+  const connections = new Map<string, Map<Send, Close>>();
+
+  const detachAll = (userId: string, closeEach: boolean) => {
+    const registrations = connections.get(userId);
+    if (!registrations) return;
+    connections.delete(userId);
+    for (const [send, close] of registrations) {
+      if (closeEach) {
+        try {
+          close();
+        } catch {
+          // A close that fails is a connection already going; its own close handler's detach
+          // finds nothing left and does nothing.
+        }
+      }
+      // The send of a closing connection is never called again: the registration is gone, so
+      // neither `deliver` nor `revokeUser` can reach it.
+      void send;
+    }
+  };
 
   return {
-    register(userId, send) {
-      const existing = connections.get(userId) ?? new Set<Send>();
-      existing.add(send);
+    register(userId, send, close) {
+      const existing = connections.get(userId) ?? new Map();
+      existing.set(send, close ?? (() => {}));
       connections.set(userId, existing);
 
       return () => {
@@ -112,8 +151,16 @@ export function createChannelEventHub(): ChannelEventHub {
     },
 
     deliver(event) {
+      // A revocation carries no business payload and is not delivered: it ends the named
+      // person's connections on this instance. Whoever published it already checked the
+      // session on the server side; the connection of a signed-out identity loses its
+      // receiving qualification here rather than at the browser's next close.
+      if (event.sessionRevoked) {
+        for (const userId of event.memberIds) detachAll(userId, true);
+        return;
+      }
       for (const userId of event.memberIds) {
-        for (const send of connections.get(userId) ?? []) {
+        for (const [send] of connections.get(userId) ?? []) {
           try {
             send(JSON.stringify(event));
           } catch {
@@ -124,9 +171,13 @@ export function createChannelEventHub(): ChannelEventHub {
       }
     },
 
+    revokeUser(userId) {
+      detachAll(userId, true);
+    },
+
     resyncAll() {
-      for (const sends of connections.values()) {
-        for (const send of sends) {
+      for (const registrations of connections.values()) {
+        for (const [send] of registrations) {
           try {
             send(RESYNC_PAYLOAD);
           } catch {
@@ -143,6 +194,33 @@ export function createChannelEventHub(): ChannelEventHub {
 }
 
 export type ChannelActivityListener = { stop: () => Promise<void> };
+
+/**
+ * Announce that these people's sessions have ended, on the same topic every instance listens to.
+ *
+ * The instance that handled the sign-out closes its own sockets directly; this carries the same
+ * fact to the others, so a socket upgraded on a replica that never saw the POST loses its
+ * receiving qualification too, rather than living on until the browser happens to close it. The
+ * event carries member ids and nothing else — there is no payload, because a signed-out identity
+ * is owed no content, not even a reason.
+ */
+export async function announceSessionRevoked(
+  database: Database,
+  userIds: string[],
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const event: ChannelActivityEvent = {
+    channelId: "",
+    lastMessage: null,
+    lastMessageAt: null,
+    lastMessageAgentId: null,
+    memberIds: userIds,
+    sessionRevoked: true,
+  };
+  await database.execute(
+    sql`select pg_notify(${CHANNEL_ACTIVITY_TOPIC}, ${JSON.stringify(event)})`,
+  );
+}
 
 /**
  * Listen for activity announced by any instance, including this one.
