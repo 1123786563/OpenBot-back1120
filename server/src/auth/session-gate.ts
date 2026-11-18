@@ -67,10 +67,14 @@ export function createSessionGate(database: Database): SessionGate {
  * enqueued, and a refused one ends the stream, so the browser sees the response close rather than
  * a body that quietly stays open doing nothing.
  *
- * Finite bodies need no wrapper — they are answered in one write, inside the request that was
- * authorized. Only a body that trickles over time can outlive the session, so only one is
- * wrapped; a response without a body, or with no session on the request that asked for it
- * (single-user mode), passes through untouched.
+ * EVERY BODY IS WRAPPED, NOT ONLY AN OBVIOUSLY STREAMING ONE. Whether a body will trickle is a
+ * property of the code behind the caller — a route can grow a stream under a wrapper that was
+ * written for a JSON answer, and the wrapper would never hear of it. The cost of wrapping a
+ * one-write body is one indexed primary-key read per write, the same price every gated frame
+ * pays; the cost of NOT wrapping one that turned out to trickle is exactly the leak this gate
+ * exists to close. So the wrapper is the default, and a response without a body — a HEAD answer,
+ * a 204 — or one asked for with no session on the request (single-user mode) passes through
+ * untouched, because there is nothing to gate.
  */
 export function gateStreamingResponse(
   response: Response,

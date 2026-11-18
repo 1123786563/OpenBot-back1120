@@ -39,6 +39,7 @@ import { PluginRefusedError } from "../src/plugins/plugin-store/model";
 import { createPluginStore } from "../src/plugins/store";
 import type { ConnectedAppBroker } from "../src/plugins/broker";
 import { personalOrgOf, sharedAccountInScope } from "../src/plugins/plugin-store/shared-scope";
+import { deploymentOrgVendorUserId } from "../src/plugins/shared-accounts";
 import { TEST_POOL, testDatabaseUrl } from "./support/database";
 
 /**
@@ -102,6 +103,17 @@ const createdAgentIds: string[] = [];
 const createdChannelIds: string[] = [];
 const createdServerIds: string[] = [];
 const createdConnectionApp = `t04shared-${randomUUID().slice(0, 8)}`;
+
+/**
+ * The identity a REAL consent now carries for a workspace: what `accountRefFor` derives for the
+ * connecting administrator's space. The routes hand this ref to the authorize mint and the
+ * completion writes it into the row, so recording with it here reproduces the flow as shipped.
+ */
+const sharedRefFor = (workspaceId: string, serverId: string) => ({
+  holder: "deployment" as const,
+  vendorUserId: deploymentOrgVendorUserId(suite, workspaceId, serverId),
+  organizationId: workspaceId,
+});
 
 afterEach(async () => {
   for (const id of createdChannelIds.splice(0)) {
@@ -640,10 +652,12 @@ describe("shared accounts: one workspace per deployment account", () => {
     });
     createdServerIds.push(serverId);
 
-    // The administrator of workspace OA connects the deployment account.
+    // The administrator of workspace OA connects the deployment account, the way the route does:
+    // the account is the ref `accountRefFor` built for THEIR workspace, whose vendor identity is
+    // that workspace's own.
     const written = await pluginStore.recordBrokeredConnection({
       toolkit: createdConnectionApp,
-      account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+      account: sharedRefFor(a.workspaceId, serverId),
       connectedBy: a.id,
       verified: true,
       probeAction: null,
@@ -658,6 +672,12 @@ describe("shared accounts: one workspace per deployment account", () => {
     // The binding is the connecting administrator's own workspace, read off the person, never
     // off a request field.
     expect(row.organizationId).toBe(a.workspaceId);
+    // And the identity PERSISTED on the row is OA's own derivation — the identity the consent
+    // was minted under at the vendor, which a call for this workspace sends and a disconnect of
+    // this workspace withdraws.
+    expect(row.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
 
     // The call-time and route-time question: in scope for OA, out of scope for OB.
     expect(
@@ -693,15 +713,15 @@ describe("shared accounts: one workspace per deployment account", () => {
     expect(entryA?.connected).toBe(true);
     expect(entryA?.connectedBy).toBe(`${a.id}@example.test`);
 
-    // A later consent from OB's administrator gives OB ITS OWN row: OA's row — its
-    // administrator, its identity, its verified state — is untouched, and both workspaces now
-    // read "connected" about their own account only. The old (provider, app) key let this
-    // consent overwrite OA's row out from under OA's users. The consent runs under the app's
-    // own Shared identity, the way a real consent does — the workspace is what makes OB's row
-    // OB's.
+    // A later consent from OB's administrator gives OB ITS OWN row — under OB's own vendor
+    // identity, distinct from OA's, because the vendor files actions and revocations under the
+    // identity it is sent and one space's account must not be mistaken for the other's at the
+    // vendor either. OA's row — its administrator, its identity, its verified state — is
+    // untouched, and both workspaces now read "connected" about their own account only. The old
+    // (provider, app) key let this consent overwrite OA's row out from under OA's users.
     await pluginStore.recordBrokeredConnection({
       toolkit: createdConnectionApp,
-      account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+      account: sharedRefFor(b.workspaceId, serverId),
       connectedBy: b.id,
       verified: true,
       probeAction: null,
@@ -713,6 +733,17 @@ describe("shared accounts: one workspace per deployment account", () => {
     expect(rows).toHaveLength(2);
     expect(rows.map((each) => each.organizationId).sort()).toEqual(
       [a.workspaceId, b.workspaceId].sort(),
+    );
+    // Two spaces, two identities at the vendor: neither space's actions can run in the other's
+    // vendor-side account.
+    expect(
+      new Set(rows.map((each) => each.vendorUserId)).size,
+    ).toBe(2);
+    expect(rows.map((each) => each.vendorUserId).sort()).toEqual(
+      [
+        sharedRefFor(a.workspaceId, serverId).vendorUserId,
+        sharedRefFor(b.workspaceId, serverId).vendorUserId,
+      ].sort(),
     );
 
     const afterSecondConsentForA = await pluginStore.sharedConnections({
@@ -752,7 +783,7 @@ describe("shared accounts: one workspace per deployment account", () => {
 
     await pluginStore.recordBrokeredConnection({
       toolkit: createdConnectionApp,
-      account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+      account: sharedRefFor(a.workspaceId, serverId),
       connectedBy: a.id,
       verified: true,
       probeAction: null,
@@ -767,11 +798,15 @@ describe("shared accounts: one workspace per deployment account", () => {
     };
 
     // OA's administrator calls: the ref the resolution built carries OA's workspace, and the
-    // one read keyed on it returns OA's own identity.
+    // one read keyed on it returns OA's own identity — the identity the vendor files OA's
+    // actions under, which is what a call sends and what the vendor keys the account by.
     const refA = await pluginStore.accountRefFor(serverId, a.id);
     if (!("ref" in refA)) throw new Error("OA's own shared app did not resolve");
     expect(refA.ref.holder).toBe("deployment");
     expect(refA.ref.organizationId).toBe(a.workspaceId);
+    expect(refA.ref.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
     const callA = await pluginStore.connectionTokenFor(
       { id: serverId, title: "T04 shared app, called", credentialId: null },
       null,
@@ -779,7 +814,9 @@ describe("shared accounts: one workspace per deployment account", () => {
       access,
       "shared",
     );
-    expect(callA.vendorUserId).toBe(`shared-${suite}`);
+    expect(callA.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
 
     // OB calls the same app while OA holds the only row: refused BEFORE a vendor identity is
     // returned — and the refusal is the same "not connected for your workspace" a genuinely
@@ -800,18 +837,21 @@ describe("shared accounts: one workspace per deployment account", () => {
       refused = error;
     }
     expect(refused).toBeInstanceOf(PluginRefusedError);
+    // The refusal names no other space's identity, and none of the derivation's own.
     expect(String(refused)).not.toContain(`shared-${suite}`);
+    expect(String(refused)).not.toContain(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
 
-    // THE INTERLEAVING THE OLD TWO-READ SHAPE ALLOWED. OB's administrator consents — under
-    // the app's own Shared identity, the way a real consent does; what distinguishes the two
-    // rows is their workspace binding, not their identity. Under the old code a scope check
-    // that read OA's binding could be followed by a credential read keyed on the identity
+    // THE INTERLEAVING THE OLD TWO-READ SHAPE ALLOWED. OB's administrator consents, the way the
+    // route does: under the identity OB's own workspace derives. Under the old code a scope
+    // check that read OA's binding could be followed by a credential read keyed on the identity
     // alone, which matched EITHER row and returned whichever sorted first. The read is one
     // statement keyed on the caller's workspace now, so after the second row exists each side
     // still resolves its own row, and neither resolves the other's.
     await pluginStore.recordBrokeredConnection({
       toolkit: createdConnectionApp,
-      account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+      account: sharedRefFor(b.workspaceId, serverId),
       connectedBy: b.id,
       verified: true,
       probeAction: null,
@@ -823,7 +863,9 @@ describe("shared accounts: one workspace per deployment account", () => {
       access,
       "shared",
     );
-    expect(callAAgain.vendorUserId).toBe(`shared-${suite}`);
+    expect(callAAgain.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
     const callB = await pluginStore.connectionTokenFor(
       { id: serverId, title: "T04 shared app, called", credentialId: null },
       null,
@@ -831,7 +873,12 @@ describe("shared accounts: one workspace per deployment account", () => {
       access,
       "shared",
     );
-    expect(callB.vendorUserId).toBe(`shared-${suite}`);
+    expect(callB.vendorUserId).toBe(
+      sharedRefFor(b.workspaceId, serverId).vendorUserId,
+    );
+    // WHAT THE VENDOR SEES: the two calls go out under DIFFERENT identities, so one space's
+    // actions cannot be filed in the other's vendor-side account.
+    expect(callAAgain.vendorUserId).not.toBe(callB.vendorUserId);
 
     // And OA's disconnect — which deletes by the SAME org-carrying predicate the call read
     // used — ends OA's row only: OB's account keeps its row, its identity and its working call.
@@ -861,7 +908,203 @@ describe("shared accounts: one workspace per deployment account", () => {
       access,
       "shared",
     );
-    expect(callBAfterWithdraw.vendorUserId).toBe(`shared-${suite}`);
+    expect(callBAfterWithdraw.vendorUserId).toBe(
+      sharedRefFor(b.workspaceId, serverId).vendorUserId,
+    );
+  });
+
+  test("a workspace-bound row left by the old shared identity is refused until its space reconnects", async () => {
+    const a = await identity("a");
+    const b = await identity("b");
+
+    const serverId = `${suite}-srv-legacy`;
+    await database.insert(mcpServers).values({
+      id: serverId,
+      title: "T04 shared app, legacy",
+      vendor: "Composio",
+      url: `composio://${createdConnectionApp}`,
+      provenance: "composio",
+      accountMode: "shared",
+      authScheme: "OAUTH2",
+      sharedVendorUserId: `shared-${suite}`,
+    });
+    createdServerIds.push(serverId);
+
+    // The row the PREVIOUS code wrote: bound to OA's workspace, but naming the app-level
+    // identity — one identity shared by every space's row. A real migration state, not a
+    // hypothetical.
+    await pluginStore.recordBrokeredConnection({
+      toolkit: createdConnectionApp,
+      account: {
+        holder: "deployment",
+        vendorUserId: `shared-${suite}`,
+        organizationId: a.workspaceId,
+      },
+      connectedBy: a.id,
+      verified: true,
+      probeAction: null,
+    });
+
+    const access = {
+      transport: "composio",
+      credential: "brokered",
+      reachedAs: "deployment",
+      ownCredential: false,
+      toolkit: createdConnectionApp,
+    };
+
+    // OA's call is REFUSED, not inherited: the identity a call derives now matches nothing the
+    // legacy row names, and a vendor grant minted under an identity every space could spell is
+    // not a grant this space keeps. Fail closed, no automatic re-claim.
+    const legacyCall = await pluginStore.connectionTokenFor(
+      { id: serverId, title: "T04 shared app, legacy", credentialId: null },
+      null,
+      a.id,
+      access,
+      "shared",
+    ).catch((error: unknown) => error);
+    expect(legacyCall).toBeInstanceOf(PluginRefusedError);
+
+    // The administrator re-consents, which mints OA's own identity at the vendor and rewrites
+    // the row to name it — the same recovery a real deployment's admin performs.
+    await pluginStore.recordBrokeredConnection({
+      toolkit: createdConnectionApp,
+      account: sharedRefFor(a.workspaceId, serverId),
+      connectedBy: a.id,
+      verified: true,
+      probeAction: null,
+    });
+    const rows = await database
+      .select()
+      .from(brokeredConnections)
+      .where(eq(brokeredConnections.app, createdConnectionApp));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
+    // And the space's call works again — under its own identity, not the shared one.
+    const call = await pluginStore.connectionTokenFor(
+      { id: serverId, title: "T04 shared app, legacy", credentialId: null },
+      null,
+      a.id,
+      access,
+      "shared",
+    );
+    expect(call.vendorUserId).toBe(
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    );
+    // Another space still has nothing: B's call is refused, and B's derived identity never
+    // appeared anywhere.
+    const callB = await pluginStore.connectionTokenFor(
+      { id: serverId, title: "T04 shared app, legacy", credentialId: null },
+      null,
+      b.id,
+      access,
+      "shared",
+    ).catch((error: unknown) => error);
+    expect(callB).toBeInstanceOf(PluginRefusedError);
+  });
+
+  test("a disconnect withdraws the workspace's OWN identity at the vendor, and the other space's account stands", async () => {
+    const a = await identity("a");
+    const b = await identity("b");
+
+    const serverId = `${suite}-srv-revoke`;
+    await database.insert(mcpServers).values({
+      id: serverId,
+      title: "T04 shared app, revoked",
+      vendor: "Composio",
+      url: `composio://${createdConnectionApp}`,
+      provenance: "composio",
+      accountMode: "shared",
+      authScheme: "OAUTH2",
+      sharedVendorUserId: `shared-${suite}`,
+    });
+    createdServerIds.push(serverId);
+
+    await pluginStore.recordBrokeredConnection({
+      toolkit: createdConnectionApp,
+      account: sharedRefFor(a.workspaceId, serverId),
+      connectedBy: a.id,
+      verified: true,
+      probeAction: null,
+    });
+    await pluginStore.recordBrokeredConnection({
+      toolkit: createdConnectionApp,
+      account: sharedRefFor(b.workspaceId, serverId),
+      connectedBy: b.id,
+      verified: true,
+      probeAction: null,
+    });
+
+    // The broker spy: what reaches the vendor is what one space's disconnect withdraws.
+    const revokedAt: string[] = [];
+    const brokerWithSpy: ConnectedAppBroker = {
+      ...broker,
+      revoke: async (input: { account: { vendorUserId: string } }) => {
+        revokedAt.push(input.account.vendorUserId);
+        return true;
+      },
+    };
+    const spyStore = createPluginStore({
+      brokerProvider: "composio",
+      database,
+      auditStore,
+      credentials: {} as never,
+      encryptionKey: "x".repeat(44),
+      policy: () => ({ mode: "enforce", deny: [], allow: ["true"] }),
+      broker: brokerWithSpy,
+      deploymentId: suite,
+      sharedUse: async () => ({ allowed: true }),
+    });
+
+    await spyStore.disconnectBrokered({
+      toolkit: createdConnectionApp,
+      account: sharedRefFor(a.workspaceId, serverId),
+      by: a.id,
+      reason: "admin",
+    });
+    // OA's withdrawal named OA's identity and NOTHING else — not OB's, not the app's own.
+    expect(revokedAt).toEqual([
+      sharedRefFor(a.workspaceId, serverId).vendorUserId,
+    ]);
+    expect(revokedAt[0]).not.toBe(`shared-${suite}`);
+    expect(revokedAt[0]).not.toBe(
+      sharedRefFor(b.workspaceId, serverId).vendorUserId,
+    );
+
+    // Locally OA's row is gone; OB's row, identity and working call are untouched.
+    const remaining = await database
+      .select()
+      .from(brokeredConnections)
+      .where(eq(brokeredConnections.app, createdConnectionApp));
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.organizationId).toBe(b.workspaceId);
+    const access = {
+      transport: "composio",
+      credential: "brokered",
+      reachedAs: "deployment",
+      ownCredential: false,
+      toolkit: createdConnectionApp,
+    };
+    const callB = await pluginStore.connectionTokenFor(
+      { id: serverId, title: "T04 shared app, revoked", credentialId: null },
+      null,
+      b.id,
+      access,
+      "shared",
+    );
+    expect(callB.vendorUserId).toBe(
+      sharedRefFor(b.workspaceId, serverId).vendorUserId,
+    );
+    const callA = await pluginStore.connectionTokenFor(
+      { id: serverId, title: "T04 shared app, revoked", credentialId: null },
+      null,
+      a.id,
+      access,
+      "shared",
+    ).catch((error: unknown) => error);
+    expect(callA).toBeInstanceOf(PluginRefusedError);
   });
 
   test("two workspaces consenting at once each get their own row, and nobody's row is lost", async () => {
@@ -881,18 +1124,19 @@ describe("shared accounts: one workspace per deployment account", () => {
     });
     createdServerIds.push(serverId);
 
-    // The two consents run concurrently, the way two administrators on two replicas do.
+    // The two consents run concurrently, the way two administrators on two replicas do, each
+    // under the identity their own workspace derives.
     await Promise.all([
       pluginStore.recordBrokeredConnection({
         toolkit: createdConnectionApp,
-        account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+        account: sharedRefFor(a.workspaceId, serverId),
         connectedBy: a.id,
         verified: true,
         probeAction: null,
       }),
       pluginStore.recordBrokeredConnection({
         toolkit: createdConnectionApp,
-        account: { holder: "deployment", vendorUserId: `shared-${suite}` },
+        account: sharedRefFor(b.workspaceId, serverId),
         connectedBy: b.id,
         verified: true,
         probeAction: null,
@@ -910,6 +1154,8 @@ describe("shared accounts: one workspace per deployment account", () => {
     expect(rows.map((each) => each.connectedBy).sort()).toEqual(
       [a.id, b.id].sort(),
     );
+    // Two concurrent consents, two distinct vendor identities, no row lost.
+    expect(new Set(rows.map((each) => each.vendorUserId)).size).toBe(2);
   });
 });
 

@@ -206,6 +206,50 @@ export function mintDeploymentVendorUserId(
 }
 
 /**
+ * The identity ONE WORKSPACE's shared account is held under at the vendor.
+ *
+ * TWO SPACES, TWO IDENTITIES — this is what stops a shared account's vendor actions from running
+ * under one another's name. An app's `shared_vendor_user_id` is minted once per switch to Shared
+ * and is the identity of the UNBOUND (single-user, legacy) deployment account; keyed on it alone,
+ * two workspaces' rows could name one identity, and the vendor — which files connections and
+ * actions under the id it is sent — could not tell one space's account from the other's: one
+ * space's call would land in the other's vendor-side account, and disconnecting one space's row
+ * would withdraw the grant the other was using.
+ *
+ * DETERMINISTIC, BECAUSE IT IS DERIVED TWICE IN TWO PLACES THAT MUST AGREE: the authorize route
+ * mints the consent at the vendor under it, and the completion writes the very ref it was handed
+ * into the workspace's `brokered_connections` row — whose `vendor_user_id` PERSISTS it. A random
+ * mint would have to be persisted before the flow starts and recovered at the callback, where a
+ * lost read would file one space's consent under the other's identity. Recomputation is safe
+ * exactly because nothing is random: the same deployment, workspace and app always spell the same
+ * identity, so an administrator re-consenting their own space re-derives the identity their row
+ * already names, and another space's consent spells a different one.
+ *
+ * LEGACY ROWS FAIL CLOSED, WHICH IS THE POINT. A workspace-bound row written before this
+ * derivation existed carries the app-level identity, which no longer matches what this derives —
+ * so every scoped read of it finds nothing and the space is refused until its administrator
+ * connects it again, which rewrites the row under its own identity. The old identity's vendor-side
+ * grant is withdrawn by that re-consent's supersede; nothing inherited, nothing claimed.
+ *
+ * THE APP IS IN THE DERIVATION, so one space's shared Gmail and shared Slack stay distinct at the
+ * vendor for the same reason {@link mintDeploymentVendorUserId} keeps them distinct: shared apps
+ * do not pool identities across apps any more than across spaces.
+ */
+export function deploymentOrgVendorUserId(
+  deploymentId: string,
+  organizationId: string,
+  appId: string,
+): string {
+  const named = deploymentId.trim();
+  if (!named) {
+    throw new Error(
+      "A deployment with no id cannot hold a shared account; set DEPLOYMENT_ID.",
+    );
+  }
+  return `${DEPLOYMENT_VENDOR_PREFIX}${named}:org:${organizationId}:${appId}`;
+}
+
+/**
  * What separates a person's own broker id from the id a further account of theirs is filed under.
  *
  * Arcade keeps one account per user id and auth provider, so a person's second Gmail there is filed

@@ -156,4 +156,106 @@ describe("identity generation guards the cache write", () => {
       .execute(undefined);
     expect(queryClient.getQueryData<string>(KEY)).toBe("never-resolved");
   });
+
+  /*
+   * THE TWO GAPS BELOW ARE THE REVIEWER'S OWN REPRODUCTIONS, kept as regressions.
+   *
+   * A real `useMutation` renders an observer, and every re-render of a pending mutation hands the
+   * observer fresh options — which the observer copies onto the STILL-PENDING mutation, replacing
+   * the wrapped copy `cache.build` made with the raw hook callbacks. A guard that only wraps at
+   * build time is silently uninstalled by the first render after the request went out.
+   */
+  test("an observer options refresh while the mutation is pending does not unbind the callbacks", async () => {
+    const { MutationObserver } = await import("@tanstack/react-query");
+    let releaseA: (saved: string) => void = () => {};
+    const gate = new Promise<string>((resolve) => {
+      releaseA = resolve;
+    });
+    const startedAt = identityGeneration();
+    const observer = new MutationObserver(queryClient, {
+      mutationFn: () => gate,
+      onSuccess: (saved: string) => queryClient.setQueryData(KEY, saved),
+    });
+    const running = observer.mutate(undefined);
+    expect(observer.getCurrentResult().isPending).toBe(true);
+
+    // A re-render while the mutation is in flight: fresh options object, same callbacks. This is
+    // the swap that used to overwrite the bound copies with raw ones.
+    observer.setOptions({
+      mutationFn: () => gate,
+      onSuccess: (saved: string) => queryClient.setQueryData(KEY, saved),
+    });
+    expect(observer.getCurrentResult().isPending).toBe(true);
+
+    // The switch runs to completion; the page belongs to B; B writes their own value.
+    freezeIdentity();
+    beginIdentitySwitch();
+    resumeIdentity();
+    expect(identityGeneration()).toBeGreaterThan(startedAt);
+    queryClient.setQueryData(KEY, "B-current");
+
+    // A's response finally lands — through the swapped-in callbacks.
+    releaseA("STALE");
+    await running.catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-current");
+  });
+
+  /*
+   * An `async` lifecycle callback writes after its own `await`. Restoring the binding when the
+   * callback FIRST returns — before its promise settles — would leave everything after the first
+   * `await` running unbound, which is the same hole one render later.
+   */
+  test("a stale async callback writes nothing after its own await, across the switch", async () => {
+    let releaseA: (saved: string) => void = () => {};
+    const gate = new Promise<string>((resolve) => {
+      releaseA = resolve;
+    });
+    const startedAt = identityGeneration();
+    queryClient
+      .getMutationCache()
+      .build(
+        queryClient,
+        mutationOptions({
+          mutationFn: () => gate,
+          onSuccess: async (saved: string) => {
+            // The callback does real work before writing — a refetch, a second request.
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            queryClient.setQueryData(KEY, saved);
+          },
+        }),
+      )
+      .execute(undefined);
+
+    freezeIdentity();
+    beginIdentitySwitch();
+    resumeIdentity();
+    expect(identityGeneration()).toBeGreaterThan(startedAt);
+    queryClient.setQueryData(KEY, "B-current");
+
+    releaseA("STALE-AFTER-AWAIT");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-current");
+  });
+
+  test("the CURRENT identity's async callback still lands — the binding must not swallow it", async () => {
+    queryClient
+      .getMutationCache()
+      .build(
+        queryClient,
+        mutationOptions({
+          mutationFn: () => Promise.resolve("mine"),
+          onSuccess: async (saved: string) => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            queryClient.setQueryData(KEY, saved);
+          },
+        }),
+      )
+      .execute(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(queryClient.getQueryData<string>(KEY)).toBe("mine");
+  });
 });

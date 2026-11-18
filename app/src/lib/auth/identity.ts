@@ -1,4 +1,9 @@
-import { MutationObserver, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  Mutation,
+  MutationObserver,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { queryClient } from "@/query-client";
 import { clearSkin } from "@/skins/store";
 
@@ -62,15 +67,53 @@ let frozen = false;
 let executing: number | null = null;
 let channel: BroadcastChannel | undefined;
 
-/** Run `fn` as a callback of the identity generation `startedAt`, nesting-safe. */
+/**
+ * Run `fn` as a callback of the identity generation `startedAt`, nesting-safe — and ACROSS ITS
+ * ENTIRE EXECUTION, not just its first synchronous stretch.
+ *
+ * A lifecycle callback may `await` before it writes: an `async onSuccess` that stores a result
+ * after a round trip, an `onSettled` that awaits a refetch. Restoring `executing` the moment `fn`
+ * RETURNS would unbind everything after its first `await` — the door would then read
+ * `executing === null`, wave the write through, and the stale result the binding existed to stop
+ * would land after all. So when `fn` answers a promise, the binding is held until that promise
+ * settles: the continuation after every `await` still runs under the generation the callback
+ * started under, and the door can still tell it from the new identity's writes.
+ *
+ * THE COST IS HONEST AND BOUNDED. While a stale callback's promise is in flight, `executing` names
+ * its generation, and an UNGUARDED write that happens to run inside that window — code that calls
+ * `setQueryData` outside any bound callback — is dropped with the stale writes. That window is
+ * exactly the leak window (a stale callback still pending after a newer identity resumed), it ends
+ * when the callback settles, and no bound write is ever mis-dropped: a bound callback stamps its
+ * own generation on entry and restores what was there before. Dropping a stranger's write while a
+ * known-stale callback is still live errs toward the side this module exists to guard; the
+ * alternative — letting the stale write through because the marker happened to be down — is the
+ * bug.
+ */
 function runForGeneration<T>(startedAt: number, fn: () => T): T {
   const outer = executing;
   executing = startedAt;
-  try {
-    return fn();
-  } finally {
+  const settle = (): void => {
     executing = outer;
+  };
+  let result: T;
+  try {
+    result = fn();
+  } catch (error) {
+    settle();
+    throw error;
   }
+  if (
+    result instanceof Promise ||
+    (result !== null &&
+      typeof result === "object" &&
+      typeof (result as { then?: unknown }).then === "function")
+  ) {
+    // `Promise.resolve` also takes a foreign thenable; `finally` passes the outcome through
+    // untouched, so the caller's await sees exactly what `fn` answered.
+    return Promise.resolve(result).finally(settle) as unknown as T;
+  }
+  settle();
+  return result;
 }
 
 /**
@@ -273,6 +316,14 @@ export function installIdentityGuards(): void {
    */
   const cache = queryClient.getMutationCache();
   const wrapped = new WeakSet<object>();
+  /** Options objects `bindMutationOptions` already produced, so they are never wrapped twice. */
+  const boundOptions = new WeakSet<object>();
+  /*
+   * The generation getter of every mutation this cache builds, kept by identity so a LATER write
+   * to the mutation's options can bind to the same stamp (see `Mutation.setOptions` below). The
+   * mutation object is the key; the stamp itself is read per execution.
+   */
+  const stamps = new WeakMap<object, () => number>();
   const originalBuild = cache.build.bind(cache);
   cache.build = ((
     client: Parameters<typeof cache.build>[0],
@@ -280,16 +331,18 @@ export function installIdentityGuards(): void {
     state: Parameters<typeof cache.build>[2],
   ) => {
     const startedAt = { value: -1 };
-    const mutation = originalBuild(
-      client,
+    const bound =
       options
         ? (bindMutationOptions(
             options as unknown as Parameters<typeof bindMutationOptions>[0],
             () => startedAt.value,
           ) as typeof options)
-        : options,
-      state,
-    );
+        : options;
+    const mutation = originalBuild(client, bound, state);
+    // The copy this build wrapped, so a `setOptions` carrying it back (the constructor's first
+    // call, and an observer refresh that passes it through) is not wrapped a second time.
+    if (bound) boundOptions.add(bound as object);
+    stamps.set(mutation, () => startedAt.value);
     if (wrapped.has(mutation)) return mutation;
     wrapped.add(mutation);
     const originalExecute = mutation.execute.bind(mutation);
@@ -302,6 +355,39 @@ export function installIdentityGuards(): void {
     };
     return mutation;
   }) as typeof cache.build;
+
+  /*
+   * A PENDING MUTATION'S OPTIONS ARE REPLACED, NOT ONLY READ — and the replacement is unbound.
+   *
+   * While a mutation is in flight, every re-render of its hook runs `observer.setOptions`, and the
+   * observer answers a still-pending mutation with `mutation.setOptions(its own raw options)` —
+   * the hook's callbacks as declared, never the wrapped copy `cache.build` made. That swap lands
+   * BETWEEN `execute` starting and the lifecycle callbacks running, so the `onSuccess` that fires
+   * when the response arrives is the RAW one: no stamp, no binding, and a stale result writing
+   * straight into the new identity's cache through the door above. This wrapper re-binds whatever
+   * arrives, to THIS mutation's own stamp — the same generation its `execute` stamped — so the
+   * swapped-in callbacks stay bound to the run that is still going, however many renders refresh
+   * the observer under it. Options that are themselves an already-bound copy (the constructor's
+   * first call) pass through untouched: wrapping a wrapper would stack one more on every rebuild.
+   */
+  const mutationPrototype = Mutation.prototype as unknown as {
+    setOptions: (options: Record<string, unknown> | undefined) => void;
+  };
+  const originalMutationSetOptions = mutationPrototype.setOptions;
+  mutationPrototype.setOptions = function (options) {
+    if (!options || boundOptions.has(options)) {
+      return originalMutationSetOptions.call(this, options);
+    }
+    const stamp = stamps.get(this as object);
+    if (!stamp) return originalMutationSetOptions.call(this, options);
+    return originalMutationSetOptions.call(
+      this,
+      bindMutationOptions(
+        options as unknown as Parameters<typeof bindMutationOptions>[0],
+        stamp,
+      ) as unknown as Record<string, unknown>,
+    );
+  };
 
   /*
    * The per-call callbacks of `mutate()` never reach the mutation's options — the observer holds

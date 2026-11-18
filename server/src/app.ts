@@ -1723,20 +1723,46 @@ export function createApp(
           return next();
         const answer = await requireUser(context, next);
         /*
-         * A STREAM ANSWERS TO ITS SESSION FOR AS LONG AS IT TRICKLES. The guard above proved the
-         * session once, at the request; the gate proves it again before every chunk, so a turn
-         * still streaming when its session signs out stops mid-stream — on this replica or any
-         * other, because the gate reads the sessions table they all share. A finite answer needs
-         * no wrapper, and one is not given one. The guard's own refusals (401/403) are already
-         * complete responses and pass through untouched.
+         * THE GUARD'S OWN REFUSALS PASS THROUGH UNTOUCHED — a 401 or 403 is a complete response,
+         * answered inside the request that asked, and the actor is not even set under it.
          */
-        return sessionGate && answer instanceof Response
-          ? gateStreamingResponse(
-              answer,
-              sessionGate,
-              context.var.actor?.sessionId,
-            )
-          : answer;
+        if (answer) return answer;
+        /*
+         * A BODY ANSWERS TO ITS SESSION FOR AS LONG AS IT IS BEING WRITTEN — including the one
+         * `next()` just finished producing.
+         *
+         * The guard above proved the session once, at the request; the gate proves it again before
+         * every chunk leaves the server, so a turn still streaming when its session signs out
+         * stops mid-stream — on this replica or any other, because the gate reads the sessions
+         * table they all share. The response the guard authorized is read back off `context.res`:
+         * a successful authentication makes `requireUser` return `undefined` AFTER `next()` has
+         * run, so the response it authorized is HERE and nowhere in this middleware's return
+         * value — keyed on that return alone, every authenticated body skipped the gate, and the
+         * only requests a stream ever gated were its own refusals.
+         *
+         * AND THE WRAPPER IS ASSIGNED, NOT RETURNED. A downstream handler answers first and sets
+         * `context.res` itself; Hono's compose then keeps only `context.res` — a middleware's own
+         * return value is discarded once the context has finalized under it. Returning the wrapper
+         * would not only gate nothing: the wrapper pipes the very body `context.res` still holds,
+         * which would hand the caller a response whose body this server had already locked. The
+         * setter is the one write Hono honours after `next()`, and it is what swaps the gated body
+         * in.
+         *
+         * A body that answers in one write is wrapped too, and deliberately: whether a body will
+         * trickle is a property of the code BEHIND this middleware, which can change without this
+         * line hearing about it, while the cost of wrapping a one-write body is a single indexed
+         * primary-key read — the same price every gated frame already pays. A refusal the other
+         * way (ending a body that outlived its session) is the failure mode being closed, so the
+         * wrapper is the default and exempting a body shape is a decision someone has to make,
+         * not a silence that keeps it.
+         */
+        if (sessionGate) {
+          context.res = gateStreamingResponse(
+            context.res,
+            sessionGate,
+            context.var.actor?.sessionId,
+          );
+        }
       });
     app.use("/api/copilotkit/*", createCapturePassOrigin(config));
     // Mounted at the ROOT with the handler carrying its own basePath. Mounting it at

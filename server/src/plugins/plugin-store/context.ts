@@ -40,6 +40,7 @@ import {
   type AccountMode,
   type AccountRef,
   accountFor,
+  deploymentOrgVendorUserId,
   personAccount,
 } from "../shared-accounts";
 import { filedUnder } from "../single-user-identity";
@@ -396,25 +397,58 @@ export function createStoreContext(options: PluginStoreOptions) {
     /*
      * THE SHARED REF NAMES THE ACTOR'S OWN WORKSPACE, BECAUSE THE ROW IT RESOLVES IS CHOSEN BY IT.
      *
-     * One app can hold one Shared account per workspace, and those rows can share a vendor
-     * identity — so every row read keyed on this ref carries the workspace in its WHERE, and a
-     * call resolves the calling actor's row or none. Read off the actor here, at the same place
-     * the ref is minted, so no caller can hold a ref that names somebody else's space: a
-     * single-user or legacy identity holds none, and keeps the unscoped lookup it always ran.
+     * One app can hold one Shared account per workspace, and every row read keyed on this ref
+     * carries the workspace in its WHERE, so a call resolves the calling actor's row or none. Read
+     * off the actor here, at the same place the ref is minted, so no caller can hold a ref that
+     * names somebody else's space: a single-user or legacy identity holds none, and keeps the
+     * unscoped lookup it always ran.
+     *
+     * AND THE IDENTITY IS THE WORKSPACE'S OWN, NOT THE APP'S. The app's `shared_vendor_user_id` is
+     * the unbound deployment account's identity; keyed on it, two workspaces' rows would name one
+     * vendor identity and the vendor could not tell one space's actions or revocations from the
+     * other's. A workspace actor's ref derives {@link deploymentOrgVendorUserId} — deterministic in
+     * deployment, workspace and app — so the consent this ref mints at the vendor and the row the
+     * completion writes PERSIST that space's own identity, and another space's consent spells a
+     * different one. A workspace-bound row left from before the derivation (carrying the app-level
+     * identity) matches nothing this ref looks up and is refused until re-connected — fail closed,
+     * never inherited.
      */
     const workspace = actorId
       ? await personalOrgOf(database, actorId)
       : null;
+    if (workspace) {
+      if (!options.deploymentId?.trim()) {
+        throw new PluginInvariantError(
+          `${appId} is Shared for a workspace, but the deployment has no id to derive that workspace's vendor identity from; set DEPLOYMENT_ID.`,
+        );
+      }
+      return {
+        ref: {
+          holder: "deployment",
+          vendorUserId: deploymentOrgVendorUserId(
+            options.deploymentId,
+            workspace,
+            appId,
+          ),
+          organizationId: workspace,
+        },
+        title: row.title,
+        mode: "shared",
+        appId,
+      };
+    }
+    if (!row.sharedVendorUserId) {
+      throw new PluginInvariantError(
+        `${appId} is Shared and holds no deployment identity; switch it to Personal and back.`,
+      );
+    }
     return {
       // As in {@link asAccountRef}: the workspace key exists only when there is one, so a
       // single-user or legacy actor's ref stays the shape every unscoped reader has always read.
-      ref: workspace
-        ? {
-            holder: "deployment",
-            vendorUserId: row.sharedVendorUserId,
-            organizationId: workspace,
-          }
-        : { holder: "deployment", vendorUserId: row.sharedVendorUserId },
+      ref: {
+        holder: "deployment",
+        vendorUserId: row.sharedVendorUserId,
+      },
       title: row.title,
       mode: "shared",
       appId,
