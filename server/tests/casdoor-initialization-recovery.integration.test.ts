@@ -188,6 +188,13 @@ test("concurrent first sign-ins converge on one user with one identity row", asy
   expect(first.activeOrganizationId).toBe(workspaces[0].id);
   expect(second.activeOrganizationId).toBe(workspaces[0].id);
   expect(first.authSource).toBe(ISSUER);
+  // The trail the audit store captured is read, not just filled: each session the callback bound
+  // left a `session.signed_in` event against this user.
+  const signedIn = audit.filter(
+    (event) => event.eventType === "session.signed_in" && event.targetId === userId,
+  );
+  expect(signedIn.length).toBeGreaterThanOrEqual(1);
+  expect(signedIn.every((event) => event.actorUserId === userId)).toBe(true);
 });
 
 test("the same subject from a different issuer is a different identity and is never merged", async () => {

@@ -7,13 +7,12 @@ const env = serverEnvironment(process.env);
 const result = spawnSync(
   "docker-compose",
   [
-    "compose",
     "-p",
     "openbot-t03",
     "--env-file",
     "deploy/t03/.env.t03",
     "-f",
-    "deploy/t03/docker-compose.t02.yml",
+    "deploy/t03/docker-compose.t03.yml",
     "exec",
     "-T",
     "postgres",
