@@ -108,7 +108,7 @@ services:
   lago-migrate:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
-    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/migrate.sh"]
+    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/migrate.sh"]
     environment: &lago-env
       LAGO_DATABASE_URL: postgres://${BILLING62_LAGO_USER}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
       LAGO_DATABASE_URL_PASSWORD: ${BILLING62_LAGO_PASSWORD}
@@ -130,7 +130,7 @@ services:
   lago-api:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-api
-    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.api.sh"]
+    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.api.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     expose:
@@ -146,7 +146,7 @@ services:
   lago-clock:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-clock
-    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.clock.sh"]
+    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.clock.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
@@ -155,7 +155,7 @@ services:
   lago-worker:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-worker
-    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.worker.sh"]
+    command: ["sh", "-c", "export LAGO_RSA_PRIVATE_KEY=$(printf %s \"$$LAGO_RSA_PRIVATE_KEY_B64\" | base64 -d) && exec ./scripts/start.worker.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
