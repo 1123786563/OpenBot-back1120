@@ -150,18 +150,23 @@ function isThenable(value: unknown): value is Promise<unknown> {
 /**
  * Run `fn` as a callback of the identity generation `startedAt`.
  *
- * A callback of a generation that no longer holds the page is not run at all. That check answers
- * the dominant case outright, in both bindings: React Query invokes a mutation's lifecycle
- * callbacks when the response lands, so a response that arrives after the switch invokes the
- * callback AFTER it — dropping the invocation drops the write and every continuation after it,
- * whatever the callback does inside. What remains is a callback already running when the switch
- * happened: it is invoked before, and its post-`await` continuations come later. The exact binding
- * follows those continuations wherever they interleave — two overlapping callbacks, settling in
- * either order, each write lands or is refused by its own generation. The fallback covers them
- * with the registry, and refuses unattributed writes for the window a stale callback is pending.
+ * The callback always runs; what the generation decides is what it may WRITE. The door refuses a
+ * superseded callback's writes at the moment it makes them, in either binding: the exact one
+ * follows each callback's continuations across its `await`s and refuses by generation, and the
+ * fallback claims the synchronous stretch exactly and refuses unattributed writes for the window
+ * a stale callback is still pending. The one thing the generation must never decide is WHETHER a
+ * lifecycle callback runs — see the comment inside.
  */
 function runForGeneration<T>(startedAt: number, fn: () => T): T {
-  if (startedAt !== generation) return undefined as T;
+  // NO INVOCATION GATE, deliberately. A lifecycle callback of a superseded generation still runs:
+  // gating the invocation on the generation would break the one flow this module exists to serve,
+  // because the SIGN-OUT mutation's own `onMutate` is what moves the generation (the freeze), and
+  // its `onSuccess` — the code that performs the switch, clears the cache and navigates away — is
+  // then a callback whose stamp no longer matches the page. Refusing that invocation would leave
+  // the person signed out server-side and standing in the app forever; the refused-sign-out
+  // `onError` and its unfreeze would die the same way. What the generation owes the page is that
+  // a superseded callback WRITES NOTHING — and that is the door's answer, below, which holds no
+  // matter when the callback was invoked or how long it ran.
   if (asyncContext) {
     // The context is captured for this callback's whole execution — every continuation after
     // every `await`, however interleaved with other callbacks — and the door reads it at the

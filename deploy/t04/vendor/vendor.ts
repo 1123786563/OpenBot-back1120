@@ -37,7 +37,7 @@ const TOOLKIT = {
   name: "T04 Board",
   meta: {
     description: "The stand-in vendor's message board.",
-    categories: ["productivity"],
+    categories: [{ id: "productivity", name: "productivity" }],
     logo: null,
     tools_count: 2,
   },
@@ -64,7 +64,8 @@ const TOOLS = [
       required: ["text"],
     },
     version: TOOL_VERSION,
-    toolkit: { slug: TOOLKIT.slug },
+    tags: ["createHint"],
+    toolkit: { slug: TOOLKIT.slug, name: TOOLKIT.name },
   },
   {
     slug: "T04BOARD_READ_BOARD",
@@ -73,7 +74,8 @@ const TOOLS = [
     input_parameters: { type: "object", properties: {} },
     parameters: { type: "object", properties: {} },
     version: TOOL_VERSION,
-    toolkit: { slug: TOOLKIT.slug },
+    tags: ["readOnlyHint"],
+    toolkit: { slug: TOOLKIT.slug, name: TOOLKIT.name },
   },
 ];
 
@@ -93,11 +95,14 @@ type AuthConfig = {
   created_at: string;
 };
 
+/** The vendor's own state file: its accounts and ledger survive a restart of this process. */
+const STATE_FILE = import.meta.dir + "/vendor-state.json";
+
 const authConfigs = new Map<string, AuthConfig>();
 const accounts = new Map<string, ConnectedAccount>();
 /** Consents handed out, keyed by the state this vendor minted. */
 const consents = new Map<string, { account: ConnectedAccount }>();
-/** The board: what executions wrote, read back by the read action. */
+/** The board, PER ACCOUNT: the vendor scopes what an account reads to what it wrote. */
 const board: { by: string; text: string; at: string }[] = [];
 /** THE LEDGER: every executed action with the vendor identity that performed it. */
 const executions: {
@@ -111,6 +116,53 @@ const executions: {
 const revocations: { at: string; vendorUserId: string; accountId: string }[] =
   [];
 const unanswered: string[] = [];
+const requests: string[] = [];
+const state: Record<string, unknown> = {};
+
+type VendorSnapshot = {
+  authConfigs: AuthConfig[];
+  accounts: ConnectedAccount[];
+  board: { by: string; text: string; at: string }[];
+  executions: {
+    at: string;
+    vendorUserId: string;
+    connectedAccountId: string;
+    tool: string;
+    arguments: unknown;
+  }[];
+  revocations: { at: string; vendorUserId: string; accountId: string }[];
+};
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+function saveSoon(): void {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const snapshot: VendorSnapshot = {
+      authConfigs: [...authConfigs.values()],
+      accounts: [...accounts.values()],
+      board,
+      executions,
+      revocations,
+    };
+    void Bun.write(STATE_FILE, JSON.stringify(snapshot)).catch(() => {});
+  }, 200);
+}
+
+async function loadSaved(): Promise<void> {
+  try {
+    const file = Bun.file(STATE_FILE);
+    if (!(await file.exists())) return;
+    const saved = (await file.json()) as VendorSnapshot;
+    for (const config of saved.authConfigs ?? []) authConfigs.set(config.id, config);
+    for (const account of saved.accounts ?? []) accounts.set(account.id, account);
+    board.push(...(saved.board ?? []));
+    executions.push(...(saved.executions ?? []));
+    revocations.push(...(saved.revocations ?? []));
+  } catch {
+    // A state file that cannot be read is a fresh vendor, not a fault.
+  }
+}
+await loadSaved();
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data as never, { status });
@@ -135,6 +187,8 @@ const server = Bun.serve({
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    const line = `${method} ${path}${url.search}`;
+    requests.push(line);
 
     // The consent screen, and the approval that sends the browser back to OpenBot's callback.
     if (path === "/consent" && method === "GET") {
@@ -159,6 +213,7 @@ const server = Bun.serve({
       const back = form.get("back") ?? "";
       const consent = consents.get(state);
       if (consent) consent.account.status = "ACTIVE";
+      saveSoon();
       // Straight back to the address the link was given, which is OpenBot's own callback carrying
       // its sealed state — the same leg the real vendor runs.
       return Response.redirect(back, 302);
@@ -166,14 +221,32 @@ const server = Bun.serve({
 
     // The evidence read-out: sanitized at the caller, not here.
     if (path === "/__ledger" && method === "GET") {
+      saveSoon();
       return json({ executions, revocations, board, accounts: [...accounts.values()] });
     }
     if (path === "/__unanswered" && method === "GET") {
       return json({ unanswered });
     }
+    if (path === "/__requests" && method === "GET") {
+      return json({ requests: requests.slice(-25) });
+    }
+    // The verification harness's state (sanitized ids plus the fixture credentials it needs to
+    // re-sign people in across acts). Loopback only, never logged, never in the evidence.
+    if (path === "/__state") {
+      if (method === "GET") return json(state);
+      if (method === "POST") {
+        const body = await readBody(request);
+        if (body.reset) {
+          for (const key of Object.keys(state)) delete state[key];
+          return json({ reset: true });
+        }
+        Object.assign(state, body);
+        return json({ saved: Object.keys(body).length });
+      }
+    }
 
-    if (path === "/api/v3/toolkits" && method === "GET") {
-      return json({ items: [TOOLKIT], next_cursor: null });
+    if ((path === "/api/v3/toolkits" || path === "/api/v3.1/toolkits") && method === "GET") {
+      return json({ items: [TOOLKIT], next_cursor: null, total_pages: 1 });
     }
     if (path === `/api/v3/toolkits/${TOOLKIT.slug}` && method === "GET") {
       return json({
@@ -190,13 +263,24 @@ const server = Bun.serve({
       });
     }
 
-    if (path === "/api/v3/auth_configs") {
+    if (path === "/api/v3/auth_configs" || path === "/api/v3.1/auth_configs") {
       if (method === "GET") {
-        const toolkit = url.searchParams.get("toolkits") ?? url.searchParams.get("toolkit");
+        const toolkit =
+          url.searchParams.get("toolkits") ??
+          url.searchParams.get("toolkit_slug") ??
+          url.searchParams.get("toolkit");
         const rows = [...authConfigs.values()].filter((config) =>
           toolkit ? config.toolkit.slug === toolkit : true,
         );
-        return json({ items: rows, next_cursor: null });
+        return json({
+          items: rows.map((config) => ({
+            ...config,
+            toolkit: { slug: config.toolkit.slug, logo: `http://127.0.0.1:${PORT}/logo.png` },
+          })),
+          next_cursor: null,
+          total_pages: 1,
+          total_items: rows.length,
+        });
       }
       if (method === "POST") {
         const body = await readBody(request);
@@ -208,13 +292,26 @@ const server = Bun.serve({
         const id = randomId("acfg");
         const created: AuthConfig = {
           id,
-          name: `${slug} OpenBot ${id.slice(-6)}`,
+          name: `${slug} ${id.slice(-6)} (OpenBot)`,
           status: "ENABLED",
+          no_of_connections: 0,
           toolkit: { slug: slug || TOOLKIT.slug },
           created_at: new Date().toISOString(),
         };
         authConfigs.set(id, created);
-        return json(created, 201);
+        saveSoon();
+        // The create response the SDK parses strictly: {id, authScheme, isComposioManaged, toolkit}.
+        return json(
+          {
+            id,
+            authScheme: "OAUTH2",
+            isComposioManaged: true,
+            toolkit: created.toolkit.slug,
+            // The wrapper shape the broker reads the new config's id from.
+            auth_config: { id, status: "ENABLED" },
+          },
+          201,
+        );
       }
     }
     if (path.startsWith("/api/v3/auth_configs/") && method === "DELETE") {
@@ -224,9 +321,21 @@ const server = Bun.serve({
       return json({ id, deleted: Boolean(removed) });
     }
 
-    if (path === "/api/v3/connected_accounts" && method === "GET") {
-      const rows = [...accounts.values()];
+    if ((path === "/api/v3/connected_accounts" || path === "/api/v3.1/connected_accounts") && method === "GET") {
+      // The link preflight filters by user, config and status — and the vendor must answer with
+      // the filtered set, exactly the contract the real API keeps: the SDK trusts this answer.
+      const userIds = url.searchParams.get("user_ids")?.split(",").filter(Boolean);
+      const authConfigIds = url.searchParams.get("auth_config_ids")?.split(",").filter(Boolean);
+      const statuses = url.searchParams.get("statuses")?.split(",").filter(Boolean);
+      const rows = [...accounts.values()].filter(
+        (account) =>
+          (!userIds || userIds.includes(account.user_uuid)) &&
+          (!authConfigIds || authConfigIds.includes(account.auth_config_id)) &&
+          (!statuses || statuses.includes(account.status)),
+      );
       return json({
+        total_pages: 1,
+        total_items: rows.length,
         items: rows.map((account) => ({
           id: account.id,
           status: account.status,
@@ -241,7 +350,7 @@ const server = Bun.serve({
         next_cursor: null,
       });
     }
-    if (path === "/api/v3/connected_accounts/link" && method === "POST") {
+    if ((path === "/api/v3/connected_accounts/link" || path === "/api/v3.1/connected_accounts/link") && method === "POST") {
       const body = await readBody(request);
       const authConfigId = String(body.auth_config ?? body.auth_config_id ?? "");
       const userId = String(body.user_id ?? "unknown");
@@ -261,6 +370,7 @@ const server = Bun.serve({
         created_at: new Date().toISOString(),
       };
       accounts.set(account.id, account);
+      saveSoon();
       const state = randomId("st");
       consents.set(state, { account });
       const back = callbackUrl || "http://localhost:14003/api/plugins/oauth/callback";
@@ -273,7 +383,11 @@ const server = Bun.serve({
         201,
       );
     }
-    if (path.startsWith("/api/v3/connected_accounts/") && path !== "/api/v3/connected_accounts/link") {
+    if (
+      (path.startsWith("/api/v3/connected_accounts/") ||
+        path.startsWith("/api/v3.1/connected_accounts/")) &&
+      !path.endsWith("/link")
+    ) {
       const id = path.split("/").pop() ?? "";
       const account = accounts.get(id);
       if (!account) return json({ message: "Connected account not found" }, 404);
@@ -297,14 +411,15 @@ const server = Bun.serve({
           vendorUserId: account.user_uuid,
           accountId: account.id,
         });
+        saveSoon();
         return json({ success: true });
       }
     }
 
-    if (path === "/api/v3/tools" && method === "GET") {
-      return json({ items: TOOLS, next_cursor: null });
+    if ((path === "/api/v3/tools" || path === "/api/v3.1/tools") && method === "GET") {
+      return json({ items: TOOLS, next_cursor: null, total_pages: 1 });
     }
-    if (path.startsWith("/api/v3/tools/") && method === "GET") {
+    if ((path.startsWith("/api/v3/tools/") || path.startsWith("/api/v3.1/tools/")) && method === "GET" && !path.includes("execute")) {
       const slug = decodeURIComponent(path.split("/").pop() ?? "");
       const tool = TOOLS.find((candidate) => candidate.slug === slug);
       if (!tool) return json({ message: "Tool not found" }, 404);
@@ -315,9 +430,16 @@ const server = Bun.serve({
         path.split("/").pop()?.replace(/^execute[/_]/, "") ?? "",
       );
       const body = await readBody(request);
-      const vendorUserId = String(body.user_id ?? "unknown");
       const connectedAccountId = String(body.connected_account_id ?? body.connectedAccountId ?? "");
-      const account = accounts.get(connectedAccountId);
+      // A call may pin the account by id, or name only the user it runs for, which is how the
+      // real vendor resolves an unpinned call: the account held for that user.
+      const account =
+        accounts.get(connectedAccountId) ??
+        [...accounts.values()].find(
+          (candidate) =>
+            candidate.user_uuid === String(body.user_id ?? "") &&
+            candidate.status === "ACTIVE",
+        );
       const text = (body.arguments as { text?: unknown } | undefined)?.text;
       // THE VENDOR-SIDE RULE THAT MAKES THE EVIDENCE MEAN SOMETHING: an action runs as the
       // connected account the call names, and the ledger records exactly that identity. An
@@ -336,21 +458,24 @@ const server = Bun.serve({
         tool: slug,
         arguments: body.arguments,
       });
+      saveSoon();
       if (slug === "T04BOARD_READ_BOARD") {
+        // The vendor enforces the account boundary on reads too: an account sees its own words.
         return json({
           successful: true,
           data: {
-            messages: board.map((entry) => ({ by: entry.by, text: entry.text })),
-            original: String(text ?? ""),
+            messages: board
+              .filter((entry) => entry.by === account.user_uuid)
+              .map((entry) => ({ by: entry.by, text: entry.text })),
           },
         });
       }
       const message = String(text ?? "");
       board.push({ by: account.user_uuid, text: message, at: new Date().toISOString() });
+      saveSoon();
       return json({ successful: true, data: { posted: message } });
     }
 
-    const line = `${method} ${path}${url.search}`;
     unanswered.push(line);
     await Bun.write(import.meta.dir + "/unanswered.log", `${line}\n`, {
       append: true,
