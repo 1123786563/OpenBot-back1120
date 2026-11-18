@@ -8,6 +8,13 @@
       "when": 1795003817409,
       "tag": "0000_sad_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795089600000000,
+      "tag": "0001_recovery_allocation",
+      "breakpoints": true
     }
   ]
 }

@@ -389,7 +389,7 @@ export interface paths {
         put?: never;
         /**
          * Grant one credit lot from a trusted business event (authorized entitlement service)
-         * @description The ONLY entry that adds credits. Requires the billing:grant capability; the source namespace and actor are derived from the authenticated service credential, never from the request. The stable business key (source_namespace, source_event_id) binds to the account, amount, period and validity once: the same key with the same content under ANY new Idempotency-Key replays the first result, and the same key with a different account/amount/period/validity is refused — a re-grant through a changed request or a second account can never happen. The credit lot, the grant ledger event, the pending outbox record and the successful idempotency row all commit in ONE transaction; no external network call runs inside it. subscription grants carry their period and a finite expiry from the trusted period result (#65); packs are long-lived (expires_at_us null, period null); compensation grants link their original deduction event and, when the original source was an expired subscription, expire 30 days after grant. Idempotent under (organization_id, billing_account_id, createCreditGrant, source_event_id, key).
+         * @description The ONLY entry that adds credits. Requires the billing:grant capability; the source namespace and actor are derived from the authenticated service credential, never from the request. The stable business key (source_namespace, source_event_id) binds to the account, amount, period and validity once: the same key with the same content under ANY new Idempotency-Key replays the first result, and the same key with a different account/amount/period/validity is refused — a re-grant through a changed request or a second account can never happen. The credit lot, the grant ledger event, the pending outbox record and the successful idempotency row all commit in ONE transaction; no external network call runs inside it. subscription grants carry their period and a finite expiry from the trusted period result (#65); packs are long-lived (expires_at_us null, period null); compensation grants link their original deduction event — shares whose original source is still valid are restored in place with that source's original validity, and only shares whose source subscription has expired become a compensation lot expiring 30 days after grant (server-computed; the request may only echo it). Recovery is tracked per original deduction line across ALL entries, so grants and adjustments together can never restore more than the original deduction. Idempotent under (organization_id, billing_account_id, createCreditGrant, source_event_id, key).
          */
         post: operations["createCreditGrant"];
         delete?: never;
@@ -1343,7 +1343,7 @@ export interface components {
             granted_microcredits: components["schemas"]["PositiveMicrocredits"];
             /** @description When the lot becomes spendable; earlier instants answer the scheduled status until reached. */
             valid_from_us: components["schemas"]["TimestampUs"];
-            /** @description Absolute expiry; REQUIRED finite and after valid_from_us for subscription and compensation, null for pack. */
+            /** @description Absolute expiry; REQUIRED finite and after valid_from_us for subscription; null for pack; compensation sends null or the server-computed arrival+30d echo. */
             expires_at_us: components["schemas"]["TimestampUsNullable"];
             /** @description Original deduction event a compensation restores; REQUIRED for source_type=compensation, null otherwise. */
             original_event_id: string | null;
@@ -1352,6 +1352,7 @@ export interface components {
         } & (unknown & unknown & unknown);
         /** @description Created (or replayed) grant; the lot id, ledger event id and account revision are stable under replay. */
         CreditGrantMutationResult: {
+            /** @description The issued compensation lot when the recovery includes an expired-source share; otherwise the original credit lot after the in-place restoration (the largest restored share when one deduction spanned several live lots). */
             credit_lot: components["schemas"]["CreditLot"];
             ledger_event_id: components["schemas"]["Uuid"];
             billing_account: components["schemas"]["BillingAccount"];

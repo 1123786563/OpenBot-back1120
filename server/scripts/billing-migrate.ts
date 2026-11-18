@@ -99,6 +99,7 @@ $$ LANGUAGE plpgsql`,
     ["business_event", "billing_business_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
     ["idempotency", "billing_idempotency_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
     ["outbox_event", "billing_outbox_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["recovery_allocation", "billing_recovery_allocation_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
   ].map(([table, name, fn, ops]) => ensureTrigger(table, name, fn, ops)),
   // credit_lot: components/status/revision updatable, source identity not; no delete
   ensureTrigger(
@@ -108,6 +109,41 @@ $$ LANGUAGE plpgsql`,
     "BEFORE UPDATE",
   ),
   ensureTrigger("credit_lot", "billing_credit_lot_immutable", "refuse_rewrite", "BEFORE DELETE"),
+  // THE recovery quota backstop: the cumulative restoration recorded against
+  // one original deduction line can never exceed what that line consumed —
+  // across ALL entries (grants, adjustments), concurrent or replayed. The
+  // service enforces the same rule inside the account lock; this trigger is
+  // what the DATABASE promises even if future code forgets it.
+  `CREATE OR REPLACE FUNCTION billing.refuse_over_recovery() RETURNS trigger AS $$
+BEGIN
+  IF (SELECT delta_consumed_microcredits FROM billing.ledger_line
+      WHERE event_id = NEW.original_event_id AND lot_id = NEW.original_lot_id)
+     IS NULL THEN
+    RAISE EXCEPTION 'recovery allocation % references a non-deduction line (event %, lot %)',
+      NEW.id, NEW.original_event_id, NEW.original_lot_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.restored_microcredits + COALESCE((
+       SELECT SUM(restored_microcredits) FROM billing.recovery_allocation
+       WHERE original_event_id = NEW.original_event_id
+         AND original_lot_id = NEW.original_lot_id
+         AND (TG_OP = 'INSERT' OR id <> NEW.id)), 0) >
+     (SELECT delta_consumed_microcredits FROM billing.ledger_line
+      WHERE event_id = NEW.original_event_id AND lot_id = NEW.original_lot_id)
+  THEN
+    RAISE EXCEPTION 'recovery allocation exceeds the original deduction line quota (event %, lot %)',
+      NEW.original_event_id, NEW.original_lot_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql`,
+  ensureTrigger(
+    "recovery_allocation",
+    "billing_recovery_line_quota_guard",
+    "refuse_over_recovery",
+    "BEFORE INSERT",
+  ),
 ];
 
 export async function ensureRuntimeRole(

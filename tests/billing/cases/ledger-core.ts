@@ -284,11 +284,11 @@ async function main(): Promise<number> {
     `SELECT table_name AS tablename FROM information_schema.tables WHERE table_schema='billing' ORDER BY 1`,
   );
   const names = tables.map((t) => t.tablename).sort();
-  for (const expect of ["account", "adjustment", "business_event", "credit_lot", "idempotency", "ledger_event", "ledger_line", "outbox_delivery", "outbox_event"]) {
+  for (const expect of ["account", "adjustment", "business_event", "credit_lot", "idempotency", "ledger_event", "ledger_line", "outbox_delivery", "outbox_event", "recovery_allocation"]) {
     ok(names.includes(expect), `billing.${expect} exists after migration`);
   }
   const journal = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`);
-  eq(journal[0]!.n, "1", "migration journal records exactly the one migration");
+  eq(journal[0]!.n, "2", "migration journal records exactly the two migrations (v1 schema + v2 recovery quota)");
   const probe = await owner.unsafe(`SELECT v FROM ac1_non_billing_probe`);
   eq((probe[0] as { v: number }).v, 1, "non-billing data untouched by ledger migrations");
   const triggers = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM pg_trigger WHERE tgname LIKE 'billing\\_%' AND tgname LIKE '%immutable%'`);
@@ -374,9 +374,9 @@ async function main(): Promise<number> {
     await owner.unsafe(`UPDATE billing.credit_lot SET available_microcredits = available_microcredits - 250, consumed_microcredits = consumed_microcredits + 250, revision = revision + 1 WHERE id = $1`, [lot0]);
 
     const nowUsA = BigInt(Date.now()) * 1000n;
-    const now30d = nowUsA + 30n * 24n * 3600n * 1_000_000n;
     // the expiry belongs to the SERVER: a caller-declared wrong deadline is
-    // refused while the deduction's capacity is still intact
+    // refused while the deduction's quota is still intact (null is also legal:
+    // the caller may simply not assert the server-computed echo)
     const compWrongExpiry = await post("/internal/v1/billing/credit-grants", makeBody({
       billing_account_id: acctA, source_event_id: `evt_compwrongexp_${RUN_ID}`, source_type: "compensation",
       granted_microcredits: "1", valid_from_us: String(nowUsA),
@@ -384,6 +384,10 @@ async function main(): Promise<number> {
       original_event_id: deductionD1,
     }), ENT_A_TOKEN, "compwrongexp-1");
     eq(compWrongExpiry.status, 409, "caller-declared non-30d compensation expiry refused");
+    const lot0Before = (await owner.unsafe<{ a: string; c: string; e: string }[]>(`SELECT available_microcredits::text AS a, consumed_microcredits::text AS c, expires_at_us::text AS e FROM billing.credit_lot WHERE id = $1`, [lot0]))[0]!;
+    // lot0's source is STILL VALID (expires far in the future), so the direct
+    // compensation must RESTORE THE ORIGINAL SOURCE — consumed back to
+    // available inside lot0 with lot0's own expiry, never a fresh 30-day batch
     const compGrant = await postConverge("/internal/v1/billing/credit-grants", makeBody({
       billing_account_id: acctA,
       source_event_id: `evt_comp_${RUN_ID}`,
@@ -391,22 +395,29 @@ async function main(): Promise<number> {
       source_period_id: null,
       granted_microcredits: "250",
       valid_from_us: String(nowUsA),
-      expires_at_us: String(now30d),
+      expires_at_us: null,
       original_event_id: deductionD1,
     }), ENT_A_TOKEN, `comp-${RUN_ID}`);
     eq(compGrant.status, 201, "compensation grant links its original deduction event");
     const compLot = compGrant.body.credit_lot as { id: string; expires_at_us: string; source_period_id: string | null; source_type: string };
-    eq(compLot.source_type, "compensation", "compensation lot records its source type");
-    eq(compLot.source_period_id, null, "compensation lot has no period of its own");
-    // SERVER-computed expiry = arrival + 30 days (a tight bound, not just a floor)
-    const compExpDelta = BigInt(compLot.expires_at_us) - (BigInt(Date.now()) * 1000n + 30n * 24n * 3600n * 1_000_000n);
-    ok(compExpDelta >= -60_000_000n && compExpDelta <= 60_000_000n, "compensation expiry is server-computed as arrival + 30 days (±60s)");
+    eq(compLot.id, lot0, "direct compensation answers the ORIGINAL still-valid source lot");
+    eq(compLot.source_type, "subscription", "the restored lot keeps its original source type");
+    eq(compLot.expires_at_us, lot0Before.e, "restored credits keep the ORIGINAL validity — never converted to 30 days");
+    eq(compLot.source_period_id, "period_2026-12", "restored credits keep the original period");
+    const lot0After = (await owner.unsafe<{ a: string; c: string }[]>(`SELECT available_microcredits::text AS a, consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [lot0]))[0]!;
+    eq(lot0After.c, "0", "the deduction's consumed share moved fully back to zero");
+    eq(lot0After.a, (BigInt(lot0Before.a) + 250n).toString(), "restoration moved exactly the consumed share back to available in place");
+    eq(await countOf(owner, "credit_lot", `compensation_for_event_id = '${deductionD1}'`), 0n, "NO compensation batch was created for the still-valid source");
+    const compAlloc = await owner.unsafe<{ r: string; v: string }[]>(`SELECT restored_microcredits::text AS r, restored_via AS v FROM billing.recovery_allocation WHERE original_event_id = $1`, [deductionD1]);
+    eq(compAlloc.length, 1, "the grant recorded its recovery against the shared quota ledger");
+    eq(`${compAlloc[0]?.r}:${compAlloc[0]?.v}`, "250:credit_grant", "the recovery row carries the full amount under the grant entry");
+    eq(await countOf(owner, "outbox_event", `ledger_event_id = '${compGrant.body.ledger_event_id as string}'`), 1n, "the restoration grant committed its pending outbox record in the same transaction");
 
     // the original event MUST be a deduction, never a plain grant
     const compBadSource = await post("/internal/v1/billing/credit-grants", makeBody({
       billing_account_id: acctA, source_event_id: `evt_compbad_${RUN_ID}`, source_type: "compensation",
       granted_microcredits: "1", valid_from_us: String(BigInt(Date.now()) * 1000n),
-      expires_at_us: String(BigInt(Date.now()) * 1000n + 30n * 24n * 3600n * 1_000_000n),
+      expires_at_us: null,
       original_event_id: (g0.body.ledger_event_id as string),
     }), ENT_A_TOKEN, "compbad-1");
     eq(compBadSource.status, 409, "a plain grant event is refused as a compensation source");
@@ -417,18 +428,30 @@ async function main(): Promise<number> {
     const compOver = await post("/internal/v1/billing/credit-grants", makeBody({
       billing_account_id: acctA, source_event_id: `evt_compover_${RUN_ID}`, source_type: "compensation",
       granted_microcredits: "400", valid_from_us: String(BigInt(Date.now()) * 1000n),
-      expires_at_us: String(BigInt(Date.now()) * 1000n + 30n * 24n * 3600n * 1_000_000n),
+      expires_at_us: null,
       original_event_id: deductionD1,
     }), ENT_A_TOKEN, "compover-1");
-    eq(compOver.status, 409, "compensation above the deduction capacity refused");
-    // the first compensation consumed the whole capacity: a second is refused
+    eq(compOver.status, 409, "compensation above the deduction quota refused");
+    // the grant consumed the whole shared quota: a second grant is refused
     const compDouble = await post("/internal/v1/billing/credit-grants", makeBody({
       billing_account_id: acctA, source_event_id: `evt_compdouble_${RUN_ID}`, source_type: "compensation",
       granted_microcredits: "1", valid_from_us: String(BigInt(Date.now()) * 1000n),
-      expires_at_us: String(BigInt(Date.now()) * 1000n + 30n * 24n * 3600n * 1_000_000n),
+      expires_at_us: null,
       original_event_id: deductionD1,
     }), ENT_A_TOKEN, "compdouble-1");
     eq(compDouble.status, 409, "double compensation of the same deduction refused");
+    // CROSS-ENTRY: the review blocker — a positive ADJUSTMENT over the same
+    // original deduction must be refused too, because the direct grant
+    // already spent the shared per-line quota. Whole-request rejection, zero
+    // writes anywhere.
+    const crossEntryAdj = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, deductionD1, `evt_crossadj_${RUN_ID}`, "charge_correction", "250"), ENT_A_TOKEN, `crossadj-1`);
+    eq(crossEntryAdj.status, 409, "positive adjustment over an already-restored deduction refused (shared quota)");
+    eq((crossEntryAdj.body as { title?: string }).title, "state_conflict", "cross-entry over-restoration refusal is state_conflict");
+    eq(await countOf(owner, "adjustment", `original_event_id = '${deductionD1}'`), 0n, "the refused cross-entry adjustment stored no adjustment row");
+    eq(await countOf(owner, "business_event", `source_event_id = 'evt_crossadj_${RUN_ID}'`), 0n, "the refused cross-entry adjustment stored no business identity");
+    eq(await countOf(owner, "recovery_allocation", `original_event_id = '${deductionD1}'`), 1n, "the refused cross-entry adjustment recorded no extra recovery");
+    const lot0AfterRefusal = (await owner.unsafe<{ a: string; c: string }[]>(`SELECT available_microcredits::text AS a, consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [lot0]))[0]!;
+    eq(`${lot0AfterRefusal.a}:${lot0AfterRefusal.c}`, `${lot0After.a}:0`, "the refused cross-entry adjustment touched no lot component");
     // the audited actor IS the credential subject: a trusted entry cannot
     // write history on behalf of a subject it does not hold
     const wrongActor = await post("/internal/v1/billing/credit-grants", makeBody({
@@ -466,7 +489,7 @@ async function main(): Promise<number> {
       original_event_id: (grantB.body.ledger_event_id as string),
     }), ENT_A_TOKEN, "compforeign-1");
     eq(compForeignSource.status, 404, "another account's event is refused as a compensation source");
-    const deniedCompCount = await countOf(owner, "business_event", `source_event_id IN ('evt_compforeign_${RUN_ID}','evt_compbad_${RUN_ID}','evt_compwrongexp_${RUN_ID}','evt_compover_${RUN_ID}','evt_compdouble_${RUN_ID}','evt_actor_${RUN_ID}','evt_adjactor_${RUN_ID}')`);
+    const deniedCompCount = await countOf(owner, "business_event", `source_event_id IN ('evt_compforeign_${RUN_ID}','evt_compbad_${RUN_ID}','evt_compwrongexp_${RUN_ID}','evt_compover_${RUN_ID}','evt_compdouble_${RUN_ID}','evt_crossadj_${RUN_ID}','evt_actor_${RUN_ID}','evt_adjactor_${RUN_ID}')`);
     eq(deniedCompCount, 0n, "refused compensation/actor requests left zero business identities");
 
     // authorization boundaries
@@ -907,6 +930,182 @@ async function main(): Promise<number> {
     ok(!!replayComp && replayComp.revision === "1", "replayed compensation lot shows its CREATION revision");
     eq(await countOf(owner, "adjustment", `original_event_id = '${eventCE2}' AND adjustment_type = 'compensation'`), 1n, "new-key replay stored no second adjustment");
 
+    // ================== AC5c the shared recovery quota across ALL entries
+    console.log("\n== AC5c shared per-line recovery quota: grants x adjustments, expired sources, races, restart");
+    // A deduction fixture helper: one ledger event + per-lot consumption lines
+    // written through the owner connection (a real deduction the entries can
+    // then restore against).
+    // `live` lines move the lot components (still-valid lots); fixture lines
+    // for already-expired lots only append the historical ledger line — the
+    // lot's components were written final at fixture time (as in AC5b).
+    const insertDeduction = async (lines: { lotId: string; amount: bigint; live: boolean }[]): Promise<string> => {
+      const ev = crypto.randomUUID();
+      await owner.unsafe(
+        `INSERT INTO billing.ledger_event (id, organization_id, account_id, event_type, account_seq, occurred_at_us, committed_at_us)
+         VALUES ($1, $2, $3, 'credit.adjusted', (SELECT COALESCE(MAX(account_seq),0)+1 FROM billing.ledger_event WHERE account_id = $3), 1000, 1000)`,
+        [ev, ORG_A, acctA],
+      );
+      for (const l of lines) {
+        await owner.unsafe(
+          `INSERT INTO billing.ledger_line (organization_id, account_id, event_id, lot_id, delta_consumed_microcredits, delta_available_microcredits, balances_after, created_at_us)
+           SELECT $2::uuid, $3::uuid, $1::uuid, id, $5::bigint, -$5::bigint,
+             jsonb_build_object('note', 'fixture'), 1000
+           FROM billing.credit_lot WHERE id = $4`,
+          [ev, ORG_A, acctA, l.lotId, String(l.amount)],
+        );
+        if (l.live) {
+          await owner.unsafe(
+            `UPDATE billing.credit_lot SET available_microcredits = available_microcredits - $2, consumed_microcredits = consumed_microcredits + $2, revision = revision + 1 WHERE id = $1`,
+            [l.lotId, String(l.amount)],
+          );
+        }
+      }
+      return ev;
+    };
+    // The valid_from is FROZEN for the whole AC5c block: the grant content is
+    // the dedupe identity, so a restart replay must carry the identical
+    // normalized request (a recomputed timestamp would be a different
+    // content behind the same key and business identity).
+    const ac5cValidFrom = String(BigInt(Date.now()) * 1000n);
+    const compGrantOf = (sourceEventId: string, originalEventId: string, amount: string) =>
+      postConverge("/internal/v1/billing/credit-grants", makeBody({
+        billing_account_id: acctA,
+        source_event_id: sourceEventId,
+        source_type: "compensation",
+        source_period_id: null,
+        granted_microcredits: amount,
+        valid_from_us: ac5cValidFrom,
+        expires_at_us: null,
+        original_event_id: originalEventId,
+      }), ENT_A_TOKEN, `${sourceEventId}-key`);
+
+    // (a) review blocker replay: direct grant 250 first, then the SAME +250
+    // through a positive adjustment — the adjustment must be refused whole.
+    const evA = await insertDeduction([{ lotId: lot0, amount: 250n, live: true }]);
+    const gA = await compGrantOf(`evt_rc_g1_${RUN_ID}`, evA, "250");
+    eq(gA.status, 201, "AC5c: direct grant restores the full deduction in place");
+    const adjA = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, evA, `evt_rc_a1_${RUN_ID}`, "charge_correction", "250"), ENT_A_TOKEN, `rc-a1`);
+    eq(adjA.status, 409, "AC5c: same deduction +250 adjustment after a full grant is refused whole");
+    eq(await countOf(owner, "adjustment", `original_event_id = '${evA}'`), 0n, "AC5c: refused adjustment stored no row");
+    eq(await countOf(owner, "recovery_allocation", `original_event_id = '${evA}'`), 1n, "AC5c: refused adjustment consumed no extra quota");
+    const overGrantA = await compGrantOf(`evt_rc_g1b_${RUN_ID}`, evA, "1");
+    eq(overGrantA.status, 409, "AC5c: a second grant over the spent quota is refused too");
+
+    // (b) reverse order: adjustment first, grant second, still capped.
+    const evB = await insertDeduction([{ lotId: lot0, amount: 250n, live: true }]);
+    const adjB = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctA, evB, `evt_rc_a2_${RUN_ID}`, "compensation", "100"), ENT_A_TOKEN, `rc-a2`);
+    eq(adjB.status, 201, "AC5c: adjustment-first partial restoration accepted");
+    const gBOver = await compGrantOf(`evt_rc_g2_${RUN_ID}`, evB, "151");
+    eq(gBOver.status, 409, "AC5c: grant above the remaining shared quota (150) refused whole");
+    const gB = await compGrantOf(`evt_rc_g2b_${RUN_ID}`, evB, "150");
+    eq(gB.status, 201, "AC5c: grant of exactly the remaining quota accepted");
+    const adjB2 = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, evB, `evt_rc_a2b_${RUN_ID}`, "expiry_correction", "1"), ENT_A_TOKEN, `rc-a2b`);
+    eq(adjB2.status, 409, "AC5c: another adjustment type over the spent quota refused");
+    eq(`${await countOf(owner, "adjustment", `original_event_id = '${evB}'`)}:${await countOf(owner, "recovery_allocation", `original_event_id = '${evB}'`)}`, "1:2", "AC5c: exactly one adjustment and two per-entry recovery rows");
+    const lot0Quota = await owner.unsafe<{ s: string }[]>(`SELECT COALESCE(SUM(restored_microcredits),0)::text AS s FROM billing.recovery_allocation WHERE original_lot_id = $1`, [lot0]);
+    eq(lot0Quota[0]!.s, "750", "AC5c: the shared quota ledger equals every restoration on this lot across both entries (AC2 grant 250 + grant 250 + adjustment 100 + grant 150)");
+
+    // (c) cross-type adjustments: the first type spends the quota, the others
+    // are refused — the quota ledger is shared, not per adjustment type.
+    const evC = await insertDeduction([{ lotId: lot0, amount: 250n, live: true }]);
+    const adjC = await postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctA, evC, `evt_rc_a3_${RUN_ID}`, "charge_correction", "250"), ENT_A_TOKEN, `rc-a3`);
+    eq(adjC.status, 201, "AC5c: charge_correction consumes the shared quota");
+    for (const t of ["compensation", "expiry_correction", "charge_correction"]) {
+      const again = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, evC, `evt_rc_a3_${t}_${RUN_ID}`, t, "1"), ENT_A_TOKEN, `rc-again-${t}`);
+      eq(again.status === 409 || again.status === 201, true, "AC5c: probe completed");
+      if (t !== "charge_correction") {
+        // same scope content would replay; a DIFFERENT type is a new scope,
+        // and its positive delta has no quota left
+        eq(again.status, 409, `AC5c: ${t} over the spent quota refused`);
+      }
+    }
+    // (the charge_correction retry above replayed its own first result)
+
+    // (d) EXPIRED source direct grant: the expired share becomes ONE fresh
+    // 30-day compensation lot; the expired source lot itself is never revived,
+    // and the quota is shared with adjustments afterwards.
+    await owner.unsafe(
+      `INSERT INTO billing.credit_lot (id, organization_id, account_id, source_type, source_event_id, source_period_id,
+         granted_microcredits, available_microcredits, consumed_microcredits, expired_microcredits,
+         valid_from_us, expires_at_us, status, created_at_us, updated_at_us)
+       VALUES (gen_random_uuid(), $1, $2, 'subscription', 'evt_expg_${RUN_ID}', 'period_old', 200, 0, 120, 80, 0, 1000, 'expired', 1000, 1000)`,
+      [ORG_A, acctA],
+    );
+    const lotEG = (await owner.unsafe<{ id: string }[]>(`SELECT id FROM billing.credit_lot WHERE source_event_id = 'evt_expg_${RUN_ID}'`))[0]!.id;
+    const evD = await insertDeduction([{ lotId: lotEG, amount: 120n, live: false }]);
+    const gD = await compGrantOf(`evt_rc_g3_${RUN_ID}`, evD, "120");
+    eq(gD.status, 201, "AC5c: direct grant over an expired source accepted");
+    const gDLot = gD.body.credit_lot as { id: string; source_type: string; granted_microcredits: string; expires_at_us: string };
+    ok(gDLot.id !== lotEG, "AC5c: the expired source lot was NOT restored in place");
+    eq(gDLot.source_type, "compensation", "AC5c: the expired share became a compensation lot");
+    eq(gDLot.granted_microcredits, "120", "AC5c: the compensation lot carries exactly the expired share");
+    const gDExpDelta = BigInt(gDLot.expires_at_us) - (BigInt(Date.now()) * 1000n + 30n * 24n * 3600n * 1_000_000n);
+    ok(gDExpDelta >= -60_000_000n && gDExpDelta <= 60_000_000n, "AC5c: the compensation lot expires arrival + 30 days");
+    const lotEGAfter = (await owner.unsafe<{ g: string; a: string; c: string; e: string }[]>(`SELECT granted_microcredits::text AS g, available_microcredits::text AS a, consumed_microcredits::text AS c, expired_microcredits::text AS e FROM billing.credit_lot WHERE id = $1`, [lotEG]))[0]!;
+    eq(`${lotEGAfter.g}:${lotEGAfter.a}:${lotEGAfter.c}:${lotEGAfter.e}`, "200:0:120:80", "AC5c: the expired source lot itself was never revived by the direct grant");
+    eq(await countOf(owner, "recovery_allocation", `original_event_id = '${evD}' AND restored_via = 'credit_grant'`), 1n, "AC5c: the expired-share grant recorded its quota under the grant entry");
+    const adjD = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, evD, `evt_rc_a4_${RUN_ID}`, "compensation", "1"), ENT_A_TOKEN, `rc-a4`);
+    eq(adjD.status, 409, "AC5c: adjustment over the grant-compensated expired deduction refused");
+
+    // (e) MIXED deduction (expired + still-valid) through the GRANT entry:
+    // the live share restores in place, only the expired share compensates.
+    await owner.unsafe(
+      `INSERT INTO billing.credit_lot (id, organization_id, account_id, source_type, source_event_id, source_period_id,
+         granted_microcredits, available_microcredits, consumed_microcredits,
+         valid_from_us, expires_at_us, status, created_at_us, updated_at_us)
+       VALUES (gen_random_uuid(), $1, $2, 'subscription', 'evt_expg2_${RUN_ID}', 'period_old', 70, 0, 70, 0, 1000, 'expired', 1000, 1000)`,
+      [ORG_A, acctA],
+    );
+    const lotEG2 = (await owner.unsafe<{ id: string }[]>(`SELECT id FROM billing.credit_lot WHERE source_event_id = 'evt_expg2_${RUN_ID}'`))[0]!.id;
+    const evE = await insertDeduction([{ lotId: lotEG2, amount: 70n, live: false }, { lotId: packLotId, amount: 30n, live: true }]);
+    const packBeforeE = (await owner.unsafe<{ a: string }[]>(`SELECT available_microcredits::text AS a FROM billing.credit_lot WHERE id = $1`, [packLotId]))[0]!.a;
+    const gE = await compGrantOf(`evt_rc_g4_${RUN_ID}`, evE, "100");
+    eq(gE.status, 201, "AC5c: mixed expired+live grant accepted");
+    const gELot = gE.body.credit_lot as { id: string; source_type: string; granted_microcredits: string };
+    eq(`${gELot.source_type}:${gELot.granted_microcredits}`, "compensation:70", "AC5c: the response lot is the 70-credit compensation share");
+    const packAfterE = (await owner.unsafe<{ a: string; c: string }[]>(`SELECT available_microcredits::text AS a, consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [packLotId]))[0]!;
+    eq(`${packAfterE.a}:${packAfterE.c}`, `${BigInt(packBeforeE) + 30n}:0`, "AC5c: the live share (30) restored in place in the pack lot");
+    const eg2After = (await owner.unsafe<{ a: string; c: string }[]>(`SELECT available_microcredits::text AS a, consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [lotEG2]))[0]!;
+    eq(`${eg2After.a}:${eg2After.c}`, "0:70", "AC5c: the expired share was not revived");
+    const allocE = await owner.unsafe<{ lot: string; r: string }[]>(`SELECT original_lot_id AS lot, restored_microcredits::text AS r FROM billing.recovery_allocation WHERE original_event_id = $1`, [evE]);
+    eq(allocE.map((x) => `${x.r}`).sort().join("+"), "30+70", "AC5c: both per-line shares recorded against the shared quota ledger");
+    eq(await countOf(owner, "credit_lot", `compensation_for_event_id = '${evE}'`), 1n, "AC5c: exactly one compensation lot for the expired share");
+    const adjE = await post("/internal/v1/billing/adjustments", adjBodyOf(acctA, evE, `evt_rc_a5_${RUN_ID}`, "compensation", "100"), ENT_A_TOKEN, `rc-a5`);
+    eq(adjE.status, 409, "AC5c: full-deduction adjustment after the mixed grant refused");
+
+    // (f) concurrent cross-entry race: 4 demands of 100 over ONE 200-credit
+    // deduction (two grants + two adjustment types). The account lock
+    // serializes them; the shared quota ledger admits EXACTLY TWO (200 of
+    // the 400 demanded) and refuses the rest whole.
+    const evF = await insertDeduction([{ lotId: packLotId, amount: 200n, live: true }]);
+    const raceResults = await Promise.all([
+      compGrantOf(`evt_rc_p1_${RUN_ID}`, evF, "100"),
+      compGrantOf(`evt_rc_p2_${RUN_ID}`, evF, "100"),
+      postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctA, evF, `evt_rc_p3_${RUN_ID}`, "charge_correction", "100"), ENT_A_TOKEN, `rc-p3`),
+      postConverge("/internal/v1/billing/adjustments", adjBodyOf(acctA, evF, `evt_rc_p4_${RUN_ID}`, "compensation", "100"), ENT_A_TOKEN, `rc-p4`),
+    ]);
+    const winners = raceResults.filter((r) => r.status === 201);
+    eq(winners.length, 2, "AC5c: exactly TWO of the four concurrent cross-entry demands fit the quota");
+    ok(raceResults.every((r) => r.status === 201 || r.status === 409), `AC5c: every loser answered 409 state_conflict (${raceResults.map((r) => r.status).join(",")})`);
+    const raceQuota = await owner.unsafe<{ s: string; n: string }[]>(`SELECT COALESCE(SUM(restored_microcredits),0)::text AS s, COUNT(*)::text AS n FROM billing.recovery_allocation WHERE original_event_id = $1`, [evF]);
+    eq(raceQuota[0]!.s, "200", "AC5c: the race restored exactly the deduction, never more");
+    eq(raceQuota[0]!.n, "2", "AC5c: each winner recorded exactly one recovery row for the single original line");
+    const packF = (await owner.unsafe<{ c: string }[]>(`SELECT consumed_microcredits::text AS c FROM billing.credit_lot WHERE id = $1`, [packLotId]))[0]!;
+    eq(packF.c, "0", "AC5c: the raced deduction's consumed share moved back to zero exactly once");
+
+    // (g) restart: replays answer the stored FIRST result and consume no new
+    // quota — the durable shared ledger makes retries inert.
+    await svc.stop();
+    svc = await startService();
+    const gAreplay = await compGrantOf(`evt_rc_g1_${RUN_ID}`, evA, "250");
+    ok(gAreplay.status === 200 || gAreplay.status === 201, "AC5c: grant replay after restart succeeds");
+    eq((gAreplay.body.credit_lot as { id: string }).id, (gA.body.credit_lot as { id: string }).id, "AC5c: replay answers the SAME stored result lot");
+    eq(await countOf(owner, "recovery_allocation", `original_event_id = '${evA}'`), 1n, "AC5c: restart replay consumed no extra quota");
+    const conservedAll = await owner.unsafe<{ ok: string }[]>(
+      `SELECT bool_and(granted_microcredits = available_microcredits + reserved_microcredits + refund_frozen_microcredits + consumed_microcredits + expired_microcredits + revoked_microcredits)::text AS ok
+       FROM billing.credit_lot WHERE account_id = $1`, [acctA]);
+    eq(conservedAll[0]!.ok, "true", "AC5c: every lot in the account still conserves exactly after all cross-entry traffic");
+
     // ============================================ AC6a/AC6b crash-window tests
     console.log("\n== AC6a/6b crash windows (commit-before / commit-after), grant + adjustment");
     await svc.stop();
@@ -1123,7 +1322,7 @@ async function main(): Promise<number> {
     const ownerRewriteRe = await owner.unsafe(`UPDATE billing.ledger_event SET reason = 'rewritten' WHERE reason IS NULL`).catch((e: { message?: string }) => e);
     ok(String((ownerRewriteRe as { message?: string }).message).includes("append-only"), "owner still cannot rewrite history after the re-run (trigger)");
     const journalRe = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.__drizzle_migrations`);
-    eq(journalRe[0]!.n, "1", "the live-data re-run added no migration journal row");
+    eq(journalRe[0]!.n, "2", "the live-data re-run added no migration journal row");
 
     console.log(`\nmain phase complete: ${checks} checks, ${failures} failures`);
     return failures === 0 ? 0 : 1;

@@ -393,6 +393,78 @@ export const adjustment = billing.table(
   ],
 );
 
+// ------------------------------------------------------- recovery_allocation
+/**
+ * The ONE non-overridable recovery record for original deductions. Every
+ * grant or adjustment that restores credits against an original deduction
+ * line appends a row here IN THE SAME TRANSACTION that moves the lot
+ * components — compensation grants and positive adjustments share this
+ * single quota ledger, so no entry path, adjustment type, HTTP key, race or
+ * crash replay can together restore more than the original deduction took.
+ * The cumulative sum per (original_event_id, original_lot_id) is the quota
+ * already consumed; the database guard trigger refuses any insert that
+ * would push it past that line's delta_consumed.
+ */
+export const recoveryAllocation = billing.table(
+  "recovery_allocation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    originalEventId: uuid("original_event_id").notNull(),
+    originalLotId: uuid("original_lot_id").notNull(),
+    restored: micros("restored_microcredits").notNull(),
+    /** Which trusted entry wrote it: the grant or the adjustment route. */
+    restoredVia: text("restored_via").notNull(),
+    /** The grant/adjustment ledger event that performed the restoration. */
+    restorationEventId: uuid("restoration_event_id").notNull(),
+    createdAtUs: micros("created_at_us").notNull(),
+  },
+  (t) => [
+    unique("billing_recovery_org_account_id_uq").on(
+      t.organizationId,
+      t.accountId,
+      t.id,
+    ),
+    // One row per (original deduction line, restoring event): a replayed
+    // restoration can never double-count its quota consumption.
+    unique("billing_recovery_line_event_uq").on(
+      t.originalEventId,
+      t.originalLotId,
+      t.restorationEventId,
+    ),
+    index("billing_recovery_quota_idx").on(t.originalEventId, t.originalLotId),
+    check(
+      "billing_recovery_via_check",
+      sql`${t.restoredVia} IN ('credit_grant', 'adjustment')`,
+    ),
+    check(
+      "billing_recovery_positive_check",
+      sql`${t.restored} > 0`,
+    ),
+    foreignKey({
+      name: "billing_recovery_account_fk",
+      columns: [t.organizationId, t.accountId],
+      foreignColumns: [account.organizationId, account.id],
+    }),
+    foreignKey({
+      name: "billing_recovery_original_fk",
+      columns: [t.organizationId, t.accountId, t.originalEventId],
+      foreignColumns: [ledgerEvent.organizationId, ledgerEvent.accountId, ledgerEvent.id],
+    }),
+    foreignKey({
+      name: "billing_recovery_lot_fk",
+      columns: [t.organizationId, t.accountId, t.originalLotId],
+      foreignColumns: [creditLot.organizationId, creditLot.accountId, creditLot.id],
+    }),
+    foreignKey({
+      name: "billing_recovery_event_fk",
+      columns: [t.organizationId, t.accountId, t.restorationEventId],
+      foreignColumns: [ledgerEvent.organizationId, ledgerEvent.accountId, ledgerEvent.id],
+    }),
+  ],
+);
+
 // ------------------------------------------------------------------ idempotency
 /**
  * Persisted idempotency: the normalized request, its hash and the FIRST

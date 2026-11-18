@@ -1035,9 +1035,14 @@ paths:
         transaction; no external network call runs inside it. subscription
         grants carry their period and a finite expiry from the trusted period
         result (#65); packs are long-lived (expires_at_us null, period null);
-        compensation grants link their original deduction event and, when the
-        original source was an expired subscription, expire 30 days after
-        grant. Idempotent under (organization_id, billing_account_id,
+        compensation grants link their original deduction event — shares whose
+        original source is still valid are restored in place with that
+        source's original validity, and only shares whose source subscription
+        has expired become a compensation lot expiring 30 days after grant
+        (server-computed; the request may only echo it). Recovery is tracked
+        per original deduction line across ALL entries, so grants and
+        adjustments together can never restore more than the original
+        deduction. Idempotent under (organization_id, billing_account_id,
         createCreditGrant, source_event_id, key).
       security:
         - ServiceCredentialAuth: []

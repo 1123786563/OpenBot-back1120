@@ -1707,7 +1707,7 @@ components:
         expires_at_us:
           type: ["string", "null"]
           $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
-          description: Absolute expiry; REQUIRED finite and after valid_from_us for subscription and compensation, null for pack.
+          description: Absolute expiry; REQUIRED finite and after valid_from_us for subscription; null for pack; compensation sends null or the server-computed arrival+30d echo.
         original_event_id:
           type: ["string", "null"]
           description: Original deduction event a compensation restores; REQUIRED for source_type=compensation, null otherwise.
@@ -1762,12 +1762,22 @@ components:
                 maxLength: 128
                 pattern: "^[A-Za-z0-9._:-]{1,128}$"
               expires_at_us:
-                type: string
-                $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+                type: ["string", "null"]
+                $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
               source_period_id:
                 type: "null"
-            required: [original_event_id, expires_at_us]
-            description: compensation links its original deduction event and expires 30 days after grant (server-computed).
+            required: [original_event_id]
+            description: >-
+              compensation links its original deduction event. Shares whose
+              original source is still valid are restored IN PLACE with the
+              original lot's validity; only shares whose source subscription
+              has expired become a compensation lot expiring 30 days after
+              grant arrival. expires_at_us is the caller's optional echo of
+              that server-computed instant — send null, or exactly
+              arrival+30d (small transport tolerance); any other value is
+              refused, and the server never adopts a caller-declared expiry.
+              Total recovery across ALL entries (grants and adjustments) can
+              never exceed the original deduction.
 
     CreditGrantMutationResult:
       type: object
@@ -1777,6 +1787,11 @@ components:
       properties:
         credit_lot:
           $ref: "./objects.yaml#/components/schemas/CreditLot"
+          description: >-
+            The issued compensation lot when the recovery includes an
+            expired-source share; otherwise the original credit lot after the
+            in-place restoration (the largest restored share when one
+            deduction spanned several live lots).
         ledger_event_id:
           type: string
           $ref: "./scalars.yaml#/components/schemas/Uuid"
