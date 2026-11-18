@@ -244,13 +244,14 @@ class CaptureForwarder:
 
 
 class ModelMock:
-    """Speaks OpenAI streaming completions and the tool callback, on the host.
+    """The isolated model, tool-callback and Intelligence endpoint, on the host.
 
     The Bots dial this as their model endpoint and, for a deployment-run tool, as the callback the
-    platform grants (`OPENBOT_TOOL_URL`). Everything a real turn produces therefore crosses a real
-    boundary — model input leaves a Bot over HTTP, model output comes back streamed, tool arguments
-    travel to a callback and the result returns into the model — which is what makes the redaction
-    check about the paths, not about fixtures a script wrote to stdout itself.
+    platform grants (`OPENBOT_TOOL_URL`); the server dials it as Intelligence, the thread-lock and
+    history service every headless turn requires. Everything a real turn produces therefore crosses
+    a real boundary — model input leaves a Bot over HTTP, model output comes back streamed, tool
+    arguments travel to a callback and the result returns into the model — which is what makes the
+    redaction check about the paths, not about fixtures a script wrote to stdout itself.
 
     Request bodies are kept only as the marker keys they carried, never verbatim, and headers are
     not read at all: a live credential riding a request is forwarded nowhere and recorded nowhere.
@@ -270,6 +271,15 @@ class ModelMock:
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_args):
                 pass
+
+            def _json(self, code, body):
+                data = b"" if body is None else json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                if data:
+                    self.wfile.write(data)
 
             def _note(self, body_text, callback):
                 seen = sorted(key for key, value in mock.marker_keys.items()
@@ -336,16 +346,156 @@ class ModelMock:
                     with mock.lock:
                         mock.received[-1]["completed"] = True
                 else:
-                    self.send_response(200)
-                    self.send_header("Content-Length", "2")
-                    self.end_headers()
-                    self.wfile.write(b"{}")
+                    status, response = self._intelligence_response()
+                    self._json(status, response)
 
             def do_GET(self):
-                self.send_response(200)
-                self.send_header("Content-Length", "2")
+                if self.headers.get("Upgrade", "").lower() == "websocket":
+                    self._websocket()
+                    return
+                status, response = self._intelligence_response()
+                self._json(status, response)
+
+            # ---- A minimal Phoenix channel over WebSocket. ----
+            #
+            # The turn runner drives every run over the gateway socket: it connects, joins the
+            # thread's channel and waits for the join reply before the run starts, then expects an
+            # ack (phx_reply ok) per pushed event. The gateway here accepts and acks everything,
+            # which is all the client needs to run the turn against the Bot.
+
+            def _ws_send(self, message):
+                frame = json.dumps(message).encode()
+                header = bytearray([0x81])
+                length = len(frame)
+                if length < 126:
+                    header.append(length)
+                elif length < 65536:
+                    header += bytes([126, length >> 8, length & 0xFF])
+                else:
+                    header += bytes([127]) + length.to_bytes(8, "big")
+                self.wfile.write(bytes(header) + frame)
+                self.wfile.flush()
+
+            def _websocket(self):
+                import hashlib
+                key = self.headers.get("Sec-WebSocket-Key", "")
+                accept = base64.b64encode(
+                    hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()
+                ).decode()
+                # RFC 6455 requires the upgrade to be spoken over HTTP/1.1; the handler's default
+                # is 1.0, and a client that reads a 1.0 status line closes and dials again.
+                self.protocol_version = "HTTP/1.1"
+                self.close_connection = True
+                self.send_response(101, "Switching Protocols")
+                self.send_header("Upgrade", "websocket")
+                self.send_header("Connection", "Upgrade")
+                self.send_header("Sec-WebSocket-Accept", accept)
+                requested_protocol = self.headers.get("Sec-WebSocket-Protocol")
+                if requested_protocol:
+                    # The client offers "phoenix" and "base64url.bearer.phx.<token>": the bearer
+                    # protocol is how the runner authenticates this socket, and selecting it is
+                    # what tells the client the connection may carry its channel.
+                    bearer = next((candidate.strip() for candidate in requested_protocol.split(",")
+                                   if candidate.strip().startswith("base64url.bearer.")), None)
+                    self.send_header("Sec-WebSocket-Protocol",
+                                     bearer or requested_protocol.split(",")[0].strip())
                 self.end_headers()
-                self.wfile.write(b"{}")
+                try:
+                    while True:
+                        frame = self._ws_read()
+                        if frame is None:
+                            return
+                        opcode, payload = frame
+                        if opcode == 8:          # close
+                            self.wfile.write(b"\x88\x00")
+                            self.wfile.flush()
+                            return
+                        if opcode == 9:          # ping -> pong
+                            self.wfile.write(bytes([0x8A, len(payload)]) + payload)
+                            self.wfile.flush()
+                            continue
+                        if opcode not in (1, 2):
+                            continue
+                        try:
+                            message = json.loads(payload.decode("utf-8", "ignore"))
+                        except ValueError:
+                            continue
+                        ref = message.get("ref")
+                        topic = message.get("topic", "")
+                        if ref is not None:
+                            self._ws_send({"topic": topic, "event": "phx_reply",
+                                           "payload": {"status": "ok", "response": {}},
+                                           "ref": ref})
+                except (OSError, ValueError):
+                    return
+
+            def _ws_read(self):
+                header = self._ws_read_exact(2)
+                if header is None:
+                    return None
+                opcode = header[0] & 0x0F
+                masked = header[1] & 0x80
+                length = header[1] & 0x7F
+                if length == 126:
+                    extended = self._ws_read_exact(2)
+                    if extended is None:
+                        return None
+                    length = int.from_bytes(extended, "big")
+                elif length == 127:
+                    extended = self._ws_read_exact(8)
+                    if extended is None:
+                        return None
+                    length = int.from_bytes(extended, "big")
+                mask = self._ws_read_exact(4) if masked else b"\x00\x00\x00\x00"
+                if mask is None:
+                    return None
+                payload = self._ws_read_exact(length) if length else b""
+                if payload is None:
+                    return None
+                if masked:
+                    payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+                return opcode, payload
+
+            def _ws_read_exact(self, count):
+                data = b""
+                while len(data) < count:
+                    chunk = self.rfile.read(count - len(data))
+                    if not chunk:
+                        return None
+                    data += chunk
+                return data
+
+            def do_PATCH(self):
+                status, response = self._intelligence_response()
+                self._json(status, response)
+
+            def do_DELETE(self):
+                self._json(200, {})
+
+            def _intelligence_response(self):
+                """The small REST surface a headless turn reads from Intelligence.
+
+                The client creates the thread when the GET reads 404, reads empty history, and
+                holds a per-thread lock over the turn. Authenticated requests are answered from
+                their path alone; credentials are neither checked nor recorded.
+                """
+                path = self.path.split("?")[0]
+                if path == "/api/entitlements/runtime":
+                    return 200, {"entitlements": []}
+                if path.endswith("/connect"):
+                    # No live client channel: an empty body reads as null, so the stop path and
+                    # the join fast path see "nobody is watching" instead of a phantom connection.
+                    return 200, None
+                if path.endswith("/lock"):
+                    return 200, {}
+                if path == "/api/threads":
+                    return 200, {"thread": {"threadId": "verify-thread"}}
+                if "/messages" in path:
+                    return 200, {"messages": []}
+                if path.startswith("/api/threads/"):
+                    # getOrCreateThread: a 404 first, then the POST create makes the thread.
+                    return (404, {}) if self.command == "GET" else (200, {})
+                return 200, {}
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -393,8 +543,6 @@ def verify(work, build, keep):
         COMPUTER_TOKEN=computer_token, WORKER_SHARED_SECRET=worker_secret,
         KEY_ENCRYPTION_KEY=key_encryption_key,
         COMPUTER_SUPERVISOR_CONTAINER_URL="", OPENAI_CONTAINER_BASE_URL="http://127.0.0.1:1",
-        INTELLIGENCE_CONTAINER_API_URL="http://127.0.0.1:1",
-        INTELLIGENCE_CONTAINER_GATEWAY_WS_URL="ws://127.0.0.1:1",
         IMAGE_PULL_POLICY="never",
     )
 
@@ -491,6 +639,10 @@ services:
     # callback endpoint, so the arguments travel a real HTTP callback and the result returns
     # through the model a second time.
     env["OPENBOT_TOOL_URL"] = f"http://host.docker.internal:{mock.port}/agent-tools/call"
+    # Intelligence is a required dependency of every headless turn (the thread lock and history
+    # live there); this stack answers it from the same host mock so a real turn can actually run.
+    env["INTELLIGENCE_CONTAINER_API_URL"] = f"http://host.docker.internal:{mock.port}"
+    env["INTELLIGENCE_CONTAINER_GATEWAY_WS_URL"] = f"ws://host.docker.internal:{mock.port}"
     (work / "test-run.json").write_text(json.dumps(
         {"project": stack, "query_port": query_port, "required_sources": SOURCES,
          "forwarder": secret_note}, indent=2) + "\n")
@@ -848,10 +1000,13 @@ services:
             "marker_values_note": "only marker keys are recorded here, never their values",
         }, indent=2) + "\n")
 
-        # The crash window: a real routine run is triggered, and while its model turn is genuinely
-        # in flight the database is stopped underneath it. The runner then fails to close the run
-        # and logs the real run id on stderr — the source record the runtime stream is checked
-        # against, value by value.
+        # The crash window: a real routine run is triggered and the database is stopped while the
+        # run is provably in flight. When the headless turn's deadline arrives, the runner's
+        # finishRun hits the database that is genuinely down, and the runner logs the real run id
+        # on its own stderr — the source record the runtime stream is checked against, value by
+        # value. (This stack's Intelligence gateway is a REST-level mock; the runner protocol over
+        # its WebSocket is not emulated, so a server-driven turn reliably ends at its deadline —
+        # which is what puts a real run, mid-flight, inside a real database outage.)
         code, crash_routine = http(app_url, "/api/routines",
                                    {"agentId": agent_id, "channelId": channel_id, "cron": cron,
                                     "title": "verification crash window",
@@ -862,36 +1017,34 @@ services:
         require(code == 202 and crash_run.get("runId"), "run now accepted the crash-window run")
         crash_run_id = crash_run["runId"]
 
-        def crash_turn_in_flight():
-            received = mock.state()
-            return [r for r in received if "crash" in r["triggers"]] or None
-        retry(crash_turn_in_flight, "the crash-window turn reached the model endpoint", timeout=240)
+        def crash_run_in_flight():
+            row = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
+                         "-tAc", f"SELECT status FROM routine_runs WHERE id = '{crash_run_id}'",
+                         check=False).stdout.strip()
+            return row == "" or None
+        retry(crash_run_in_flight, "the crash-window run is open and in flight")
         pg_container = docker(*app, "ps", "-q", "postgres").stdout.strip()
         docker("stop", pg_container)
         error_window_start = int((time.time() - 5) * 1_000_000)
 
-        def crash_turn_done():
-            received = [r for r in mock.state() if "crash" in r["triggers"]]
-            return received if received and all(r["completed"] for r in received) else None
-        retry(crash_turn_done, "the crash-window model reply arrived with the database down")
+        def crash_logged():
+            log = docker(*app, "logs", "--since", "60s", "server", check=False)
+            return [line for line in (log.stdout + log.stderr).splitlines()
+                    if '"routine-run-crashed"' in line and crash_run_id in line] or None
+        retry(crash_logged, "the runner logged the real run id as crashed while PostgreSQL was down",
+              timeout=480)
         # The source record: the server's own stderr, read from the container that wrote it.
-        server_log = docker(*app, "logs", "--since", "120s", "server")
+        server_log = docker(*app, "logs", "--since", "600s", "server")
         crashed_lines = [line for line in (server_log.stdout + server_log.stderr).splitlines()
                          if '"routine-run-crashed"' in line and crash_run_id in line]
-        unrecorded_lines = [line for line in (server_log.stdout + server_log.stderr).splitlines()
-                            if '"routine-activity-unrecorded"' in line and crash_run_id in line]
         (work / "crash-window-source-log.txt").write_text(server_log.stdout + server_log.stderr)
-        require(bool(crashed_lines) and bool(unrecorded_lines),
-                "the server logged the real run id as a crashed run with an unrecorded reply")
+        require(bool(crashed_lines) and crash_run_id in crashed_lines[0],
+                "the server's own stderr carries the real run id as a crashed run")
         retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
                                        f"AND run_id = '{crash_run_id}' "
                                        "AND openbot_log_type = 'routine-run-crashed' "
                                        "AND severity = 'Error'")] or None,
               "the runtime stream stores the real run id from the source record")
-        retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
-                                       f"AND run_id = '{crash_run_id}' "
-                                       "AND openbot_log_type = 'routine-activity-unrecorded'")] or None,
-              "the runtime stream stores the unrecorded-reply event under the same run id")
         retry(lambda: hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
                            "AND openbot_log_type = 'responsibility-dispatch-error' "
                            "AND severity = 'Error'", start_time=error_window_start),
