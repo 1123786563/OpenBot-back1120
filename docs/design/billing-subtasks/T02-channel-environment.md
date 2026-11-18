@@ -59,7 +59,9 @@ AES-256-GCM（`AEAD_AES_256_GCM`，nonce 12 字节，`associated_data` 可空，
   24 小时同时返回新老两张；`serial_no` 与回调头 `Wechatpay-Serial` 匹配。
 - **判定规则**（官方 4012791882）：回调头 `Wechatpay-Serial` 为 `PUB_KEY_ID_*` → 用
   公钥验签；否则用平台证书。灰度期间两模式随机出现，**必须双模式兼容**；未知 Serial
-  一律验签失败，不跳过。
+  一律验签失败，不跳过。配置侧该迁移态由 §3 `wechat.verification_mode=migration_dual`
+  表达（两套材料来源、按 Serial 路由、初始化/刷新与退出条件见 §3；接受/拒绝用例见
+  §5.1 V-R10/V-R11）。
 - 公钥模式切换按商户号维度、需在商户平台手动开启；"2024-10 起新商户强制公钥"为
   第三方信息，官方现行页面未核实到，仅作背景。
 
@@ -191,14 +193,38 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
 2. **平台侧变更**：商户管理员在开放平台提交模式/公钥变更；变更生效时刻起，新通知按
    新材料签名、旧材料签名的通知仍可能到达（重发队列）；
 3. **原子切换**：加载器以 `config_revision=N+1` 原子覆盖运行态；**切换窗口内保留旧
-   验签材料只读副本**（`previous_verification_material_refs`），旧签名通知在窗口内
-   仍按原验签路径验证并正常业务处理；窗口结束（含待处理重发已过期，如 §2.3 通知
-   重发序列末次 15h 后）撤销旧材料；
-4. **失败回滚**：仅回退到仍有效且未撤销的上一 `config_revision`；新材料自检失败或
-   平台变更未生效时不切换、告警并保持旧版本；**泄露/过期材料禁止回退使用**；
+   验签材料只读副本**（有类型对象 `alipay.previous_verification_material`，含旧材料
+   模式、所属 `config_revision`、公钥标识或证书 sn 引用、生效与撤销时刻，见 §3），
+   旧签名通知在窗口内按 §2.3.3 材料选择规则验证并正常业务处理；窗口结束（含待处理
+   重发已过期，如 §2.3 通知重发序列末次 15h 后）撤销旧材料；
+4. **切换失败处置**：
+   - 新材料自检失败或加载失败：不切换，保持 `config_revision=N` 运行并告警；
+   - **平台已变更、本地未激活**（本地仍以旧材料发起主动请求，网关持续返回签名校验
+     失败类错误）：停止对该渠道的主动请求重试并告警，**不得**用未通过自检的新材料
+     自动顶替，等待人工按本节顺序处置（用例 V-R14）；
+   - **回滚前提（须核实平台仍接受旧版本）**：回退到上一 `config_revision` 仅在取得
+     下列证据之一后执行：(a) 开放平台后台显示加签方式仍为旧模式/旧公钥（平台变更
+     未生效）；或 (b) 以旧材料对真实网关完成一次无资金变更调用（如查单）成功、且
+     新材料调用被网关签名校验拒绝。仅"本地旧材料未过期"不构成回滚依据；
+     **泄露/过期材料禁止回退使用**；
 5. **切换前后验证步骤**：切换前记录第 1 步自检结果；切换后立即以真实网关发起一次
    无资金变更的配置验证调用并核对通知验签路径命中新材料；结果由安全/商户管理员
    实测回填——**本节是流程定义，不是实测证据**。
+
+#### 2.3.3 切换窗口内通知验签材料选择（含无序列号情形；2026-11-18 第三轮补充）
+
+切换/换钥窗口内（`alipay.previous_verification_material != null` 且未过 `not_after`），
+入站通知按下列规则选择验签材料：
+
+1. **通知携带 `alipay_cert_sn`**（证书模式签名）→ 以 sn 精确匹配当前模式证书或
+   `previous_verification_material` 证书；两者均无匹配 → 验签失败，不跳过；
+2. **通知不携带 `alipay_cert_sn`**（密钥模式签名，无序列号可路由）→ **仅在窗口内**
+   允许以当前模式材料与 previous 材料依序尝试验签（previous 材料须与当前 `app_id`
+   同应用，加载时校验，见 §3）；窗口外或两套均失败 → 验签失败，不确认到账；
+3. **待验证保留**：平台过渡期对积压通知重发时使用新旧哪种材料签名，官方页面无明文
+   条款，本票保留**待验证**状态（AC4 实测回填）；实现不得假设重发只用其中一种，
+   两种签名的通知都须能按上述规则处理。
+
 - **异步通知验签**：剔除 `sign`/`sign_type` → 其余参数 URLDecode → 字典序拼串 →
   `sign` Base64 解码 → 用支付宝公钥 RSA 验签；验签通过后**必须二次校验
   `out_trade_no`/`total_amount`/`seller_id`/`app_id`**（[02mse7](https://opendocs.alipay.com/common/02mse7)）。
@@ -272,13 +298,28 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
     "signing_private_key_ref": "kms://wechat/apiv3-client-private-key",
     "merchant_certificate_serial_ref": "kms://wechat/cert-serial",
     "api_v3_key_ref": "kms://wechat/api-v3-key",
-    "verification_mode": "platform_certificate | public_key",
-    // public_key 模式必填（ID 前缀 PUB_KEY_ID_）：
+    "verification_mode": "public_key | platform_certificate | migration_dual",
+    // public_key（单模式或主模式）必填（ID 前缀 PUB_KEY_ID_）：
     "platform_public_key_ref": "kms://wechat/platform-public-key",
     "platform_public_key_id_ref": "kms://wechat/platform-public-key-id",
-    // platform_certificate 模式无静态 ref：证书经 GET /v3/certificates 定期刷新（<12h），
-    // 解密用 api_v3_key_ref；两种模式互斥，非当前模式字段必须缺省
-    "notify_url": "https://<联调域名>/payment-callbacks/wechat",
+    // platform_certificate 单模式无静态 ref：证书经 GET /v3/certificates 定期刷新（<12h），
+    // 解密用 api_v3_key_ref；public_key 与 platform_certificate 两个单模式互斥，
+    // 非当前模式字段必须缺省；
+    // migration_dual（灰度迁移态，双模式兼容见 §1.2）必填以下字段，
+    // 且 secondary_mode != primary_mode：
+    "primary_mode": "public_key | platform_certificate",
+    "secondary_mode": "public_key | platform_certificate",
+    // secondary_mode=public_key 时必填（如主模式为平台证书、迁往公钥的灰度方向）：
+    "secondary_platform_public_key_ref": "kms://wechat/secondary-platform-public-key",
+    "secondary_platform_public_key_id_ref": "kms://wechat/secondary-platform-public-key-id",
+    // secondary_mode=platform_certificate 时无独立静态 ref：与主模式共用同一
+    // GET /v3/certificates 刷新缓存（官方换证书前 24h 同时返回新老两张，缓存按
+    // serial_no 全量保留，两套证书均可命中 Wechatpay-Serial）；
+    // 路由：PUB_KEY_ID_* 前缀 → 两套公钥材料按精确 ID 匹配；否则按平台证书
+    // serial_no 匹配缓存；两套均无匹配 → 验签失败，不跳过（§1.2）
+    "migration_started_at": "<迁移开始时刻>",
+    "migration_exit_condition": "连续 >=7 天（覆盖 15h 通知重发序列）所有入站通知 Serial 均命中 primary_mode 材料，且商户平台确认灰度结束；满足后将 verification_mode 固定为 primary_mode，并在新 config_revision 中清除 secondary_* 与 migration_* 字段（原子切换）",
+    "migration_deadline": "<迁移截止时刻；超期未退出 → 告警并保持双模式，不自动收敛>",
     "notify_url": "https://<联调域名>/payment-callbacks/wechat",
     "product_evidence_refs": { "native": "evidence://<索引>", "h5": "evidence://<索引>" }
   },
@@ -295,9 +336,21 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
     "app_cert_ref": "kms://alipay/app-cert",                     // → app_cert_sn，随请求上送
     "alipay_public_cert_ref": "kms://alipay/alipay-public-cert", // → 按 alipay_cert_sn 匹配后验签
     "alipay_root_cert_ref": "kms://alipay/alipay-root-cert",     // → alipay_root_cert_sn
-    // 模式切换/换钥窗口（流程见冻结表 §2.3.2）：旧验签材料只读副本，仅验签、不得用于请求签名
-    "previous_verification_material_refs": [],
-    "previous_material_expiry": "<旧材料撤销时刻，如通知重发末次 15h 后>",
+    // 模式切换/换钥窗口（流程见 §2.3.2，材料选择见 §2.3.3）：旧验签材料只读副本，
+    // 仅验签、不得用于请求签名；单模式稳定态必须为 null（不得使用无类型数组）
+    "previous_verification_material": null,
+    // 窗口态示例（非 null 时须为以下有类型对象之一，字段按 mode 匹配）：
+    // "previous_verification_material": {
+    //   "mode": "public_key | certificate",              // 旧材料的模式（有类型）
+    //   "config_revision": "<该材料所属的上一配置版本>",
+    //   // mode=public_key 必填（密钥模式通知无序列号，选择规则见 §2.3.3 第 2 条）：
+    //   "alipay_public_key_ref": "kms://alipay/previous-alipay-public-key",
+    //   "alipay_public_key_note": "<可选脱敏标识：开放平台配置版本/上传时间，非凭据>",
+    //   // mode=certificate 必填（按通知 alipay_cert_sn 精确匹配）：
+    //   "alipay_public_cert_ref": "kms://alipay/previous-alipay-public-cert",
+    //   "valid_from": "<平台侧变更生效时刻>",
+    //   "not_after": "<撤销时刻，>= 通知重发末次 15h；过期未清除则新 config_revision 不生效>"
+    // },
     "notify_url": "https://<联调域名>/payment-callbacks/alipay",
     "return_url_allowlist": ["https://<联调域名>/..."],
     "product_evidence_refs": { "page": "evidence://<索引>", "wap": "evidence://<索引>" }
@@ -320,8 +373,18 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
   （微信 public_key → 双公钥引用齐全 / platform_certificate → 仅 api_v3_key_ref；
   支付宝 public_key → 仅 alipay_public_key_ref / certificate → 三证齐全，
   见 §2.3.1）；混用、缺项或多填 → 拒绝启用；
-- 切换窗口内 `previous_verification_material_refs` 中的材料**只允许验签**，
-  不得用于请求签名；窗口过期引用必须清除后才允许新版本生效；
+- **键唯一**：配置每个对象不允许重复键，解析必须以严格重复键检查拒绝并整体失败，
+  不得静默覆盖（用例 V-R15）；
+- **微信迁移态**：`verification_mode=migration_dual` 时 `primary_mode`/`secondary_mode`
+  必填、二者不等，且 secondary 对应有类型引用齐全（public_key → 双引用；
+  platform_certificate → 无静态 ref，共用刷新缓存）；单模式配置中出现
+  `secondary_*` 或 `migration_*` 字段 → 拒绝启用；迁移窗口内两套材料均只用于验签，
+  商户请求签名始终只用 `signing_private_key_ref`（与灰度无关）；
+- **支付宝切换窗口**：`previous_verification_material` 必须为 null 或 §3 模板所列
+  有类型对象（不得为无类型数组）；`mode` 与其对应引用一一匹配，缺项或多填 → 拒绝
+  启用；加载时须校验 previous 材料与当前 `app_id` 同应用，校验不过 → 拒绝启用；
+  窗口内旧材料**只允许验签**、不得用于请求签名；`not_after` 过期未清除 →
+  新 `config_revision` 不生效；
 - `sales_enabled` 必须显式为 `false` 才允许进入联调；
 - 公开诊断只输出 `config_revision`、脱敏身份、加载成功布尔与固定错误码，
   不输出解析异常原文、材料正文或配置全文；
@@ -375,4 +438,10 @@ AC5 执行时每格须补：OS、浏览器/客户端精确版本、真机或桌�
 | V-R6 | 微信查单（微信单号）构造请求缺 `mchid` query 参数 | 客户端本地拒绝、不发出请求；带 `mchid` 时签名覆盖含 query string 的完整 URL 目标（§1.1） |
 | V-R7 | 支付宝通知携带未知 `alipay_cert_sn`（证书模式）/ 微信通知携带未知 `Wechatpay-Serial` | 验签失败：不跳过、不确认到账、无账务变化（§1.2、§2.3.1） |
 | V-R8 | 模式与材料不一致（public_key 混入证书三证、缺 `alipay_public_key_ref` 等） | 配置加载拒绝启用该渠道（§3 验收口径） |
-| V-R9 | 切换窗口内旧材料被用于请求签名 / `previous_material_expiry` 过期引用未清除 | 拒绝：旧材料仅可验签；过期引用未清除则新 `config_revision` 不生效（§2.3.2） |
+| V-R9 | 切换窗口内旧材料被用于请求签名 / `previous_verification_material.not_after` 过期未清除 | 拒绝：旧材料仅可验签；过期未清除则新 `config_revision` 不生效（§2.3.2、§3） |
+| V-R10 | 微信灰度迁移态：通知 A 带 `PUB_KEY_ID_*` Serial（命中 secondary 公钥）、通知 B 带平台证书 Serial（命中 primary 刷新缓存） | 两类合法签名均验签通过并正常业务处理（§1.2、§3） |
+| V-R11 | 微信 `migration_dual` 下未知 Serial：既非两套公钥 ID、也非刷新缓存证书 serial_no | 验签失败：不跳过、不确认到账、无账务变化 |
+| V-R12 | 支付宝切换窗口内合法旧签名通知（窗口未过 `not_after`，含携带与不携带 `alipay_cert_sn` 两种） | 按 §2.3.3 规则命中 previous 材料验签通过并正常业务处理 |
+| V-R13 | 支付宝窗口过期后的旧签名通知；及无 `alipay_cert_sn` 且两套材料均验签失败 | 验签失败：不跳过、不确认到账（§2.3.3） |
+| V-R14 | 平台已切换但本地激活失败：主动查单持续被网关签名校验拒绝 | 停止该渠道主动请求重试并告警；不自动切换新材料、不自动回退；按 §2.3.2 第 4 条人工处置 |
+| V-R15 | 配置对象含重复键（如两个 `notify_url`） | 严格解析拒绝并整体失败，不静默覆盖（§3 键唯一） |
