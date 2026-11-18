@@ -153,10 +153,37 @@ export const accounts = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex("accounts_provider_account_idx").on(
+    /*
+     * One external identity, one account row: `(provider, issuer, subject)`.
+     *
+     * The `issuer` half is what makes the key honest. Two Okta tenants, or a Casdoor and a SSO
+     * directory, can both hand over the subject string `12345`, and those are two people (or at
+     * least two identities this deployment cannot tell apart) — the old `(provider, account_id)`
+     * key wrongly called them one and blocked the second sign-in forever. Within one issuer the
+     * index is the convergence guarantee T03 needs: two clients whose first sign-ins race each
+     * other cannot both commit an account for the same identity, and the loser's whole identity
+     * transaction rolls back to retry into the winner's user.
+     *
+     * In PostgreSQL `NULL` is distinct from every value — including another `NULL` — in a unique
+     * index, so this index constrains every row an OAuth or OIDC path writes (none leave it null)
+     * and leaves pre-existing null-issuer rows alone; they are covered by the partial index below.
+     */
+    uniqueIndex("accounts_provider_issuer_account_idx").on(
       table.providerId,
+      table.issuer,
       table.accountId,
     ),
+    /*
+     * The old key, kept for the rows that predate the `issuer` column.
+     *
+     * A legacy row has no issuer, so the index above cannot see it, and two such rows for the same
+     * provider and subject were never legal. The partial index preserves exactly that rule — one
+     * null-issuer row per `(provider, account_id)` — without forbidding a later, real-issuer row
+     * for the same subject.
+     */
+    uniqueIndex("accounts_provider_account_legacy_idx")
+      .on(table.providerId, table.accountId)
+      .where(sql`${table.issuer} is null`),
   ],
 );
 

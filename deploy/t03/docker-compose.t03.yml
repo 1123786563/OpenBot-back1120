@@ -1,0 +1,49 @@
+name: openbot-t03
+services:
+  postgres:
+    image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: openbot_t03
+      POSTGRES_DB: openbot_t03
+      POSTGRES_PASSWORD: ${T03_DB_PASSWORD:?run setup.ts}
+    ports: ["127.0.0.1:56433:5432"]
+    volumes: ["openbot-t03-db:/var/lib/postgresql/data"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbot_t03 -d openbot_t03"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  casdoor-db:
+    image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: casdoor_t03
+      POSTGRES_DB: casdoor_t03
+      POSTGRES_PASSWORD: ${T03_CASDOOR_DB_PASSWORD:?run setup.ts}
+    volumes: ["openbot-t03-casdoor-db:/var/lib/postgresql/data"]
+    networks: [identity]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U casdoor_t03 -d casdoor_t03"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  casdoor:
+    image: casbin/casdoor@sha256:d8fd4f387026e1ffdf887b924c1c74ad5c15e8d3be54fb739b57b2037073a51f
+    depends_on:
+      casdoor-db: {condition: service_healthy}
+    ports: ["127.0.0.1:19001:8000"]
+    volumes:
+      - ./.runtime/app.conf:/conf/app.conf:ro
+      - openbot-t03-casdoor-files:/files
+    networks: [identity]
+  mailpit:
+    image: axllent/mailpit:v1.29.2@sha256:030f06031ce5c60913ac9363da1ab0d4be6fd2a78147dd0e1ca0fcac665d6b34
+    ports: ["127.0.0.1:18026:8025"]
+    networks: [identity]
+networks:
+  data:
+  identity:
+volumes:
+  openbot-t03-db:
+  openbot-t03-casdoor-db:
+  openbot-t03-casdoor-files:
