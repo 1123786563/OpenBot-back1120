@@ -506,7 +506,7 @@ async function runFull(): Promise<number> {
     BILLING62_LAGO_ENC_SALT: lagoSalt,
   };
 
-  const appContainer = `billing62_${runId}-ledger-app`;
+  const appContainer = "ledger-app"; // compose exec addresses the SERVICE name
   const execDriver = (phase: string): { code: number; out: string } =>
     sh(
       `docker-compose -p ${project} exec -T ${appContainer} bun tests/billing/cases/ledger-core.ts --phase ${phase}`,
