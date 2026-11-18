@@ -135,6 +135,17 @@ function stopOf(proc: ChildProcess) {
         resolve();
       });
     });
+    // Wait until the port is actually free: a healthz answered by a STALE
+    // process would make startService adopt the wrong server (its credential
+    // scopes differ), which is exactly the 404 race this guard closes.
+    for (let i = 0; i < 50; i++) {
+      try {
+        await fetch(`${BASE}/healthz`, { signal: AbortSignal.timeout(400) });
+      } catch {
+        return; // port closed
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
   };
 }
 
