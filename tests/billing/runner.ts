@@ -441,7 +441,7 @@ function composeArgs(
   args: string[],
   env: NodeJS.ProcessEnv = {},
 ): { code: number; out: string } {
-  return sh(`${COMPOSE} -p ${project} ${args.join(" ")}`, { env: { ...process.env, ...env } });
+  return sh(`${COMPOSE} -f tests/billing/compose.yml -p ${project} ${args.join(" ")}`, { env: { ...process.env, ...env } });
 }
 
 function randomToken(bytes = 16): string {
