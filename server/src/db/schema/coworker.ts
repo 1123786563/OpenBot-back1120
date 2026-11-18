@@ -96,6 +96,8 @@ export const routineRunStatus = pgEnum("routine_run_status", [
   "failed",
   "skipped",
   "waiting",
+  // A stop asked for through the cancel route (T01): the turn was aborted mid-flight.
+  "cancelled",
 ]);
 
 /**

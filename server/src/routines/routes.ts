@@ -73,6 +73,49 @@ export function createRoutineRoutes(
         return mapStoreError(context, error);
       }
     });
+
+    // Request an abort, never report a completed stop before the runner has acknowledged it.
+    routes.post("/:id/runs/:runId/cancel", requireUser, async (context) => {
+      const id = context.req.param("id");
+      const runId = context.req.param("runId");
+      if (!id.trim() || !runId.trim()) {
+        return context.json(
+          { error: "A routine id and a run id are required." },
+          400,
+        );
+      }
+      try {
+        const run = await routineStore.findRun(context.var.actor.id, id, runId);
+        if (!run) {
+          return context.json({ error: "No such routine or run." }, 404);
+        }
+        if (run.status !== null) {
+          return context.json({ cancelled: false, status: run.status }, 409);
+        }
+        await routineStore.setEnabled(context.var.actor.id, id, false);
+        const inFlight = runner.cancel(runId);
+        if (!inFlight) {
+          return context.json(
+            {
+              error:
+                "Routine paused, but this API process does not own that run; stop is unconfirmed.",
+            },
+            503,
+          );
+        }
+        if (options.auditStore)
+          await recordAuditEvent(options.auditStore, {
+            eventType: "routines.run_cancelled",
+            targetType: "routine",
+            targetId: id,
+            actorUserId: context.var.actor.id,
+            payload: { runId, inFlight },
+          }).catch(() => undefined);
+        return context.json({ accepted: true, runId }, 202);
+      } catch (error) {
+        return mapStoreError(context, error);
+      }
+    });
   }
 
   routes.get("/:id/runs", requireUser, async (context) => {

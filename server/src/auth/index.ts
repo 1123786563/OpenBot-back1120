@@ -499,6 +499,14 @@ export function createAuth(
               user.email,
               authConfig.initialAdminEmails,
             );
+            // Runs once per user, after role provisioning; onboarding uses the existing DB defaults.
+            await record(auditStore, {
+              eventType: "t01.login_initialized",
+              targetType: "person",
+              targetId: user.id,
+              actorUserId: user.id,
+              payload: { email: user.email, onboardingStep: 0 },
+            });
             if (context?.path?.startsWith("/scim")) {
               await recordProvisioned(scimDeps, user);
             }

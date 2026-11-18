@@ -157,6 +157,11 @@ const RUN_STATUS: Record<
     className: "text-amber-600 dark:text-amber-500",
   },
   waiting: { text: "Waiting for you", dot: "bg-sky-500", className: "" },
+  cancelled: {
+    text: "Cancelled",
+    dot: "bg-muted-foreground/40",
+    className: "text-muted-foreground",
+  },
 };
 
 /** Every firing of one routine, newest first, each linking to the thread it ran in. */
