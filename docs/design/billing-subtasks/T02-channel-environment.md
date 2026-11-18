@@ -26,7 +26,7 @@ Part of #61 / #63。本文件只承载两类可复用的非敏感交付物：
 | --- | --- | --- | --- |
 | Native 下单 | `POST https://api.mch.weixin.qq.com/v3/pay/transactions/native`（备 `api2.mch.weixin.qq.com`） | 必填 `appid/mchid/description/out_trade_no/notify_url/amount.total`（分）；`out_trade_no` 6–32 字符；应答 `code_url` **有效期 2 小时** | [4012791877](https://pay.weixin.qq.com/doc/v3/merchant/4012791877)（2025.03.31） |
 | 查单（商户单号） | `GET /v3/pay/transactions/out-trade-no/{out_trade_no}?mchid=` | 应答 `trade_state`（SUCCESS/REFUND/NOTPAY/CLOSED/…） | [4012791880](https://pay.weixin.qq.com/doc/v3/merchant/4012791880)（2024.12.27） |
-| 查单（微信单号） | `GET /v3/pay/transactions/id/{transaction_id}` | — | [4012791879](https://pay.weixin.qq.com/doc/v3/merchant/4012791879) |
+| 查单（微信单号） | `GET /v3/pay/transactions/id/{transaction_id}?mchid={mchid}` | **`mchid` 是必填 query 参数**（2026-11-18 第二轮更正，此前遗漏）：官方 Go SDK `QueryOrderById` 缺 `mchid` 时直接报错 `field Mchid is required`，并在构造请求时将其加入查询串（[api_native.go](https://github.com/wechatpay-apiv3/wechatpay-go/blob/main/services/payments/native/api_native.go)，`QueryOrderById`/`QueryOrderByOutTradeNo` 两方法一致）。#69 实现时**签名覆盖的 URL 目标必须与请求目标一致（含 query string）**，并覆盖"缺 mchid → 本地拒绝"测试用例（见 §5 V-R6） | [4012791879](https://pay.weixin.qq.com/doc/v3/merchant/4012791879) |
 | 关单 | `POST /v3/pay/transactions/out-trade-no/{out_trade_no}/close`，body 必填 `mchid` | 应答 **204，无包体** | [4012791881](https://pay.weixin.qq.com/doc/v3/merchant/4012791881)（2024.12.11） |
 | H5 下单 | `POST /v3/pay/transactions/h5` | **`scene_info` 必填**：`payer_client_ip`、`h5_info.type`（Wap/iOS/Android）；应答 `h5_url` **有效期 5 分钟**，禁缓存、禁拆改，仅可追加 `redirect_url`；`time_expire` 上限 15 天（Native 7 天） | [4012791834](https://pay.weixin.qq.com/doc/v3/merchant/4012791834)（2025.03.31） |
 | 退款 | `POST /v3/refund/domestic/refunds` | `transaction_id`/`out_trade_no` 二选一；`out_refund_no` 必填且重试必须用原单号；最多 50 笔部分退款；返回成功仅代表受理 | [4012791883](https://pay.weixin.qq.com/doc/v3/merchant/4012791883)（2025.01.09） |
@@ -93,7 +93,7 @@ AES-256-GCM（`AEAD_AES_256_GCM`，nonce 12 字节，`associated_data` 可空，
 npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-11-18**。
 全程未使用商户凭据、未访问商户后台。
 
-### 2.1 接口族选型（唯一选定：传统网关接口族 gateway.do）
+### 2.1 接口族选型（唯一选定：传统网关接口族 gateway.do；2026-11-18 第二轮更正选型依据）
 
 事实核查结论（官方来源）：
 
@@ -102,15 +102,43 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
   [page.pay v3](https://opendocs.alipay.com/open-v3/2423fad5_alipay.trade.page.pay)；v3 基本原则
   [054oog](https://opendocs.alipay.com/open-v3/054oog) 明确正式接入点 `https://openapi.alipay.com`）；
   **但 v3 各接口的精确 REST 路径文本未在官方页面核实到**（官方页只给 SDK 示例）。
-- **官方 Node.js SDK（npm `alipay-sdk`）只支持传统网关协议**（gateway.do，
-  `pageExecute`/`execute` 形态），不支持 v3。
+- **官方 Node.js SDK v4.14.0 同时支持两族协议**（README，[v4.14.0 tag](https://github.com/alipay/alipay-sdk-nodejs-all/releases/tag/v4.14.0)、
+  [README 原文](https://raw.githubusercontent.com/alipay/alipay-sdk-nodejs-all/v4.14.0/README.md)，2026-11-18 核查）：
+  - SDK"基于支付宝 API v3 接口规范实现"；`curl(httpMethod, path, options)` 调用
+    **API v3 REST** 接口（README 示例 `POST /v3/alipay/trade/pay`），非弃用方法；
+  - `pageExecute(method, httpMethod, bizParams)` 生成**网站支付（gateway.do 传统族）**
+    跳转 URL / POST 表单 HTML，README 示例即 `alipay.trade.page.pay`，**非弃用方法**；
+  - `sdkExecute(method, bizParams)` 生成客户端调用串（App 支付等场景）；
+  - `exec(method, bizParams)` 传统族服务端调用，**官方已标注 deprecated**：
+    "为了让 alipay-sdk@3 尽量平滑升级到 alipay-sdk@4 保留，请尽快使用 alipaySdk.curl()
+    代替，走 API v3 协议"。
+  - ⚠ **更正**：上一版冻结表"官方 Node SDK 只支持传统网关协议、不支持 v3，且方法名为
+    `execute`"的表述**有误**（v4.14.0 支持 v3，服务端传统方法名为 `exec` 且已弃用），
+    本节为更正后的依据，以此为准。
 
-**冻结决策**：OpenBot（Bun/TS）采用**传统网关接口族**，
+**冻结决策**：OpenBot（Bun/TS）仍选定**传统网关接口族**，
 网关 `https://openapi.alipay.com/gateway.do`（沙箱
 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`），全链路不与 v3 REST 路径混拼。
-依据是 Node/Bun 生态 SDK 成熟度（官方 Node SDK 仅覆盖传统族），而非"v3 能力缺失"
-（该前提经核查不成立）。若 #69 实施后决定改走 v3 直连，须另起核查并重冻结，
-不得在实现中两族混用。
+更正后的选型依据（不再是"SDK 不支持 v3"）：
+
+1. 传统族全部七类能力的 method、参数与返回契约均有已核实的官方文档页（§2.2），
+   可完整冻结；而 v3 的精确 REST 路径在官方页面无文本可核实（仅 SDK 示例），
+   不满足本票"经核实的接口族/路径"要求；
+2. 本票所需电脑/手机网站支付为**跳转形态**，SDK 对应方法 `pageExecute` 为现行
+   （未弃用）方法；"v3 能力缺失"这一旧前提经核查不成立，已从依据中剔除。
+
+**该选择依赖的已核实能力与明确代价（不得隐去）**：
+
+- 传统族**服务端调用**（查单/关单/退款/退款查询/账单下载五类）经 SDK 只能走
+  `exec()`（deprecated）。#69 落地时二选一并记录在案：
+  (a) 锁死 `alipay-sdk@4.14.0` 使用 deprecated `exec()`（接受未来 SDK major 移除该
+  方法时升级被阻断的风险）；或
+  (b) 这五类按 §2.3 官方 RSA2 规则**直接协议**实现，SDK 仅用于 `pageExecute` 与
+  通知验签（`checkNotifySign`/`checkNotifySignV2`）。
+- 无论 (a)/(b)，**Bun 运行时兼容性与通知验签实测均为待办**（§2.4），实测不通过则
+  整族回退为按官方文档直接协议实现；
+- 若后续决定改走 v3 直连，须按官方页面补核 v3 精确 REST 路径并**重冻结**，
+  不得在实现中两族混拼。
 
 ### 2.2 能力 → method 映射（传统族，官方 URL 已核实）
 
@@ -135,6 +163,42 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
   **冻结默认：密钥模式**（对应 §3 `alipay.verification_mode=public_key`），
   证书模式作为若商户账号已配证书时的分支（需 `app_cert_sn`/`alipay_root_cert_sn`
   参与签名、按 `alipay_cert_sn` 匹配证书验签，见 [02mse7](https://opendocs.alipay.com/common/02mse7)）。
+
+#### 2.3.1 两种模式下的信任材料角色（2026-11-18 第二轮补充；对应 §3 有类型引用）
+
+与官方 SDK v4.14.0 初始化参数（`AlipaySdkConfig`：`alipayPublicKey` /
+`appCertPath|appCertContent|appCertSn` / `alipayPublicCertPath|...|alipayCertSn` /
+`alipayRootCertPath|...|alipayRootCertSn`）逐一对应：
+
+| 模式 | 材料角色 | 请求签名用 | 通知/应答验签用 | 备注 |
+| --- | --- | --- | --- | --- |
+| 密钥模式（public_key，默认） | 应用私钥 | ✔ | — | `key_type` 须显式 PKCS1/PKCS8 |
+| 同上 | 支付宝公钥 | — | ✔（验签唯一材料） | 开放平台"接口加签方式"页获取 |
+| 同上 | 应用公钥 | — | — | 仅上传开放平台配置，服务端不持有 |
+| 证书模式（certificate，分支） | 应用私钥 | ✔ | — | 同上 |
+| 同上 | 应用公钥证书 | ✔（计算 `app_cert_sn`，随请求上送 `app_cert_sn`/`alipay_root_cert_sn`） | — | 缺失则请求被网关拒 |
+| 同上 | 支付宝公钥证书 | — | ✔（按应答/通知携带的 `alipay_cert_sn` 匹配证书后验签；未知 `alipay_cert_sn` → 验签失败，不跳过） | |
+| 同上 | 支付宝根证书 | ✔（计算 `alipay_root_cert_sn`） | — | |
+
+#### 2.3.2 加签模式切换与换钥顺序（流程定义；真实切换实测待授权后由安全/商户管理员回填）
+
+前置约束："一个应用只能配置一种加签方式"（官方 02kf5p），模式切换在开放平台侧完成；
+服务端配置切换必须与之协同，不得在运行态同时存在两套可用签名材料参与**请求签名**。
+
+1. **准备**：生成/获取新材料，按 §2.3.1 确定模式，注入密钥管理服务，生成新配置版本
+   `config_revision=N+1`（此时不启用）；在候选加载入口对新材料执行自检用例
+   （可信签名、篡改拒绝、未知 serial/sn 拒绝、无权限身份拒绝）；
+2. **平台侧变更**：商户管理员在开放平台提交模式/公钥变更；变更生效时刻起，新通知按
+   新材料签名、旧材料签名的通知仍可能到达（重发队列）；
+3. **原子切换**：加载器以 `config_revision=N+1` 原子覆盖运行态；**切换窗口内保留旧
+   验签材料只读副本**（`previous_verification_material_refs`），旧签名通知在窗口内
+   仍按原验签路径验证并正常业务处理；窗口结束（含待处理重发已过期，如 §2.3 通知
+   重发序列末次 15h 后）撤销旧材料；
+4. **失败回滚**：仅回退到仍有效且未撤销的上一 `config_revision`；新材料自检失败或
+   平台变更未生效时不切换、告警并保持旧版本；**泄露/过期材料禁止回退使用**；
+5. **切换前后验证步骤**：切换前记录第 1 步自检结果；切换后立即以真实网关发起一次
+   无资金变更的配置验证调用并核对通知验签路径命中新材料；结果由安全/商户管理员
+   实测回填——**本节是流程定义，不是实测证据**。
 - **异步通知验签**：剔除 `sign`/`sign_type` → 其余参数 URLDecode → 字典序拼串 →
   `sign` Base64 解码 → 用支付宝公钥 RSA 验签；验签通过后**必须二次校验
   `out_trade_no`/`total_amount`/`seller_id`/`app_id`**（[02mse7](https://opendocs.alipay.com/common/02mse7)）。
@@ -156,9 +220,17 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
   （官方 org `alipay`），**latest 精确版本 `4.14.0`**（2025-04-29 发布；TypeScript 实现；
   engines `node >= 18`，README 要求 `>= 18.20.0`；CJS+ESM 双格式；依赖 urllib 等
   Node 生态）。官方五语言 SDK 清单见 [02n6z6](https://opendocs.alipay.com/common/02n6z6)（2026-03-26）。
-- **Bun 兼容性：官方零提及，未知**。#69 落地时须以精确版本 `4.14.0` 在 Bun 实测；
-  若不兼容，回退方案是按 §2.3 官方文档直接协议实现（RSA2 签名/验签逻辑已具备
-  官方口径），同样不混用接口族。
+- **v4.14.0 公开方法清单**（README 核查，2026-11-18；与 §2.1 选型依据一致）：
+  `curl()`（v3 REST）、`pageExecute()`（传统族网页支付跳转，现行）、
+  `sdkExecute()`（客户端调用串）、`exec()`（传统族服务端，**deprecated**）、
+  `checkNotifySign()` / `checkNotifySignV2()`（异步通知验签，V2 不对 value 做
+  decode，官方注明用于规避 [issue #45](https://github.com/alipay/alipay-sdk-nodejs-all/issues/45)
+  常见问题）、`aesDecrypt()` / `rsaCheck()`。初始化可指定 `keyType: 'PKCS1'`
+  （默认）或 `'PKCS8'`——**官方密钥工具默认生成格式与 SDK 默认解析格式不一致**，
+  配置必须显式固定 `key_type`（已纳入 §3 模板）。
+- **Bun 兼容性：官方零提及，未知**。#69 落地时须以精确版本 `4.14.0` 在 Bun 实测
+  （含 `pageExecute` 与通知验签 `checkNotifySignV2`）；若不兼容，回退方案是按
+  §2.3 官方文档直接协议实现（RSA2 签名/验签逻辑已具备官方口径），同样不混用接口族。
 - 注意：该包自 2025-04-29 起无更新（npm 与 GitHub 一致，已核实事实）；npm 生态
   其他支付宝包一律视为第三方，不得标为官方。锁文件在 #69 落地时提交。
 
@@ -201,17 +273,31 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
     "merchant_certificate_serial_ref": "kms://wechat/cert-serial",
     "api_v3_key_ref": "kms://wechat/api-v3-key",
     "verification_mode": "platform_certificate | public_key",
-    "verification_material_refs": ["kms://wechat/platform-certs"],
+    // public_key 模式必填（ID 前缀 PUB_KEY_ID_）：
+    "platform_public_key_ref": "kms://wechat/platform-public-key",
+    "platform_public_key_id_ref": "kms://wechat/platform-public-key-id",
+    // platform_certificate 模式无静态 ref：证书经 GET /v3/certificates 定期刷新（<12h），
+    // 解密用 api_v3_key_ref；两种模式互斥，非当前模式字段必须缺省
+    "notify_url": "https://<联调域名>/payment-callbacks/wechat",
     "notify_url": "https://<联调域名>/payment-callbacks/wechat",
     "product_evidence_refs": { "native": "evidence://<索引>", "h5": "evidence://<索引>" }
   },
   "alipay": {
     "app_id_ref": "kms://alipay/appid",
     "app_private_key_ref": "kms://alipay/app-private-key",
+    "key_type": "PKCS1 | PKCS8",   // 必显式：官方密钥工具默认生成格式与 SDK 默认解析格式不一致
     "api_family": "legacy_gateway",
     "gateway": "https://openapi.alipay.com/gateway.do",
     "verification_mode": "public_key | certificate",
-    "verification_material_refs": ["kms://alipay/alipay-public-key"],
+    // public_key（默认）模式必填，其余模式相关引用必须缺省：
+    "alipay_public_key_ref": "kms://alipay/alipay-public-key",
+    // certificate（分支）模式必填（三证角色见冻结表 §2.3.1），其余必须缺省：
+    "app_cert_ref": "kms://alipay/app-cert",                     // → app_cert_sn，随请求上送
+    "alipay_public_cert_ref": "kms://alipay/alipay-public-cert", // → 按 alipay_cert_sn 匹配后验签
+    "alipay_root_cert_ref": "kms://alipay/alipay-root-cert",     // → alipay_root_cert_sn
+    // 模式切换/换钥窗口（流程见冻结表 §2.3.2）：旧验签材料只读副本，仅验签、不得用于请求签名
+    "previous_verification_material_refs": [],
+    "previous_material_expiry": "<旧材料撤销时刻，如通知重发末次 15h 后>",
     "notify_url": "https://<联调域名>/payment-callbacks/alipay",
     "return_url_allowlist": ["https://<联调域名>/..."],
     "product_evidence_refs": { "page": "evidence://<索引>", "wap": "evidence://<索引>" }
@@ -230,6 +316,12 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
 
 - 引用缺失、`environment_kind` 与部署身份不符、产品不在 `allowed_products`、
   密钥不匹配 → 拒绝启用该渠道，按渠道隔离失败，不回退生产配置、不跳过验签；
+- **模式与材料必须一致**：`verification_mode` 与对应有类型引用一一匹配
+  （微信 public_key → 双公钥引用齐全 / platform_certificate → 仅 api_v3_key_ref；
+  支付宝 public_key → 仅 alipay_public_key_ref / certificate → 三证齐全，
+  见 §2.3.1）；混用、缺项或多填 → 拒绝启用；
+- 切换窗口内 `previous_verification_material_refs` 中的材料**只允许验签**，
+  不得用于请求签名；窗口过期引用必须清除后才允许新版本生效；
 - `sales_enabled` 必须显式为 `false` 才允许进入联调；
 - 公开诊断只输出 `config_revision`、脱敏身份、加载成功布尔与固定错误码，
   不输出解析异常原文、材料正文或配置全文；
@@ -275,3 +367,12 @@ npm registry / Maven Central / GitHub `alipay` 官方 org。核查日期 **2026-
 AC5 执行时每格须补：OS、浏览器/客户端精确版本、真机或桌面环境、结果
 （已验证支持 / 不支持并引导 / 仍阻塞）、证据索引。手机模拟 UA 不替代真机；
 页面回跳不证明付款。
+
+### 5.1 冻结表自检用例（#69 实现时的最低拒绝/接受覆盖；结果待实现后回填，当前全部未执行）
+
+| ID | 用例 | 期望 |
+| --- | --- | --- |
+| V-R6 | 微信查单（微信单号）构造请求缺 `mchid` query 参数 | 客户端本地拒绝、不发出请求；带 `mchid` 时签名覆盖含 query string 的完整 URL 目标（§1.1） |
+| V-R7 | 支付宝通知携带未知 `alipay_cert_sn`（证书模式）/ 微信通知携带未知 `Wechatpay-Serial` | 验签失败：不跳过、不确认到账、无账务变化（§1.2、§2.3.1） |
+| V-R8 | 模式与材料不一致（public_key 混入证书三证、缺 `alipay_public_key_ref` 等） | 配置加载拒绝启用该渠道（§3 验收口径） |
+| V-R9 | 切换窗口内旧材料被用于请求签名 / `previous_material_expiry` 过期引用未清除 | 拒绝：旧材料仅可验签；过期引用未清除则新 `config_revision` 不生效（§2.3.2） |
