@@ -63,6 +63,38 @@ test("PID reuse or an editor mentioning the entry is not our Bun process", () =>
   ).toBe(false);
 });
 
+test("lsof fallback identity (executable cwd) still refuses an unrelated PID", () => {
+  const p = {
+    entry: "/repo/server/src/production-entry.ts",
+    executable: "/bin/bun",
+    started: "/repo/server",
+  };
+  expect(
+    ownsProcess(p, { command: "/bin/bun /repo/server", started: "/repo/server" }, "/repo"),
+  ).toBe(true);
+  expect(
+    ownsProcess(
+      p,
+      { command: "/bin/other /repo/server", started: "/repo/server" },
+      "/repo",
+    ),
+  ).toBe(false);
+  expect(
+    ownsProcess(
+      p,
+      { command: "/bin/bun /somewhere/else", started: "/somewhere/else" },
+      "/repo",
+    ),
+  ).toBe(false);
+  expect(
+    ownsProcess(
+      p,
+      { command: "/bin/bun /repo", started: "/repo" },
+      "/repo",
+    ),
+  ).toBe(false);
+});
+
 test("accepts only the authorized supplement field names", () => {
   expect(() =>
     assertSupplement(

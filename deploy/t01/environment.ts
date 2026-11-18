@@ -5,6 +5,14 @@ export function serverEnvironment(
 ): Record<string, string> {
   if (source.OPENBOT_ORGANIZATION_AUTH_URL?.trim())
     throw new Error("T01 must use its own Casdoor authority");
+  // T01 fixes the Okta-compatible entry to reach Casdoor. Report the offending field
+  // name only; the dedicated AUTH_MODE=casdoor path needs its own verification matrix.
+  for (const key of Object.keys(source)) {
+    if (key === "AUTH_MODE" || key.startsWith("CASDOOR_OAUTH_"))
+      throw new Error(
+        `T01 fixes the Okta-compatible Casdoor mode; unexpected ${key} in environment`,
+      );
+  }
   const names = [
     ...readFileSync(
       new URL(".env.t01.example", import.meta.url),
@@ -29,13 +37,19 @@ export function ownsProcess(
   current: { command: string; started: string },
   root: string,
 ): boolean {
-  return (
-    !!saved.started &&
-    saved.started === current.started &&
-    ["server/src/production-entry.ts", "worker/src/index.ts"].some(
+  if (!saved.started || saved.started !== current.started) return false;
+  if (
+    !["server/src/production-entry.ts", "worker/src/index.ts"].some(
       (f) => saved.entry === `${root}/${f}`,
-    ) &&
-    current.command === `${saved.executable} ${saved.entry}`
+    )
+  )
+    return false;
+  // ps reports full argv ("executable entry"). On locked-down hosts where ps is
+  // unavailable, launch.ts records "executable cwd" from lsof instead; the recorded
+  // working directory still refuses an unrelated reused PID.
+  return (
+    current.command === `${saved.executable} ${saved.entry}` ||
+    current.command === `${saved.executable} ${root}/server`
   );
 }
 

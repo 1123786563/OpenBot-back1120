@@ -17,14 +17,37 @@ const state = "deploy/t01/.runtime/processes.json";
 const action = process.argv[2];
 const root = resolve(".");
 function identity(pid: number) {
-  return {
-    command: execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+  try {
+    return {
+      command: execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+        encoding: "utf8",
+      }).trim(),
+      started: execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
+        encoding: "utf8",
+      }).trim(),
+    };
+  } catch (error) {
+    // Locked-down hosts can refuse to exec ps. Fall back to lsof, which exposes the
+    // executable (txt) and working directory (cwd) of a live process; ownsProcess
+    // matches the recorded "executable cwd" form and still refuses unrelated PIDs.
+    if ((error as NodeJS.ErrnoException)?.code !== "EPERM") throw error;
+    const out = execFileSync("lsof", ["-w", "-p", String(pid)], {
       encoding: "utf8",
-    }).trim(),
-    started: execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-      encoding: "utf8",
-    }).trim(),
-  };
+    });
+    let cwd: string | undefined;
+    let txt: string | undefined;
+    for (const line of out.split("\n")) {
+      const columns = line.trim().split(/\s+/);
+      const name = columns.at(-1);
+      if (columns[3] === "cwd" && name?.startsWith("/")) cwd = name;
+      if (columns[3] === "txt" && !txt && name?.startsWith("/")) txt = name;
+    }
+    if (!cwd || !txt)
+      throw new Error(
+        `Process ${pid} identity unavailable: neither ps nor lsof could observe it`,
+      );
+    return { command: `${txt} ${cwd}`, started: cwd };
+  }
 }
 if (!existsSync("server/src/production-entry.ts"))
   throw new Error("Run from OpenBot/");

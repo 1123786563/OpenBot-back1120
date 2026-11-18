@@ -46,9 +46,9 @@ bash deploy/t01/up.sh         # 安装、迁移、构建、启动真实 server+w
 - 普通B请求管理员revoke-sessions和fleet stop应403且不改变A目标。
 - 用A管理员请求 `POST /api/admin/enterprise/people/<A-user-id>/revoke-sessions`。动作前保留**原始** A storageState为`.runtime/browser-a.json`；动作后该旧cookie的下一次`/api/me`401；B仍200。`bash deploy/t01/verify.sh revoked`作可重复断言。
 - 已登录B带Origin=http://untrusted.invalid请求 `/api/auth/sign-in/social`应403 INVALID_ORIGIN；跨站 `/api/me` 不提供 CORS allow-origin。无Cookie的发起登录请求可以返回授权URL，但不能因此建立会话（Better Auth的实际策略）。
-- 用户取消登录（本轮已实测）：匿名context点 Continue with Okta 到达 Casdoor 登录页后离开页面，OpenBot `/api/me` 必须401且停在 /sign。
-- 错误回调（本轮已实测）：手工构造 authorize URL，`redirect_uri=http://localhost:13001/api/auth/callback/evil`；Casdoor 在登录页前直接拒绝（"doesn't exist in the allowed Redirect URI list"），无 code、浏览器不落在回调，`/api/me` 401。
-- 错误 issuer（本轮已实测）：以 `OKTA_OAUTH_ISSUER=http://localhost:18001` 覆盖重启 server 后，`POST /api/auth/sign-in/social` 返回 400 `INVALID_OAUTH_CONFIGURATION`、不产出授权 URL、`/api/me` 401；恢复正确 issuer 重启后 200 且授权 URL 指向 18000（含 state 与 PKCE challenge）。注意 Bun 中显式 shell 环境变量优先于 `--env-file`。
+- 用户取消登录（历史轮次曾实测，本部署须复测）：匿名context点 Continue with Okta 到达 Casdoor 登录页后离开页面，OpenBot `/api/me` 必须401且停在 /sign。
+- 错误回调（历史轮次曾实测，本部署须复测）：手工构造 authorize URL，`redirect_uri=http://localhost:13001/api/auth/callback/evil`；Casdoor 在登录页前直接拒绝（"doesn't exist in the allowed Redirect URI list"），无 code、浏览器不落在回调，`/api/me` 401。
+- 错误 issuer（历史轮次曾实测，本部署须复测）：以 `OKTA_OAUTH_ISSUER=http://localhost:18001` 覆盖重启 server 后，`POST /api/auth/sign-in/social` 返回 400 `INVALID_OAUTH_CONFIGURATION`、不产出授权 URL、`/api/me` 401；恢复正确 issuer 重启后 200 且授权 URL 指向 18000（含 state 与 PKCE challenge）。注意 Bun 中显式 shell 环境变量优先于 `--env-file`。
 - 平台浏览器执行 `browser_run_code_unsafe`，filename=`OpenBot/deploy/t01/verify/oidc-failures.js`（从工作区根解析）：真实 state+无效 code 得到 invalid_code，客户端畸形/无签名 idToken 得到401 INVALID_TOKEN，各自 /api/me401。sign-in/social 存在客户端 idToken 注入面；单独合法签名 token 的 expiry/audience 子分支未逐项端到端注入，见根 implementation.md 的实际库契约与边界，不以其他拒绝替代。
 
 ## 后台执行与计算机
