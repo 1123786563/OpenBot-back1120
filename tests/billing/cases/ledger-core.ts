@@ -81,6 +81,21 @@ interface ServiceProcess {
   stop: () => Promise<void>;
 }
 
+/**
+ * Every spawned ledger service registers here: the crash-window phases start
+ * several instances, and a phase ending must stop ALL of them — a survivor
+ * would keep serving the port with NARROWED credentials and be adopted as
+ * "the service" by the next phase (observed live as a 404 in the outage
+ * phase's first grant).
+ */
+const liveServices: ServiceProcess[] = [];
+
+async function stopAllServices(): Promise<void> {
+  for (const inst of liveServices.splice(0)) {
+    await inst.stop().catch(() => {});
+  }
+}
+
 async function startService(barrierDir?: string): Promise<ServiceProcess> {
   const proc = spawn("bun", [new URL("../../../server/src/billing-ledger/isolated-main.ts", import.meta.url).pathname], {
     env: {
@@ -108,7 +123,11 @@ async function startService(barrierDir?: string): Promise<ServiceProcess> {
   for (let i = 0; i < 80; i++) {
     try {
       const r = await fetch(`${base}/healthz`);
-      if (r.ok) return { proc, stderrHead, stop: stopOf(proc) };
+      if (r.ok) {
+        const inst: ServiceProcess = { proc, stderrHead, stop: stopOf(proc) };
+        liveServices.push(inst);
+        return inst;
+      }
     } catch {
       /* not up yet */
     }
@@ -720,7 +739,7 @@ async function main(): Promise<number> {
     console.log(`\nmain phase complete: ${checks} checks, ${failures} failures`);
     return failures === 0 ? 0 : 1;
   } finally {
-    await svc.stop();
+    await stopAllServices();
     await owner.end({ timeout: 2 }).catch(() => {});
     await app.end({ timeout: 2 }).catch(() => {});
   }
@@ -743,8 +762,10 @@ async function lagoOutagePhase(): Promise<number> {
     svc = await startService();
     const ORG = ORG_A;
     const reg = await postConverge("/internal/v1/billing/accounts", { organization_id: ORG, owner_subject_id: "subj_outage", personal_workspace_id: "ws_outage" }, REGISTER_TOKEN, `outage-reg-${RUN_ID}`);
-    const acct = (reg.body.billing_account as { id: string }).id;
+    if (reg.status !== 201) console.error(`  DEBUG outage register: ${reg.status} ${JSON.stringify(reg.body).slice(0, 220)}`);
+    const acct = (reg.body.billing_account as { id: string } | undefined)?.id ?? "";
     const grant = await postConverge("/internal/v1/billing/credit-grants", makeBody({ billing_account_id: acct, source_event_id: `evt_outage_${RUN_ID}`, source_type: "pack", granted_microcredits: "777000" }), ENT_A_TOKEN, `outage-${RUN_ID}`);
+    if (grant.status !== 201) console.error(`  DEBUG outage grant: ${grant.status} ${JSON.stringify(grant.body).slice(0, 220)}`);
     eq(grant.status, 201, "grant SUCCEEDS while Lago is down (local ledger is authoritative)");
     const pending = await owner.unsafe<{ n: string }[]>(`SELECT COUNT(*)::text AS n FROM billing.outbox_delivery WHERE status = 'pending'`);
     ok(BigInt(pending[0]!.n) >= 1n, "outbox record is pending — not 'sent', not claimed delivered");
@@ -761,7 +782,7 @@ async function lagoOutagePhase(): Promise<number> {
     console.log(`\nlago-outage phase complete: ${checks} checks, ${failures} failures`);
     return failures === 0 ? 0 : 1;
   } finally {
-    if (svc) await svc.stop();
+    await stopAllServices();
     await owner.end({ timeout: 2 }).catch(() => {});
   }
 }
