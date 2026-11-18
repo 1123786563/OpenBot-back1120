@@ -4,6 +4,7 @@ import {
   beginIdentitySwitch,
   freezeIdentity,
   identityGeneration,
+  inFallbackBindingForTests,
   installIdentityGuards,
   resumeIdentity,
 } from "@/lib/auth/identity";
@@ -257,5 +258,278 @@ describe("identity generation guards the cache write", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(queryClient.getQueryData<string>(KEY)).toBe("mine");
+  });
+
+  /*
+   * THE TWO OVERLAPS BELOW ARE THE CONCURRENT PAIR THE REVIEW ASKED FOR, in both settle orders.
+   *
+   * A's lifecycle callback was already invoked — and already waiting on its own work — when the
+   * switch ran; B's starts afterwards. The two promises are then in flight together, and their
+   * settle order is whatever the world does. A shared marker held across a promise cannot tell
+   * those continuations apart: settling in entry order handed the marker back wrong, letting A's
+   * late value into B's cache and dropping one of B's. Each test below pins one settle order with
+   * deterministic gates, against the real QueryClient and the real guards.
+   */
+  const gatedAsyncMutation = (gate: Promise<unknown>, marker: string) =>
+    mutationOptions({
+      mutationFn: () => Promise.resolve("started"),
+      onSuccess: async () => {
+        await gate;
+        queryClient.setQueryData(KEY, marker);
+      },
+    });
+
+  const switchToB = (startedAt: number): void => {
+    freezeIdentity();
+    beginIdentitySwitch();
+    resumeIdentity();
+    expect(identityGeneration()).toBeGreaterThan(startedAt);
+  };
+
+  const settleFor = async (ms: number): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  };
+
+  test("two overlapping async callbacks, stale settles FIRST: its write never lands, B's does", async () => {
+    let releaseA: () => void = () => {};
+    const gateA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let releaseB: () => void = () => {};
+    const gateB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    const startedAt = identityGeneration();
+    // A's callback is INVOKED here — before the switch — and registers as pending.
+    queryClient
+      .getMutationCache()
+      .build(queryClient, gatedAsyncMutation(gateA, "A-overlap"))
+      .execute(undefined);
+    await settleFor(10);
+    switchToB(startedAt);
+    queryClient.setQueryData(KEY, "B-owns");
+    // B's callback starts under B and is pending when A settles.
+    queryClient
+      .getMutationCache()
+      .build(queryClient, gatedAsyncMutation(gateB, "B-overlap"))
+      .execute(undefined);
+    await settleFor(10);
+
+    // A settles first — and its write must land nowhere.
+    releaseA();
+    await settleFor(20);
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-owns");
+
+    // Then B settles, under no live stale callback: the write of the page's own identity lands.
+    releaseB();
+    await settleFor(20);
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-overlap");
+  });
+
+  test("two overlapping async callbacks, stale settles LAST: B writes normally through the whole window, and A's write lands nowhere", async () => {
+    let releaseA: () => void = () => {};
+    const gateA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let releaseB: () => void = () => {};
+    const gateB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    let releaseQuiescence: () => void = () => {};
+    const quiescence = new Promise<void>((resolve) => {
+      releaseQuiescence = resolve;
+    });
+    const startedAt = identityGeneration();
+    queryClient
+      .getMutationCache()
+      .build(queryClient, gatedAsyncMutation(gateA, "A-overlap"))
+      .execute(undefined);
+    await settleFor(10);
+    switchToB(startedAt);
+    queryClient.setQueryData(KEY, "B-owns");
+    // B's own callback writes twice: once while A's stale callback is still pending, once after.
+    queryClient
+      .getMutationCache()
+      .build(
+        queryClient,
+        mutationOptions({
+          mutationFn: () => Promise.resolve("started"),
+          onSuccess: async () => {
+            await gateB;
+            queryClient.setQueryData(KEY, "B-in-window");
+            await quiescence;
+            queryClient.setQueryData(KEY, "B-final");
+          },
+        }),
+      )
+      .execute(undefined);
+    await settleFor(10);
+
+    // B settles FIRST, while A is still pending — and the exact binding attributes B's write to
+    // B: the new identity writes normally through the window, in either settle order.
+    releaseB();
+    await settleFor(20);
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-in-window");
+
+    // A settles last, and its write still lands nowhere.
+    releaseA();
+    await settleFor(20);
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-in-window");
+
+    // And B's later write lands as always.
+    releaseQuiescence();
+    await settleFor(20);
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-final");
+    expect(queryClient.getQueryData<string>(KEY)).not.toBe("A-overlap");
+  });
+
+  test("a response released while B is already on the business page invokes A's callback into a closed door", async () => {
+    let releaseA: (saved: string) => void = () => {};
+    const gate = new Promise<string>((resolve) => {
+      releaseA = resolve;
+    });
+    const startedAt = identityGeneration();
+    queryClient
+      .getMutationCache()
+      .build(
+        queryClient,
+        mutationOptions({
+          mutationFn: () => gate,
+          onSuccess: async (saved: string) => {
+            // Real work after the response: a refetch, a second round trip. Every continuation
+            // below is invoked after B owns the page.
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            queryClient.setQueryData(KEY, saved);
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            queryClient.setQueryData(KEY, `${saved}-again`);
+          },
+        }),
+      )
+      .execute(undefined);
+
+    // B signs in and is already using the page — reading and writing — when A's response arrives.
+    switchToB(startedAt);
+    queryClient.setQueryData(KEY, "B-working");
+
+    releaseA("A-late-response");
+    await settleFor(60);
+
+    // Neither continuation lands, and B's own write is untouched by either.
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-working");
+    queryClient.setQueryData(KEY, "B-after");
+    expect(queryClient.getQueryData<string>(KEY)).toBe("B-after");
+  });
+});
+
+/*
+ * THE FALLBACK BINDING, exercised as a browser runs it.
+ *
+ * Everything above runs under the exact binding, because Bun has an async context. The browser
+ * build ships the fallback — no `AsyncLocalStorage` there — and a green run over the exact path
+ * alone would prove nothing about what production does. So the same overlap pair runs here with
+ * the context removed: the stale callback's write must still land nowhere, and what changes is
+ * visible and deliberate — the fallback cannot attribute a post-`await` write to its callback, so
+ * while a stale callback is pending it refuses the unattributed ones, B's own included, until the
+ * stale one settles. Both settle orders are pinned, and the cost is pinned with them, because a
+ * reader of these tests is entitled to see what the fallback costs rather than be told it has
+ * none.
+ */
+describe("identity generation without an async context (the browser fallback)", () => {
+  const settleFor = async (ms: number): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  };
+  const gatedAsyncMutation = (gate: Promise<unknown>, marker: string) =>
+    mutationOptions({
+      mutationFn: () => Promise.resolve("started"),
+      onSuccess: async () => {
+        await gate;
+        queryClient.setQueryData(KEY, marker);
+      },
+    });
+
+  test("stale settles FIRST: its write never lands, and B's writes land once the window closes", async () => {
+    await inFallbackBindingForTests(async () => {
+      let releaseA: () => void = () => {};
+      const gateA = new Promise<void>((resolve) => {
+        releaseA = resolve;
+      });
+      let releaseB: () => void = () => {};
+      const gateB = new Promise<void>((resolve) => {
+        releaseB = resolve;
+      });
+      const startedAt = identityGeneration();
+      queryClient
+        .getMutationCache()
+        .build(queryClient, gatedAsyncMutation(gateA, "A-fallback"))
+        .execute(undefined);
+      await settleFor(10);
+      freezeIdentity();
+      beginIdentitySwitch();
+      resumeIdentity();
+
+      // B's direct write during the window: refused with the stale callback's — the fallback
+      // cannot tell whose unattributed hand a write came from, and refuses rather than guess.
+      // It is answered at the next write, once the window closes.
+      queryClient.setQueryData(KEY, "B-owns");
+      expect(queryClient.getQueryData<string>(KEY)).toBeUndefined();
+
+      queryClient
+        .getMutationCache()
+        .build(queryClient, gatedAsyncMutation(gateB, "B-fallback"))
+        .execute(undefined);
+      await settleFor(10);
+
+      releaseA();
+      await settleFor(20);
+      expect(queryClient.getQueryData<string>(KEY)).toBeUndefined();
+
+      releaseB();
+      await settleFor(20);
+      expect(queryClient.getQueryData<string>(KEY)).toBe("B-fallback");
+      queryClient.setQueryData(KEY, "B-direct");
+      expect(queryClient.getQueryData<string>(KEY)).toBe("B-direct");
+    });
+  });
+
+  test("stale settles LAST: B's synchronous and post-await writes return when it is gone", async () => {
+    await inFallbackBindingForTests(async () => {
+      let releaseA: () => void = () => {};
+      const gateA = new Promise<void>((resolve) => {
+        releaseA = resolve;
+      });
+      let releaseB: () => void = () => {};
+      const gateB = new Promise<void>((resolve) => {
+        releaseB = resolve;
+      });
+      const startedAt = identityGeneration();
+      queryClient
+        .getMutationCache()
+        .build(queryClient, gatedAsyncMutation(gateA, "A-fallback"))
+        .execute(undefined);
+      await settleFor(10);
+      freezeIdentity();
+      beginIdentitySwitch();
+      resumeIdentity();
+
+      queryClient
+        .getMutationCache()
+        .build(queryClient, gatedAsyncMutation(gateB, "B-fallback"))
+        .execute(undefined);
+      await settleFor(10);
+
+      // B settles first, still inside the window: its write is refused with A's.
+      releaseB();
+      await settleFor(20);
+      expect(queryClient.getQueryData<string>(KEY)).toBeUndefined();
+
+      // A settles and closes the window; its write landed nowhere.
+      releaseA();
+      await settleFor(20);
+      expect(queryClient.getQueryData<string>(KEY)).toBeUndefined();
+
+      // From here the page is B's without qualification: any write lands.
+      queryClient.setQueryData(KEY, "B-owns");
+      expect(queryClient.getQueryData<string>(KEY)).toBe("B-owns");
+    });
   });
 });

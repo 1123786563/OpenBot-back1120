@@ -111,6 +111,7 @@ import {
   createChannelEventHub,
   startChannelActivityListener,
 } from "./channels/events";
+import { createGatewaySocketRegistry } from "./intelligence-gateway-proxy";
 import {
   createGroupConversations,
   createGroupStore,
@@ -523,7 +524,19 @@ const channelStore: ChannelStore = {
  * reads the same truth, whichever replica handled the POST.
  */
 const sessionGate = createSessionGate(database);
-const channelEvents = createChannelEventHub(sessionGate);
+/*
+ * The proxied Intelligence gateway sockets, kept where a revocation can find them. The sign-out
+ * path closes the session's channel sockets through `revokeSession` below; the same call now ends
+ * that session's conversation sockets — the frames they carry are a conversation's live turns, and
+ * a session that has signed out may hear none of them. The gate asked before every frame stays the
+ * authority; this is the prompt close, on this replica and, through the announcement, on every
+ * other.
+ */
+const gatewaySockets = createGatewaySocketRegistry();
+const channelEvents = createChannelEventHub(sessionGate, {
+  onSessionRevoked: (userId, sessionId) =>
+    gatewaySockets.revokeSession(userId, sessionId),
+});
 /**
  * Which components each Bot may answer with.
  *
@@ -3424,6 +3437,8 @@ startHttpServer({
   resolveRequestActor,
   agentProfileStore,
   computerGateway,
+  sessionGate,
+  gatewaySockets,
   app,
 });
 

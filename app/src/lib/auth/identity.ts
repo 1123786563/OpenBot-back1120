@@ -1,4 +1,7 @@
 import {
+  AsyncLocalStorage,
+} from "node:async_hooks";
+import {
   Mutation,
   MutationObserver,
   type QueryClient,
@@ -60,71 +63,156 @@ const SWITCH_MESSAGE = "identity-switched";
 let generation = 0;
 let frozen = false;
 /**
- * The generation the identity-scoped callback currently running was started under, or `null`
- * outside any such callback. Set only while a guarded callback runs (see
- * `runForGeneration`), so it never leaks into unrelated code between awaits.
+ * The async context the engine follows across `await`, carrying the generation a guarded callback
+ * started under — the exact binding, where the engine has one.
+ *
+ * Node and Bun have `AsyncLocalStorage`; a browser does not. The browser build resolves the import
+ * to the shim at `app/src/shims/node-async-hooks.ts`, whose `AsyncLocalStorage` is `undefined`, and
+ * this module answers that by running its fallback binding (see `executing` and `live` below). The
+ * check is live at runtime in each environment, however it reads under TypeScript.
  */
-let executing: number | null = null;
-let channel: BroadcastChannel | undefined;
+let asyncContext: AsyncLocalStorage<{ generation: number }> | undefined =
+  AsyncLocalStorage
+    ? new AsyncLocalStorage<{ generation: number }>()
+    : undefined;
 
 /**
- * Run `fn` as a callback of the identity generation `startedAt`, nesting-safe — and ACROSS ITS
- * ENTIRE EXECUTION, not just its first synchronous stretch.
+ * Run `fn` under the fallback binding — as a browser without an async context runs every guarded
+ * callback. TESTS ONLY.
  *
- * A lifecycle callback may `await` before it writes: an `async onSuccess` that stores a result
- * after a round trip, an `onSettled` that awaits a refetch. Restoring `executing` the moment `fn`
- * RETURNS would unbind everything after its first `await` — the door would then read
- * `executing === null`, wave the write through, and the stale result the binding existed to stop
- * would land after all. So when `fn` answers a promise, the binding is held until that promise
- * settles: the continuation after every `await` still runs under the generation the callback
- * started under, and the door can still tell it from the new identity's writes.
+ * The two bindings differ only where a callback's continuation races the identity switch: the
+ * exact one attributes every write, the fallback refuses what it cannot attribute. Production
+ * picks per environment and cannot be changed at runtime; these tests must be able to prove BOTH,
+ * or the green run would only ever have exercised the exact path while the shipped browser ran the
+ * other one. Restores the previous binding whatever `fn` does.
+ */
+export async function inFallbackBindingForTests<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  const withContext = asyncContext;
+  asyncContext = undefined;
+  try {
+    return await fn();
+  } finally {
+    asyncContext = withContext;
+  }
+}
+/**
+ * THE FALLBACK'S synchronous claim: the generation of the guarded callback running in THIS
+ * synchronous stretch, or `null` outside any. Only used when the engine has no async context.
  *
- * THE COST IS HONEST AND BOUNDED. While a stale callback's promise is in flight, `executing` names
- * its generation, and an UNGUARDED write that happens to run inside that window — code that calls
- * `setQueryData` outside any bound callback — is dropped with the stale writes. That window is
- * exactly the leak window (a stale callback still pending after a newer identity resumed), it ends
- * when the callback settles, and no bound write is ever mis-dropped: a bound callback stamps its
- * own generation on entry and restores what was there before. Dropping a stranger's write while a
- * known-stale callback is still live errs toward the side this module exists to guard; the
- * alternative — letting the stale write through because the marker happened to be down — is the
- * bug.
+ * The variable is claimed and restored strictly inside one synchronous stretch — `runForGeneration`
+ * sets it before calling `fn` and restores it the moment `fn` returns, promising or not. Two
+ * callbacks therefore can never hold it at once, and restoring it can never name a generation
+ * somebody else's callback chose: the overlap bug where a settled stale callback handed the marker
+ * back to a value an interleaved callback had written over is structurally impossible here, because
+ * there is nothing to restore across — an `async` callback's post-`await` continuations do not run
+ * under this variable at all. They run unattributed, and the door treats unattributed writes the
+ * way the {@link live} registry says it must.
+ */
+let executing: number | null = null;
+/**
+ * THE FALLBACK'S registry of guarded callbacks whose synchronous stretch has ended but whose
+ * promise has not settled — an `async` `onSuccess` sitting at an `await`, an `onSettled` mid-refetch.
+ *
+ * The entries carry the generation each was started under, and the door reads them dynamically:
+ * an entry is stale the moment the page's generation moves past it, whenever that happens. This
+ * registry is what makes overlapping callbacks safe in the fallback. WITHOUT AN ASYNC CONTEXT, the
+ * continuation a post-`await` write comes from cannot be identified — so while ANY registered
+ * callback belongs to an earlier generation, the door refuses every unattributed write. A stale
+ * callback can then never write — that is the isolation this module exists for — and the cost is
+ * bounded and honest: the CURRENT identity's own post-`await` and direct programmatic writes in
+ * the same window are refused with the stale one, until it settles. That window is the leak window
+ * itself (it exists only while a callback that started under a superseded identity is still
+ * pending), it ends when that callback settles or its awaited work fails — which
+ * `freezeIdentity`'s `cancelQueries` forces for the refetches such callbacks mostly sit on — and
+ * writes made under a claimed marker are never touched: they are attributed exactly. Refusing a
+ * write of unknown hand while a known-stale callback is live errs toward the side this module
+ * exists to guard.
+ */
+const live: { generation: number }[] = [];
+let channel: BroadcastChannel | undefined;
+
+/** Whether any pending callback belongs to an identity that no longer holds the page. */
+function staleCallbackIsLive(): boolean {
+  return live.some((entry) => entry.generation !== generation);
+}
+
+function isThenable(value: unknown): value is Promise<unknown> {
+  return (
+    value instanceof Promise ||
+    (value !== null &&
+      typeof value === "object" &&
+      typeof (value as { then?: unknown }).then === "function")
+  );
+}
+
+/**
+ * Run `fn` as a callback of the identity generation `startedAt`.
+ *
+ * A callback of a generation that no longer holds the page is not run at all. That check answers
+ * the dominant case outright, in both bindings: React Query invokes a mutation's lifecycle
+ * callbacks when the response lands, so a response that arrives after the switch invokes the
+ * callback AFTER it — dropping the invocation drops the write and every continuation after it,
+ * whatever the callback does inside. What remains is a callback already running when the switch
+ * happened: it is invoked before, and its post-`await` continuations come later. The exact binding
+ * follows those continuations wherever they interleave — two overlapping callbacks, settling in
+ * either order, each write lands or is refused by its own generation. The fallback covers them
+ * with the registry, and refuses unattributed writes for the window a stale callback is pending.
  */
 function runForGeneration<T>(startedAt: number, fn: () => T): T {
+  if (startedAt !== generation) return undefined as T;
+  if (asyncContext) {
+    // The context is captured for this callback's whole execution — every continuation after
+    // every `await`, however interleaved with other callbacks — and the door reads it at the
+    // write. Nothing to restore, nothing shared, nothing to get wrong across settle orders.
+    return asyncContext.run({ generation: startedAt }, fn);
+  }
+  const registration: { generation: number } = { generation: startedAt };
   const outer = executing;
   executing = startedAt;
-  const settle = (): void => {
-    executing = outer;
-  };
   let result: T;
   try {
     result = fn();
-  } catch (error) {
-    settle();
-    throw error;
+  } finally {
+    executing = outer;
   }
-  if (
-    result instanceof Promise ||
-    (result !== null &&
-      typeof result === "object" &&
-      typeof (result as { then?: unknown }).then === "function")
-  ) {
+  if (isThenable(result)) {
+    live.push(registration);
     // `Promise.resolve` also takes a foreign thenable; `finally` passes the outcome through
-    // untouched, so the caller's await sees exactly what `fn` answered.
-    return Promise.resolve(result).finally(settle) as unknown as T;
+    // untouched, so the caller's await sees exactly what `fn` answered. The registration is
+    // dropped by identity, never by position, so overlapping callbacks cannot unregister each
+    // other however their settle order comes out.
+    return Promise.resolve(result).finally(() => {
+      const at = live.indexOf(registration);
+      if (at !== -1) live.splice(at, 1);
+    }) as unknown as T;
   }
-  settle();
   return result;
 }
 
 /**
  * Whether a cache write must be dropped.
  *
- * Frozen — nobody holds the page — is the obvious case. The other is the stale one: a callback
- * bound to an earlier generation is running NOW, while a later identity owns the page. Both are
- * answered by one predicate so a caller cannot pass one and forget the other.
+ * Frozen — nobody holds the page — is the obvious case, and the async context answers the second
+ * one exactly: a write made inside a guarded callback carries the generation that callback started
+ * under, wherever in its execution it happens, and a superseded generation is stale however long
+ * the page has moved on. A write outside any guarded callback is the page's own — component code,
+ * query bookkeeping — and is answered by the freeze alone. The fallback, with no async context to
+ * read, answers with what is knowable: a write under a live claim names its generation exactly,
+ * and an unattributed write is refused while any pending callback belongs to an earlier identity.
+ * All of it is answered by one predicate so a caller cannot pass one case and forget the others.
  */
 function writeIsStale(): boolean {
-  return frozen || (executing !== null && executing !== generation);
+  if (frozen) return true;
+  if (asyncContext) {
+    const context = asyncContext.getStore();
+    return context !== undefined && context.generation !== generation;
+  }
+  return (
+    (executing !== null && executing !== generation) ||
+    (executing === null && staleCallbackIsLive())
+  );
 }
 
 function clearAccountScopedStorage(): void {

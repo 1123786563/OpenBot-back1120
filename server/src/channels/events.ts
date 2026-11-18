@@ -141,8 +141,20 @@ export type ChannelEventHub = {
 
 type Registration = { sessionId: string | undefined; send: Send; close: Close };
 
-export function createChannelEventHub(gate?: SessionGate): ChannelEventHub {
+export function createChannelEventHub(
+  gate?: SessionGate,
+  hooks?: {
+    /**
+     * A session ended, on this instance or announced from another: anything else this instance
+     * keeps for that session — a proxied Intelligence gateway socket, most likely — should end
+     * now. Called for each named session, before the hub's own detach work, so a socket ends the
+     * moment the announcement lands rather than at its next frame.
+     */
+    onSessionRevoked?: (userId: string, sessionId: string | undefined) => void;
+  },
+): ChannelEventHub {
   const connections = new Map<string, Set<Registration>>();
+  const onSessionRevoked = hooks?.onSessionRevoked;
 
   const detachAll = (
     keys: { userId: string; sessionId?: string }[],
@@ -202,11 +214,12 @@ export function createChannelEventHub(gate?: SessionGate): ChannelEventHub {
       // session ids names people — an older replica's shape — and closes that person's every
       // connection, which is all that publisher could have meant.
       if (event.sessionRevoked) {
-        detachAll(
+        const keys: { userId: string; sessionId?: string }[] =
           event.revokedSessions ??
-            event.memberIds.map((userId) => ({ userId })),
-          true,
-        );
+          event.memberIds.map((userId) => ({ userId }));
+        for (const { userId, sessionId } of keys)
+          onSessionRevoked?.(userId, sessionId);
+        detachAll(keys, true);
         return;
       }
       for (const userId of event.memberIds) {
@@ -232,6 +245,7 @@ export function createChannelEventHub(gate?: SessionGate): ChannelEventHub {
     },
 
     revokeSession(userId, sessionId) {
+      onSessionRevoked?.(userId, sessionId);
       detachAll([{ userId, sessionId }], true);
     },
 
