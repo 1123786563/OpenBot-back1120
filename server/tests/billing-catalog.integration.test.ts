@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import {
   type BillingCatalogService,
   CatalogServiceError,
@@ -278,60 +278,7 @@ const T0 = 1_700_000_000_000_000n; // fixed publish interval start
 const APP = () =>
   createBillingCatalogRoutes({
     service,
-    verifyCredential: (authorization) => {
-      if (authorization === `Bearer ${PROD_TOKEN}`)
-        return {
-          ok: true,
-          organizationId: ORG,
-          billingAccounts: null, // org-wide
-          capabilities: ["billing:quote"],
-          testCatalogAuthorized: true,
-        };
-      if (authorization === `Bearer ${TESTLESS_TOKEN}`) {
-        return {
-          ok: true,
-          organizationId: ORG,
-          billingAccounts: null,
-          capabilities: ["billing:quote"],
-          // deliberately NOT test-catalog authorized
-        };
-      }
-      if (authorization === `Bearer ${ACCOUNT_A_TOKEN}`) {
-        return {
-          ok: true,
-          organizationId: ORG,
-          billingAccounts: [ACCOUNT_A],
-          capabilities: ["billing:quote"],
-          testCatalogAuthorized: true,
-        };
-      }
-      if (authorization === `Bearer ${ACCOUNT_B_TOKEN}`) {
-        return {
-          ok: true,
-          organizationId: ORG,
-          billingAccounts: [ACCOUNT_B],
-          capabilities: ["billing:quote"],
-          testCatalogAuthorized: true,
-        };
-      }
-      if (authorization === `Bearer ${NO_CAPABILITY_TOKEN}`) {
-        return {
-          ok: true,
-          organizationId: ORG,
-          billingAccounts: null,
-          capabilities: ["billing:reserve"], // a credential for another service
-        };
-      }
-      if (authorization === `Bearer ${FOREIGN_TOKEN}`) {
-        return {
-          ok: true,
-          organizationId: ORG_FOREIGN,
-          billingAccounts: null,
-          capabilities: ["billing:quote"],
-        };
-      }
-      return { ok: false };
-    },
+    verifyCredential: verifyTrustedCredential,
   });
 
 const json = (body: unknown, token = PROD_TOKEN): RequestInit => ({
@@ -346,6 +293,62 @@ const json = (body: unknown, token = PROD_TOKEN): RequestInit => ({
 const get = (token = PROD_TOKEN): RequestInit => ({
   headers: { authorization: `Bearer ${token}` },
 });
+
+/** The trusted credential table shared by every app assembled in this suite. */
+function verifyTrustedCredential(authorization: string | undefined) {
+  if (authorization === `Bearer ${PROD_TOKEN}`)
+    return {
+      ok: true,
+      organizationId: ORG,
+      billingAccounts: null, // org-wide
+      capabilities: ["billing:quote"],
+      testCatalogAuthorized: true,
+    };
+  if (authorization === `Bearer ${TESTLESS_TOKEN}`) {
+    return {
+      ok: true,
+      organizationId: ORG,
+      billingAccounts: null,
+      capabilities: ["billing:quote"],
+      // deliberately NOT test-catalog authorized
+    };
+  }
+  if (authorization === `Bearer ${ACCOUNT_A_TOKEN}`) {
+    return {
+      ok: true,
+      organizationId: ORG,
+      billingAccounts: [ACCOUNT_A],
+      capabilities: ["billing:quote"],
+      testCatalogAuthorized: true,
+    };
+  }
+  if (authorization === `Bearer ${ACCOUNT_B_TOKEN}`) {
+    return {
+      ok: true,
+      organizationId: ORG,
+      billingAccounts: [ACCOUNT_B],
+      capabilities: ["billing:quote"],
+      testCatalogAuthorized: true,
+    };
+  }
+  if (authorization === `Bearer ${NO_CAPABILITY_TOKEN}`) {
+    return {
+      ok: true,
+      organizationId: ORG,
+      billingAccounts: null,
+      capabilities: ["billing:reserve"], // a credential for another service
+    };
+  }
+  if (authorization === `Bearer ${FOREIGN_TOKEN}`) {
+    return {
+      ok: true,
+      organizationId: ORG_FOREIGN,
+      billingAccounts: null,
+      capabilities: ["billing:quote"],
+    };
+  }
+  return { ok: false };
+}
 
 beforeAll(async () => {
   database = createDatabase(testDatabaseUrl(), TEST_POOL);
@@ -450,6 +453,7 @@ beforeAll(async () => {
     createdAtUs: T0,
   });
   createdIds.push(capTest, priceTest, packTest);
+  priceTestId = priceTest;
 
   // --- production release: one monthly plan + one pack -----------------------
   const capProd = await seedVersion("runCap", {
@@ -631,6 +635,8 @@ let basicQuotaAId = "";
 let basicQuotaBId = "";
 let basicQuotaTestOnlyId = "";
 let priceV2Id = "";
+/** The TEST-environment release's pinned price version (environment isolation). */
+let priceTestId = "";
 // Version ids of the first production release, for the immutability regressions.
 let priceV1Id = "";
 let planId = "";
@@ -752,6 +758,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     const v1 = snapshot.items.find(
@@ -773,6 +780,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     const packItem = snapshot.items.find(
@@ -792,6 +800,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
       await service.getCatalogVersion({
         organizationId: ORG,
         billingAccountIds: null,
+        environment: "production",
         releaseId: release1.id,
       })
     ).items[0].runCapVersionId;
@@ -909,6 +918,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     const v1 = snapshot.items.find(
@@ -932,6 +942,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     // A 1-microcredit-per-token price keeps a >2^53 quantity's total inside int64.
@@ -1433,6 +1444,7 @@ describe("publish integrity and failure closure (A14)", () => {
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     const item = snapshot.items[0];
@@ -1460,6 +1472,7 @@ describe("publish integrity and failure closure (A14)", () => {
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     const item = snapshot.items[0];
@@ -1552,6 +1565,7 @@ describe("publish integrity and failure closure (A14)", () => {
     const before = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     for (let i = 0; i < 3; i++) {
@@ -1566,6 +1580,7 @@ describe("publish integrity and failure closure (A14)", () => {
     const after = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: null,
+      environment: "production",
       releaseId: release1.id,
     });
     expect(after.contentDigest).toBe(before.contentDigest);
@@ -1673,6 +1688,7 @@ describe("per-account authorization of the quote entry (credential context)", ()
     const snapshot = await service.getCatalogVersion({
       organizationId: ORG,
       billingAccountIds: [ACCOUNT_A],
+      environment: "production",
       releaseId: releaseAccountA.id,
     });
     const priceA = snapshot.items[0].priceVersionId;
@@ -3037,11 +3053,134 @@ describe("publish-freeze hardening", () => {
     );
   });
 
+  /**
+   * Poll a real-database condition with a bounded deadline (no sleep-pass).
+   * On timeout the current lock/activity state is dumped into the error, so
+   * a red run says WHICH waiter was and was not there.
+   */
+  async function waitFor(
+    what: string,
+    probe: () => Promise<boolean>,
+    timeoutMs = 30_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      if (await probe()) return;
+      if (Date.now() > deadline) {
+        const state = await queryRows<{
+          pid: number;
+          state: string;
+          wait_event_type: string | null;
+          wait_event: string | null;
+          query: string;
+        }>(
+          sql`select pid, state, wait_event_type, wait_event, left(query, 120) as query
+              from pg_stat_activity
+              where datname = current_database() and pid <> pg_backend_pid()`,
+        );
+        throw new Error(
+          `timed out waiting for: ${what}\n  backends: ${JSON.stringify(state)}`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
+
+  /** How many sessions HOLD vs WAIT on the scope advisory lock right now. */
+  async function advisoryLockCounts(slot: string) {
+    const rows = await queryRows<{ granted: boolean }>(
+      sql`select granted from pg_locks
+          where locktype = 'advisory' and objid = hashtext(${slot})`,
+    );
+    return {
+      held: rows.filter((r) => r.granted).length,
+      waiting: rows.filter((r) => !r.granted).length,
+    };
+  }
+
+  async function queryRows<T>(query: SQL): Promise<T[]> {
+    const res = (await database.execute(query)) as unknown;
+    const rows = (res as { rows?: T[] }).rows ?? (res as T[]);
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  /**
+   * Recompute the publish content digest from the PERSISTED rows (known
+   * content), exactly as publishRelease builds it: one part per release item
+   * over the resolved version content, plus the basic-quota part, hashed
+   * sorted with a newline after each part. A digest that merely "has the
+   * right length" proves nothing — this compares against the content itself.
+   */
+  async function expectedReleaseDigest(releaseId: string): Promise<string> {
+    const [release] = await database
+      .select()
+      .from(billingCatalogReleases)
+      .where(eq(billingCatalogReleases.id, releaseId));
+    const items = await database
+      .select()
+      .from(billingCatalogReleaseItems)
+      .where(eq(billingCatalogReleaseItems.releaseId, releaseId));
+    const [basicQuota] = await database
+      .select()
+      .from(billingQuotaVersions)
+      .where(eq(billingQuotaVersions.id, release.basicQuotaVersionId!));
+    const parts: string[] = [];
+    for (const item of items) {
+      const [product] = await database
+        .select()
+        .from(billingProductVersions)
+        .where(eq(billingProductVersions.id, item.productVersionId));
+      const [price] = await database
+        .select()
+        .from(billingPriceVersions)
+        .where(eq(billingPriceVersions.id, item.priceVersionId));
+      const resources = await database
+        .select()
+        .from(billingPriceResources)
+        .where(eq(billingPriceResources.priceVersionId, item.priceVersionId))
+        .orderBy(asc(billingPriceResources.resource));
+      const [cap] = await database
+        .select()
+        .from(billingRunCapVersions)
+        .where(eq(billingRunCapVersions.id, price.defaultRootRunCapVersionId));
+      parts.push(
+        JSON.stringify([
+          item.productVersionId,
+          product.revision.toString(),
+          item.priceVersionId,
+          price.revision.toString(),
+          resources.map(
+            (r) =>
+              `${r.resource}:${r.measurementUnit}:${r.unitSize}/${r.numerator}/${r.denominator}`,
+          ),
+          price.defaultRootRunCapVersionId,
+          cap.capMicrocredits.toString(),
+        ]),
+      );
+    }
+    parts.push(
+      JSON.stringify([
+        "basic_quota",
+        basicQuota.id,
+        basicQuota.revision.toString(),
+        basicQuota.tier,
+        basicQuota.spec,
+      ]),
+    );
+    const hasher = new Bun.CryptoHasher("sha256");
+    for (const p of parts.sort()) {
+      hasher.update(p);
+      hasher.update("\n");
+    }
+    return hasher.digest("hex");
+  }
+
   test("a guarded content write during publish serializes: the digest always covers the committed content", async () => {
-    // A new publishable version; its LAST resource row is inserted by another
-    // session that holds the scope advisory lock (as every guarded write
-    // does), so publish BLOCKS until that writer commits and then validates
-    // the FULL content — the stored digest can never miss a committed row.
+    // WRITER-FIRST order, deterministic: the writer's guarded INSERT takes the
+    // scope advisory lock (as every guarded write does) and HELDS it; the
+    // test OBSERVES the publish blocked on that lock before releasing the
+    // writer. Publish must then validate the FULL committed content — the
+    // stored digest can never miss a committed row.
     const cap = await seedVersion("runCap", {
       organizationId: ORG,
       billingAccountId: ACCOUNT_B,
@@ -3066,7 +3205,9 @@ describe("publish-freeze hardening", () => {
       priceFen: 100n,
       grantedMicrocredits: 1000n,
     });
+    const slot = `${ORG}|${ACCOUNT_B}|production`;
     const writer = createDatabase(testDatabaseUrl(), { max: 1 });
+    let releaseWriter = false;
     try {
       const writerTx = writer.transaction(async (tx) => {
         await tx.insert(billingPriceResources).values({
@@ -3077,13 +3218,22 @@ describe("publish-freeze hardening", () => {
           numerator: 1n,
           denominator: 1n,
         });
-        // Hold the write open (and with it the scope lock) while publish starts.
-        await new Promise((r) => setTimeout(r, 1200));
+        // The trigger has taken the scope advisory lock; hold the transaction
+        // (and the lock) until the test has OBSERVED the publish waiting.
+        while (!releaseWriter) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
       });
-      // Give the writer a moment to take the lock, then publish: it must wait
-      // for the writer's commit, see the eighth row, and publish COMPLETE.
-      await new Promise((r) => setTimeout(r, 400));
-      const published = await service.publishRelease({
+      await waitFor(
+        "writer holds the scope advisory lock",
+        async () =>
+          (
+            await queryRows<{ pid: number }>(
+              sql`select pid from pg_locks where locktype = 'advisory' and objid = hashtext(${slot}) and granted = true and pid <> pg_backend_pid()`,
+            )
+          ).length > 0,
+      );
+      const publishing = service.publishRelease({
         organizationId: ORG,
         billingAccountId: ACCOUNT_B,
         environment: "production",
@@ -3099,8 +3249,22 @@ describe("publish-freeze hardening", () => {
         ],
         createdAtUs: T0,
       });
+      // The publish must be OBSERVED blocked on the writer's lock (its own
+      // first statement is the same scope advisory lock) before we release.
+      // Detected through pg_locks (a WAITING advisory entry for the slot),
+      // not through query text.
+      await waitFor(
+        "publish waits on the writer's scope advisory lock",
+        async () => (await advisoryLockCounts(slot)).waiting > 0,
+      );
+      releaseWriter = true;
+      const published = await publishing;
       await writerTx;
-      expect(published.contentDigest).toHaveLength(64);
+      // The stored digest equals the digest recomputed from the COMMITTED
+      // content (all eight rows) — not merely a string of the right length.
+      expect(published.contentDigest).toBe(
+        await expectedReleaseDigest(published.id),
+      );
       // The committed content is quotable in FULL: the concurrently inserted
       // row is part of what publish validated and digested.
       const replay = await service.quoteStep({
@@ -3118,8 +3282,214 @@ describe("publish-freeze hardening", () => {
         .where(eq(billingPriceResources.priceVersionId, almostComplete));
       expect(rows).toHaveLength(8);
     } finally {
+      releaseWriter = true;
       await writer.$client.end({ timeout: 5 });
     }
+  }, 60_000);
+
+  test("publisher-first order: a racing quota rewrite queues on the scope lock and is REJECTED once the release binds the quota", async () => {
+    // PUBLISHER-FIRST order, deterministic: a helper session pins the
+    // predecessor release row, so the publish blocks on its handover UPDATE
+    // AFTER taking the scope advisory lock. A concurrent rewrite of the basic
+    // quota the publish binds then queues on that lock — and once the publish
+    // commits, the database rejects the rewrite as published-content
+    // mutation. The advisory lock orders the two sessions either way; both
+    // orders are covered by this test and its writer-first sibling.
+    const predecessor = (
+      await database
+        .select({ id: billingCatalogReleases.id })
+        .from(billingCatalogReleases)
+        .where(
+          and(
+            eq(billingCatalogReleases.organizationId, ORG),
+            eq(billingCatalogReleases.billingAccountId, ACCOUNT_B),
+            eq(billingCatalogReleases.environment, "production"),
+            eq(billingCatalogReleases.status, "active"),
+            isNull(billingCatalogReleases.effectiveToUs),
+          ),
+        )
+        .orderBy(asc(billingCatalogReleases.effectiveFromUs))
+    ).at(-1)!.id;
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const price = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const pack = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "pack_publisher_first_test",
+      productType: "credit_pack",
+      displayName: "publisher-first pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    // A FRESH basic quota: not yet publish-referenced, so the racing rewrite
+    // below is legal content RIGHT UP TO the moment this release binds it.
+    const freshQuota = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      tier: "basic",
+      spec: {
+        quotas: [
+          { resource_key: "concurrent_runs", limit: "5", unit: "count" },
+          { resource_key: "automatic_task_seats", limit: "20", unit: "count" },
+        ],
+      },
+    });
+    const slot = `${ORG}|${ACCOUNT_B}|production`;
+    const locker = createDatabase(testDatabaseUrl(), { max: 1 });
+    const writer = createDatabase(testDatabaseUrl(), { max: 1 });
+    let releaseLocker = false;
+    try {
+      const lockerTx = locker.transaction(async (tx) => {
+        await tx.execute(
+          sql`select id from "billing_catalog_releases" where id = ${predecessor} for update`,
+        );
+        while (!releaseLocker) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      });
+      await waitFor(
+        "locker holds the predecessor row",
+        async () =>
+          (
+            await queryRows<{ pid: number }>(
+              sql`select pid from pg_stat_activity where state = 'idle in transaction' and query ilike '%for update%' and pid <> pg_backend_pid()`,
+            )
+          ).length > 0,
+      );
+      const publishing = service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0 + 40n * 86_400_000_000_000n,
+        effectiveToUs: null,
+        basicQuotaVersionId: freshQuota,
+        items: [
+          {
+            productVersionId: pack,
+            priceVersionId: price,
+            quotaVersionId: null,
+          },
+        ],
+        createdAtUs: T0,
+      });
+      // The publish holds the scope advisory lock mid-transaction (its first
+      // statement took it) and then WAITS on the predecessor's row lock —
+      // both observed through pg_locks, never through statement text.
+      await waitFor(
+        "publish holds the scope advisory lock mid-transaction",
+        async () => (await advisoryLockCounts(slot)).held > 0,
+      );
+      await waitFor(
+        "publish waits on the predecessor handover row lock",
+        async () =>
+          (
+            await queryRows<{ locktype: string }>(
+              sql`select locktype from pg_locks where granted = false and pid <> pg_backend_pid()`,
+            )
+          ).length > 0,
+      );
+      // The racing guarded write: rewrite the basic quota the publish binds.
+      // .execute() dispatches the query NOW (a bare builder stays lazy and
+      // would never reach the database before expectDbReject awaits it).
+      const writerUpdate = writer
+        .update(billingQuotaVersions)
+        .set({
+          spec: {
+            quotas: [
+              { resource_key: "concurrent_runs", limit: "9", unit: "count" },
+              {
+                resource_key: "automatic_task_seats",
+                limit: "20",
+                unit: "count",
+              },
+            ],
+          },
+        })
+        .where(eq(billingQuotaVersions.id, freshQuota))
+        .execute();
+      // Detected through pg_locks (one holder = the publish, one waiter =
+      // the writer's freeze trigger), independent of statement text.
+      await waitFor(
+        "quota writer queued on the publish's scope advisory lock",
+        async () => {
+          const counts = await advisoryLockCounts(slot);
+          return counts.held > 0 && counts.waiting > 0;
+        },
+      );
+      // Release the row: the publish completes (digest over the UNREWRITTEN
+      // quota), and only then does the queued writer proceed — to rejection.
+      releaseLocker = true;
+      await lockerTx;
+      const published = await publishing;
+      expect(published.contentDigest).toBe(
+        await expectedReleaseDigest(published.id),
+      );
+      await expectDbReject(writerUpdate, /immutable|published/);
+    } finally {
+      releaseLocker = true;
+      await locker.$client.end({ timeout: 5 });
+      await writer.$client.end({ timeout: 5 });
+    }
+  }, 60_000);
+
+  test("a release's BASIC quota is publish-referenced content: the database refuses to rewrite it and history keeps the original", async () => {
+    const before = await service.getCatalogVersion({
+      organizationId: ORG,
+      billingAccountIds: null,
+      environment: "production",
+      releaseId: release1.id,
+    });
+    expect(before.basicQuota?.quotas).toEqual([
+      { resource_key: "concurrent_runs", limit: "5", unit: "count" },
+      { resource_key: "automatic_task_seats", limit: "20", unit: "count" },
+    ]);
+    // The database's own publish-reference predicate recognizes the release's
+    // basic-quota binding (migration 0096), not only release items.
+    const ref = await queryRows<{ published: boolean }>(
+      sql`select "billing_catalog_published_ref"('quota', ${basicQuotaProdId}) as published`,
+    );
+    expect(ref[0]?.published).toBe(true);
+    // A direct spec rewrite of the published basic quota is rejected by the
+    // database — the freeze trigger, not application code, is the guard.
+    await expectDbReject(
+      database
+        .update(billingQuotaVersions)
+        .set({
+          spec: {
+            quotas: [
+              { resource_key: "concurrent_runs", limit: "9", unit: "count" },
+              {
+                resource_key: "automatic_task_seats",
+                limit: "20",
+                unit: "count",
+              },
+            ],
+          },
+        })
+        .where(eq(billingQuotaVersions.id, basicQuotaProdId)),
+      /immutable|published/,
+    );
+    // History answers the SAME quota content and digest as before the
+    // attempted rewrite: version id and digest keep identifying one content.
+    const after = await service.getCatalogVersion({
+      organizationId: ORG,
+      billingAccountIds: null,
+      environment: "production",
+      releaseId: release1.id,
+    });
+    expect(after.contentDigest).toBe(before.contentDigest);
+    expect(after.basicQuota).toEqual(before.basicQuota);
   });
 });
 
@@ -3178,5 +3548,327 @@ describe("history snapshot completeness and error media type", () => {
     expect(res.headers.get("content-type")).toContain(
       "application/problem+json",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// History is environment-scoped like every other read (P2): a test release's
+// amounts are readable only through the test-authorized test environment.
+// ---------------------------------------------------------------------------
+describe("history answers under the same environment authorization as quotes", () => {
+  test("a test release reads back with environment=test under test authorization", async () => {
+    const [testRelease] = await database
+      .select({ id: billingCatalogReleases.id })
+      .from(billingCatalogReleases)
+      .where(
+        and(
+          eq(billingCatalogReleases.organizationId, ORG),
+          eq(billingCatalogReleases.environment, "test"),
+        ),
+      )
+      .limit(1);
+    const ok = await APP().request(
+      `/internal/v1/billing/catalog-versions/${testRelease.id}?environment=test`,
+      get(),
+    );
+    expect(ok.status).toBe(200);
+    const body = (await ok.json()) as { environment: string };
+    expect(body.environment).toBe("test");
+  });
+
+  test("a test release is invisible in the default (production) history read", async () => {
+    const [testRelease] = await database
+      .select({ id: billingCatalogReleases.id })
+      .from(billingCatalogReleases)
+      .where(
+        and(
+          eq(billingCatalogReleases.organizationId, ORG),
+          eq(billingCatalogReleases.environment, "test"),
+        ),
+      )
+      .limit(1);
+    const res = await APP().request(
+      `/internal/v1/billing/catalog-versions/${testRelease.id}`,
+      get(),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("a credential without test-catalog authorization is 403 for environment=test", async () => {
+    const [testRelease] = await database
+      .select({ id: billingCatalogReleases.id })
+      .from(billingCatalogReleases)
+      .where(
+        and(
+          eq(billingCatalogReleases.organizationId, ORG),
+          eq(billingCatalogReleases.environment, "test"),
+        ),
+      )
+      .limit(1);
+    const denied = await APP().request(
+      `/internal/v1/billing/catalog-versions/${testRelease.id}?environment=test`,
+      get(TESTLESS_TOKEN),
+    );
+    expect(denied.status).toBe(403);
+    // ...while the SAME credential still reads production history normally.
+    const prodReadable = await APP().request(
+      `/internal/v1/billing/catalog-versions/${release1.id}`,
+      get(TESTLESS_TOKEN),
+    );
+    expect(prodReadable.status).toBe(200);
+    expect(
+      ((await prodReadable.json()) as { environment: string }).environment,
+    ).toBe("production");
+  });
+
+  test("an invalid environment query value is 422", async () => {
+    const res = await APP().request(
+      `/internal/v1/billing/catalog-versions/${release1.id}?environment=staging`,
+      get(),
+    );
+    expect(res.status).toBe(422);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Step settlement: the priced version comes from the step's TRUSTED
+// reservation reference — request version fields can assert, never steer.
+// ---------------------------------------------------------------------------
+describe("step settlement pins the price through the trusted reservation reference", () => {
+  const reservations = new Map<
+    string,
+    {
+      priceVersionId: string;
+      billingAccountId: string | null;
+      environment: "production" | "test";
+    }
+  >();
+  let settlementService: BillingCatalogService;
+
+  const settlementApp = () =>
+    createBillingCatalogRoutes({
+      service: settlementService,
+      verifyCredential: verifyTrustedCredential,
+    });
+
+  beforeAll(() => {
+    settlementService = createBillingCatalogService({
+      database,
+      clock,
+      // #66 will replace this fixture with the real reservation persistence;
+      // the SERVICE contract under test is exactly what that ticket must keep.
+      trustedReservations: {
+        readStepReservation: async ({
+          organizationId,
+          environment,
+          stepReservationRef,
+        }) => {
+          const r = reservations.get(
+            `${organizationId}|${environment}|${stepReservationRef}`,
+          );
+          return r
+            ? {
+                priceVersionId: r.priceVersionId,
+                billingAccountId: r.billingAccountId,
+              }
+            : null;
+        },
+      },
+    });
+    // Reservation fixtures: a step priced at V1 BEFORE the repricing, and one
+    // bound to ACCOUNT_B for the authorization cases.
+    reservations.set(`${ORG}|production|step_v1_reserved`, {
+      priceVersionId: priceV1Id,
+      billingAccountId: null,
+      environment: "production",
+    });
+    reservations.set(`${ORG}|production|step_account_b`, {
+      priceVersionId: priceV1Id,
+      billingAccountId: ACCOUNT_B,
+      environment: "production",
+    });
+    reservations.set(`${ORG}|test|step_test_env`, {
+      priceVersionId: priceTestId,
+      billingAccountId: null,
+      environment: "test",
+    });
+  });
+
+  test("a V1 reservation settles at V1 even after V2 is the current release (cross-boundary replay)", async () => {
+    const quote = await settlementService.quoteStepSettlement({
+      organizationId: ORG,
+      billingAccountIds: null,
+      stepReservationRef: "step_v1_reserved",
+      resources: [{ resource: "model_input_tokens", quantity: "3" }],
+    });
+    expect(quote.priceVersionId).toBe(priceV1Id);
+    expect(quote.totalMicrocredits).toBe("300000"); // V1: 0.1/token, NOT V2's 600000
+    expect(quote.stepReservationRef).toBe("step_v1_reserved");
+    expect(quote.rounding).toBe("half_up");
+  });
+
+  test("asserting both request version fields as V2 cannot reprice a V1 reservation: 409", async () => {
+    expect.assertions(3);
+    try {
+      await settlementService.quoteStepSettlement({
+        organizationId: ORG,
+        billingAccountIds: null,
+        stepReservationRef: "step_v1_reserved",
+        priceVersionId: priceV2Id,
+        expectedPriceVersionId: priceV2Id,
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      });
+    } catch (e) {
+      const err = e as CatalogServiceError;
+      expect(err).toBeInstanceOf(CatalogServiceError);
+      expect(err.code).toBe("price_version_conflict");
+      expect(err.status).toBe(409);
+    }
+  });
+
+  test("over HTTP: asserting V2 is 409; asserting the pinned V1 settles at V1", async () => {
+    const steered = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json({
+        step_reservation_ref: "step_v1_reserved",
+        price_version_id: priceV2Id,
+        expected_price_version_id: priceV2Id,
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      }),
+    );
+    expect(steered.status).toBe(409);
+    const body = (await steered.json()) as { code: string };
+    expect(body.code).toBe("price_version_conflict");
+
+    const confirmed = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json({
+        step_reservation_ref: "step_v1_reserved",
+        price_version_id: priceV1Id,
+        expected_price_version_id: priceV1Id,
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      }),
+    );
+    expect(confirmed.status).toBe(200);
+    const quote = (await confirmed.json()) as {
+      price_version_id: string;
+      total_microcredits: string;
+      step_reservation_ref: string;
+    };
+    expect(quote.price_version_id).toBe(priceV1Id);
+    expect(quote.total_microcredits).toBe("300000");
+    expect(quote.step_reservation_ref).toBe("step_v1_reserved");
+  });
+
+  test("a settlement with NO version fields at all settles at the trusted pinned version", async () => {
+    const quote = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json({
+        step_reservation_ref: "step_v1_reserved",
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      }),
+    );
+    expect(quote.status).toBe(200);
+    expect(
+      ((await quote.json()) as { price_version_id: string }).price_version_id,
+    ).toBe(priceV1Id);
+  });
+
+  test("an unknown reservation reference is 404, indistinguishable from a missing row", async () => {
+    const res = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json({
+        step_reservation_ref: "step_never_reserved",
+        resources: [{ resource: "model_input_tokens", quantity: "1" }],
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { code: string }).code).toBe(
+      "resource_not_found",
+    );
+  });
+
+  test("a reservation bound to an account outside the credential authorization is 403", async () => {
+    const res = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json(
+        {
+          step_reservation_ref: "step_account_b",
+          resources: [{ resource: "model_input_tokens", quantity: "1" }],
+        },
+        ACCOUNT_A_TOKEN,
+      ),
+    );
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code: string }).code).toBe("forbidden");
+  });
+
+  test("settlement without a configured trusted reservation reader fails closed with 503", async () => {
+    expect.assertions(2);
+    try {
+      await service.quoteStepSettlement({
+        organizationId: ORG,
+        billingAccountIds: null,
+        stepReservationRef: "step_v1_reserved",
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      });
+    } catch (e) {
+      const err = e as CatalogServiceError;
+      expect(err.code).toBe("ledger_unavailable");
+      expect(err.status).toBe(503);
+    }
+  });
+
+  test("a test-environment reservation is invisible to a production settlement (404)", async () => {
+    reservations.set(`${ORG}|test|step_test_env`, {
+      priceVersionId: priceTestId,
+      billingAccountId: null,
+      environment: "test",
+    });
+    const res = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json({
+        step_reservation_ref: "step_test_env",
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      }),
+    );
+    expect(res.status).toBe(404);
+    // ...and readable only as an explicit test-environment settlement, priced
+    // on the TEST catalog's basis (never the production version).
+    const testEnv = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json(
+        {
+          step_reservation_ref: "step_test_env",
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        PROD_TOKEN,
+      ),
+    );
+    expect(testEnv.status).toBe(200);
+    const testQuote = (await testEnv.json()) as {
+      price_version_id: string;
+      total_microcredits: string;
+    };
+    expect(testQuote.price_version_id).toBe(priceTestId);
+    // TEST price basis: 100/1000000 credits per 1000 tokens -> 3 tokens cost
+    // 0.0000003 microcredits -> one HALF_UP rounding at the step -> 0.
+    expect(testQuote.total_microcredits).toBe("0");
+  });
+
+  test("requesting the test environment without test-catalog authorization is 403 on settlement too", async () => {
+    const res = await settlementApp().request(
+      "/internal/v1/billing/step-settlement-quotes",
+      json(
+        {
+          step_reservation_ref: "step_test_env",
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        TESTLESS_TOKEN,
+      ),
+    );
+    expect(res.status).toBe(403);
   });
 });

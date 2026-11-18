@@ -67,6 +67,33 @@ export interface TrustedStateReader {
   ): Promise<TrustedSubscriptionSnapshot>;
 }
 
+/**
+ * The trusted reader for step reservations (#65 rework). Settlement resolves
+ * a step's pinned price version from THIS trusted side — persisted by #66 —
+ * never from the settlement request body: the request can only ASSERT the
+ * pinned version, and a divergence is 409 price_version_conflict. Until #66
+ * lands, a deployment without this reader answers settlement queries 503
+ * ledger_unavailable (fail closed), never by trusting the caller.
+ */
+export interface TrustedStepReservationReader {
+  /**
+   * The pinned fixed reference of one step reservation, or null when no
+   * reservation with that reference exists (and, per the reference grammar,
+   * for any reservation outside the given organization/environment — the
+   * service answers 404 without an existence leak).
+   */
+  readStepReservation(input: {
+    organizationId: string;
+    environment: ScopeKey["environment"];
+    stepReservationRef: string;
+  }): Promise<{
+    /** The price version recorded on the reservation at pricing time. */
+    priceVersionId: string;
+    /** The reservation's billing account (null = organization-global). */
+    billingAccountId: string | null;
+  } | null>;
+}
+
 export interface BillingCatalogService {
   publishRelease(
     input: PublishReleaseInput,
@@ -77,11 +104,26 @@ export interface BillingCatalogService {
     input: ResolveCurrentPriceInput,
   ): Promise<CurrentPriceResolution>;
   quoteStep(input: QuoteStepInput): Promise<StepQuote>;
+  /**
+   * SETTLEMENT of one reserved step: the priced version is resolved from the
+   * step's trusted reservation (never from the request), so a settlement can
+   * never be repriced by sending another version id.
+   */
+  quoteStepSettlement(
+    input: QuoteStepSettlementInput,
+  ): Promise<StepSettlementQuote>;
   queryPeriod(input: QueryPeriodInput): Promise<PeriodAnswer>;
   getCatalogVersion(input: {
     organizationId: string;
     /** Trusted account authorization (null = unrestricted in the organization). */
     billingAccountIds: string[] | null;
+    /**
+     * The caller's trusted deployment environment: a test release is
+     * historical-readable ONLY with environment "test" under the same
+     * test-catalog authorization the quote path requires — the history path
+     * is never a side door to test amounts or unit prices.
+     */
+    environment: ScopeKey["environment"];
     releaseId: string;
   }): Promise<CatalogVersionSnapshot>;
 }
@@ -207,6 +249,39 @@ export interface StepQuoteLine {
 }
 
 export interface StepQuote {
+  priceVersionId: string;
+  rounding: "half_up";
+  lines: StepQuoteLine[];
+  totalMicrocredits: string;
+  totalDisplay: string;
+}
+
+export interface QuoteStepSettlementInput {
+  organizationId: string;
+  /**
+   * Trusted billing-account authorization carried from the credential context
+   * (null = unrestricted within the organization). A reservation bound to an
+   * account outside it is forbidden — 403, never the reservation's numbers.
+   */
+  billingAccountIds: string[] | null;
+  /** The caller's trusted deployment environment; foreign-environment reservations are invisible. */
+  environment?: "production" | "test";
+  /** The trusted reservation/step identity recorded when the step was priced. */
+  stepReservationRef: string;
+  /**
+   * Optional client ASSERTION of the priced version. Never authoritative: a
+   * value different from the reservation's trusted pinned version is 409
+   * price_version_conflict; asserting the pinned value is allowed but never
+   * required.
+   */
+  priceVersionId?: string;
+  expectedPriceVersionId?: string;
+  /** Final merged resource vector for one step: resource -> quantity string. */
+  resources: { resource: string; quantity: string }[];
+}
+
+export interface StepSettlementQuote {
+  stepReservationRef: string;
   priceVersionId: string;
   rounding: "half_up";
   lines: StepQuoteLine[];
@@ -340,8 +415,115 @@ export function createBillingCatalogService(deps: {
   database: Database;
   clock: TrustedClock;
   trustedState?: TrustedStateReader;
+  /**
+   * The trusted step-reservation persistence (#66 wires the real one). Absent,
+   * settlement queries answer 503 ledger_unavailable — a settlement is never
+   * priced from caller-supplied version fields as a fallback.
+   */
+  trustedReservations?: TrustedStepReservationReader;
 }): BillingCatalogService {
   const { database, clock } = deps;
+
+  /**
+   * The exact pricing core shared by the estimate/replay path (quoteStep) and
+   * the settlement path (quoteStepSettlement): resolve one PUBLISHED price
+   * version within the caller's trusted scope, price the merged vector with a
+   * single HALF_UP rounding, and echo the full pricing basis.
+   */
+  async function priceAtVersion(args: {
+    organizationId: string;
+    billingAccountIds: string[] | null;
+    environment: ScopeKey["environment"];
+    priceVersionId: string;
+    resources: { resource: string; quantity: string }[];
+  }): Promise<{
+    priceVersionId: string;
+    lines: StepQuoteLine[];
+    totalMicrocredits: string;
+    totalDisplay: string;
+  }> {
+    let replay: Awaited<ReturnType<typeof loadPriceVersionForReplay>>;
+    try {
+      replay = await loadPriceVersionForReplay(
+        database,
+        args.organizationId,
+        args.priceVersionId,
+        args.billingAccountIds,
+        args.environment,
+      );
+    } catch (e) {
+      throw mapStorageError(e);
+    }
+    if (!replay) {
+      throw new CatalogServiceError(
+        "resource_not_found",
+        `no published price version ${args.priceVersionId} is quotable in this organization and environment`,
+      );
+    }
+    const priced = new Map(
+      replay.resources.map((r) => [r.resource as string, r]),
+    );
+    const lines = args.resources.map((line) => {
+      if (!(PRICED_RESOURCES as readonly string[]).includes(line.resource)) {
+        throw new CatalogServiceError(
+          "out_of_range",
+          `resource ${line.resource} is not a priced resource (quantity zero does not excuse an unknown resource)`,
+          "resources.resource",
+        );
+      }
+      const row = priced.get(line.resource);
+      if (!row) {
+        throw new CatalogServiceError(
+          "out_of_range",
+          `resource ${line.resource} has no price in version ${args.priceVersionId}`,
+          "resources.resource",
+        );
+      }
+      validatePriceEntry({
+        numerator: row.numerator,
+        denominator: row.denominator,
+        unitSize: row.unitSize,
+        measurementUnit: row.measurementUnit as MeasurementUnit,
+      });
+      return {
+        resource: line.resource as PricedResource,
+        quantity: line.quantity,
+        price: {
+          numerator: row.numerator,
+          denominator: row.denominator,
+          unitSize: row.unitSize,
+        },
+      };
+    });
+    let total: bigint;
+    try {
+      total = stepCostMicrocreditsExact(
+        lines.map((l) => ({
+          resource: l.resource,
+          quantity: l.quantity,
+          price: l.price,
+        })),
+      );
+    } catch (e) {
+      if (e instanceof BillingValueError) {
+        throw new CatalogServiceError(e.code, e.message, "resources");
+      }
+      throw e;
+    }
+    return {
+      priceVersionId: replay.priceVersion.id,
+      lines: lines.map((l) => ({
+        resource: l.resource,
+        quantity: l.quantity.toString(),
+        measurementUnit: priced.get(l.resource)?.measurementUnit ?? "",
+        unitSize: (priced.get(l.resource)?.unitSize ?? 0n).toString(),
+        numerator: (priced.get(l.resource)?.numerator ?? 0n).toString(),
+        denominator: (priced.get(l.resource)?.denominator ?? 0n).toString(),
+      })),
+      totalMicrocredits: total.toString(),
+      totalDisplay: formatMicrocreditsDisplay(total),
+    };
+  }
 
   return {
     async publishRelease(input) {
@@ -595,88 +777,93 @@ export function createBillingCatalogService(deps: {
           `step is pinned to reserved price version ${input.expectedPriceVersionId}; quoting ${input.priceVersionId} would reprice it`,
         );
       }
-      let replay: Awaited<ReturnType<typeof loadPriceVersionForReplay>>;
-      try {
-        replay = await loadPriceVersionForReplay(
-          database,
-          input.organizationId,
-          input.priceVersionId,
-          input.billingAccountIds,
-          input.environment ?? "production",
+      const priced = await priceAtVersion({
+        organizationId: input.organizationId,
+        billingAccountIds: input.billingAccountIds,
+        environment: input.environment ?? "production",
+        priceVersionId: input.priceVersionId,
+        resources: input.resources,
+      });
+      return { ...priced, rounding: "half_up" as const };
+    },
+
+    async quoteStepSettlement(input) {
+      if (input.resources.length === 0) {
+        throw new CatalogServiceError(
+          "out_of_range",
+          "a step settlement requires at least one resource line",
+          "resources",
         );
+      }
+      if (!deps.trustedReservations) {
+        // Fail closed: without the trusted reservation persistence (#66) a
+        // settlement has NO trustworthy pinned version to price against. It
+        // is never priced from the caller's fields as a fallback.
+        throw new CatalogServiceError(
+          "ledger_unavailable",
+          "no trusted step-reservation reader is configured; settlements cannot be priced",
+        );
+      }
+      const environment = input.environment ?? "production";
+      let reservation: Awaited<
+        ReturnType<TrustedStepReservationReader["readStepReservation"]>
+      >;
+      try {
+        reservation = await deps.trustedReservations.readStepReservation({
+          organizationId: input.organizationId,
+          environment,
+          stepReservationRef: input.stepReservationRef,
+        });
       } catch (e) {
         throw mapStorageError(e);
       }
-      if (!replay) {
+      if (!reservation) {
+        // Unknown reference (or a reference of another environment):
+        // 404, indistinguishable from a missing row — no existence leak.
         throw new CatalogServiceError(
           "resource_not_found",
-          `no published price version ${input.priceVersionId} is quotable in this organization and environment`,
+          `no step reservation ${input.stepReservationRef} exists in this organization and environment`,
         );
       }
-      const priced = new Map(
-        replay.resources.map((r) => [r.resource as string, r]),
-      );
-      const lines = input.resources.map((line) => {
-        if (!(PRICED_RESOURCES as readonly string[]).includes(line.resource)) {
+      // Account authorization: a reservation bound to a billing account the
+      // credential does not act for is forbidden, exactly like quoting that
+      // account's catalog content directly.
+      if (
+        reservation.billingAccountId !== null &&
+        input.billingAccountIds !== null &&
+        !input.billingAccountIds.includes(reservation.billingAccountId)
+      ) {
+        throw new CatalogServiceError(
+          "forbidden",
+          "This credential is not authorized to act for the billing account of this reservation.",
+        );
+      }
+      // Client-asserted versions are NEVER authoritative: the reservation's
+      // pinned reference decides, and a divergent assertion (including "both
+      // fields filled with the successor version after a repricing") is 409 —
+      // a settlement cannot be steered onto another configuration.
+      for (const asserted of [
+        input.priceVersionId,
+        input.expectedPriceVersionId,
+      ]) {
+        if (asserted !== undefined && asserted !== reservation.priceVersionId) {
           throw new CatalogServiceError(
-            "out_of_range",
-            `resource ${line.resource} is not a priced resource (quantity zero does not excuse an unknown resource)`,
-            "resources.resource",
+            "price_version_conflict",
+            `reservation ${input.stepReservationRef} is pinned to trusted price version ${reservation.priceVersionId}; asserting ${asserted} would reprice the step`,
           );
         }
-        const row = priced.get(line.resource);
-        if (!row) {
-          throw new CatalogServiceError(
-            "out_of_range",
-            `resource ${line.resource} has no price in version ${input.priceVersionId}`,
-            "resources.resource",
-          );
-        }
-        validatePriceEntry({
-          numerator: row.numerator,
-          denominator: row.denominator,
-          unitSize: row.unitSize,
-          measurementUnit: row.measurementUnit as MeasurementUnit,
-        });
-        return {
-          resource: line.resource as PricedResource,
-          quantity: line.quantity,
-          price: {
-            numerator: row.numerator,
-            denominator: row.denominator,
-            unitSize: row.unitSize,
-          },
-        };
+      }
+      const priced = await priceAtVersion({
+        organizationId: input.organizationId,
+        billingAccountIds: input.billingAccountIds,
+        environment,
+        priceVersionId: reservation.priceVersionId,
+        resources: input.resources,
       });
-      let total: bigint;
-      try {
-        total = stepCostMicrocreditsExact(
-          lines.map((l) => ({
-            resource: l.resource,
-            quantity: l.quantity,
-            price: l.price,
-          })),
-        );
-      } catch (e) {
-        if (e instanceof BillingValueError) {
-          throw new CatalogServiceError(e.code, e.message, "resources");
-        }
-        throw e;
-      }
-      const display = formatMicrocreditsDisplay(total);
       return {
-        priceVersionId: replay.priceVersion.id,
-        rounding: "half_up",
-        lines: lines.map((l) => ({
-          resource: l.resource,
-          quantity: l.quantity.toString(),
-          measurementUnit: priced.get(l.resource)?.measurementUnit ?? "",
-          unitSize: (priced.get(l.resource)?.unitSize ?? 0n).toString(),
-          numerator: (priced.get(l.resource)?.numerator ?? 0n).toString(),
-          denominator: (priced.get(l.resource)?.denominator ?? 0n).toString(),
-        })),
-        totalMicrocredits: total.toString(),
-        totalDisplay: display,
+        stepReservationRef: input.stepReservationRef,
+        ...priced,
+        rounding: "half_up" as const,
       };
     },
 
@@ -730,6 +917,7 @@ export function createBillingCatalogService(deps: {
           input.organizationId,
           input.releaseId,
           input.billingAccountIds,
+          input.environment,
         );
       } catch (e) {
         throw mapStorageError(e);
@@ -737,7 +925,7 @@ export function createBillingCatalogService(deps: {
       if (!snapshot) {
         throw new CatalogServiceError(
           "resource_not_found",
-          `catalog release ${input.releaseId} does not exist in this organization`,
+          `catalog release ${input.releaseId} does not exist in this organization and environment`,
         );
       }
       return {

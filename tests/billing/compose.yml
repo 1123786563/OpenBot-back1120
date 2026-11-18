@@ -126,8 +126,12 @@ services:
       lago-migrate: { condition: service_completed_successfully }
     healthcheck:
       # v1.57.0 serves /health (the old /healthz answers 404) and ships curl
-      # (no wget in this image).
+      # (no wget in this image). start_period gives the Rails boot (bundle
+      # install checks, DB pool warmup) a no-penalty window: probes that fail
+      # during it do not consume retries, so a slow first boot on a loaded
+      # host no longer fails `compose up --wait` while the API is coming up.
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
+      start_period: 240s
       interval: 10s
       timeout: 5s
       retries: 30

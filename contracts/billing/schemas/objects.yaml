@@ -2272,6 +2272,80 @@ components:
           total_microcredits: "9007199254740993"
           total_display: "9007199254740993.000000"
 
+    StepSettlementQuote:
+      type: object
+      description: >-
+        Read-only exact settlement cost of one RESERVED step, priced against
+        the version the step's TRUSTED reservation pins — resolved
+        server-side from the reservation reader, never from a request field.
+        Arithmetic and rounding are identical to StepQuote: one exact rational
+        summed over the merged resource vector, ONE HALF_UP rounding to whole
+        microcredits, with the full pricing basis echoed for offline
+        recomputation. price_version_id is therefore the TRUSTED pinned
+        version the settlement actually used; a settlement can never silently
+        run under another configuration.
+      required: [step_reservation_ref, price_version_id, rounding, lines, total_microcredits, total_display]
+      additionalProperties: false
+      properties:
+        step_reservation_ref:
+          type: string
+          description: Echo of the settled step's trusted reservation reference.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        price_version_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: The reservation's pinned version the cost was computed from (trusted, not caller-nominated).
+        rounding:
+          type: string
+          const: half_up
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [resource, quantity, measurement_unit, unit_size, numerator, denominator]
+            additionalProperties: false
+            properties:
+              resource:
+                $ref: "#/components/schemas/ResourceKind"
+              quantity:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              measurement_unit:
+                $ref: "#/components/schemas/MeasurementUnit"
+              unit_size:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              numerator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              denominator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+        total_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Microcredits"
+        total_display:
+          type: string
+          description: The total rendered with the contract's exact six-decimal credit display.
+          minLength: 8
+          maxLength: 64
+          pattern: "^[0-9]+\\.[0-9]{6}$"
+      examples:
+        - step_reservation_ref: "step_01hf3k8m2q.reservation"
+          price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+          rounding: half_up
+          lines:
+            - resource: model_input_tokens
+              quantity: "9007199254740993"
+              measurement_unit: token
+              unit_size: "1"
+              numerator: "1"
+              denominator: "1000000"
+          total_microcredits: "9007199254740993"
+          total_display: "9007199254740993.000000"
+
     PeriodAnswer:
       type: object
       description: >-

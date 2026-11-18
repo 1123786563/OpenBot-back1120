@@ -978,15 +978,20 @@ export async function loadPriceVersionForReplay(
 
 /**
  * Full immutable version bundle by release id, for the history endpoint.
- * Account-scoped like replay: a release bound to another billing account is
- * invisible (404 at the service boundary, never an existence leak);
- * organization-global releases stay readable.
+ * Environment-scoped like every other read: a release of another deployment
+ * environment is invisible (a production settlement can never read a test
+ * release's amounts, and vice versa — the test catalog stays behind the same
+ * test-catalog authorization as the quote path). Account-scoped like replay:
+ * a release bound to another billing account is invisible (404 at the service
+ * boundary, never an existence leak); organization-global releases stay
+ * readable.
  */
 export async function loadReleaseSnapshot(
   db: DatabaseLike,
   organizationId: string,
   releaseId: string,
   allowedBillingAccountIds: string[] | null,
+  environment: ScopeKey["environment"],
 ) {
   const accountFilter =
     allowedBillingAccountIds === null
@@ -1005,6 +1010,7 @@ export async function loadReleaseSnapshot(
       and(
         eq(billingCatalogReleases.id, releaseId),
         eq(billingCatalogReleases.organizationId, organizationId),
+        eq(billingCatalogReleases.environment, environment),
         ...(accountFilter ? [accountFilter] : []),
       ),
     );

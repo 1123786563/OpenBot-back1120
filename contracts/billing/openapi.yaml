@@ -919,7 +919,11 @@ paths:
         version from resolveCurrentBillingPrice and record it as the reserved
         fixed reference; replay/settlement must pass that reference as
         expected_price_version_id — a divergence is 409
-        price_version_conflict, never a silent reprice. Quantities travel as
+        price_version_conflict, never a silent reprice. This operation is the
+        ESTIMATE/REPLAY path (any published version by id, caller-nominated);
+        SETTLEMENT of a reserved step must use quoteBillingStepSettlement,
+        which resolves the pinned version from the step's trusted reservation
+        instead of trusting request fields. Quantities travel as
         contract decimal strings; a quantity outside the closed lexeme/range
         or a resource with no price in the version is rejected. Historical
         replay may use this operation; purchasing against a retired version is
@@ -942,6 +946,62 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/objects.yaml#/components/schemas/StepQuote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, price_version_conflict, invalid_integer, out_of_range, ledger_unavailable]
+
+  /internal/v1/billing/step-settlement-quotes:
+    post:
+      operationId: quoteBillingStepSettlement
+      tags: [internal-billing]
+      summary: Settle one reserved step against the version its TRUSTED reservation pins
+      description: >-
+        The settlement path: the priced version is resolved from the step's
+        reservation through the server's TRUSTED reservation reader — never
+        from a caller-supplied version id, and never from the currently-active
+        release. step_reservation_ref identifies the reservation/step record
+        that resolveCurrentBillingPrice created at pricing time; the reader
+        resolves its pinned fixed reference server-side, so a settlement can
+        never be repriced by sending another version id. Any client-asserted
+        price_version_id or expected_price_version_id that diverges from the
+        trusted pinned version is 409 price_version_conflict (asserting the
+        pinned value is allowed but never required — the trusted reference
+        alone decides). The same exact arithmetic as quoteBillingStep applies:
+        one exact rational summed over the merged resource vector, ONE
+        HALF_UP rounding to whole microcredits. An unknown reservation answers
+        404 like a missing row; a reservation whose account is outside the
+        credential's trusted authorization is 403 forbidden. x-readonly: no
+        write side effects.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      x-readonly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteBillingStepSettlementRequest"
+      responses:
+        "200":
+          description: The exact settlement cost of the reserved step and its trusted pricing basis.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/StepSettlementQuote"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1061,7 +1121,12 @@ paths:
       description: >-
         Returns the complete referenced version bundle of one release, scoped
         to the caller's organization (cross-organization ids answer 404
-        without revealing existence). Historical reads answer retired
+        without revealing existence) and to the caller's trusted deployment
+        environment: a test-environment release is readable only with the
+        environment=test request of an explicitly test-authorized credential —
+        the same authorization quoteBillingProduct requires — so a caller
+        without that trusted mark can never read test amounts, credits or
+        unit prices out of the history path. Historical reads answer retired
         releases — history never disappears — but a historical read can never
         be used to purchase against a retired price; new sales always select
         through quoteBillingProduct.
@@ -1071,6 +1136,16 @@ paths:
       x-required-capability: billing:quote
       parameters:
         - $ref: "#/components/parameters/CatalogVersionId"
+        - name: environment
+          in: query
+          required: false
+          schema:
+            $ref: "./schemas/objects.yaml#/components/schemas/BillingEnvironment"
+          description: >-
+            The deployment environment whose release is read; production by
+            default. Requesting the test environment requires the credential's
+            trusted test-catalog authorization (403 forbidden without it), and
+            a release of the other environment answers 404 like a missing row.
       responses:
         "200":
           description: The immutable release snapshot.
@@ -1822,6 +1897,63 @@ components:
       examples:
         - billing_account_id: "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
           product_id: "pack_1m_credits"
+
+    QuoteBillingStepSettlementRequest:
+      type: object
+      description: >-
+        Settle one RESERVED step. The priced version comes from the trusted
+        reservation reader keyed by step_reservation_ref; the request carries
+        NO authoritative version. The optional assertion fields may confirm
+        the pinned version, but a divergence from the trusted reference is
+        409 price_version_conflict and can never redirect the settlement to
+        another configuration. The resource vector is the step's FINAL merged
+        vector under the same merge semantics as QuoteBillingStepRequest.
+      required: [step_reservation_ref, resources]
+      additionalProperties: false
+      properties:
+        step_reservation_ref:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          description: >-
+            The trusted reservation/step identity recorded when the step was
+            priced (resolveCurrentBillingPrice's pinned version was saved on
+            it). Resolved server-side; an unknown reference answers 404.
+        price_version_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: >-
+            Optional client assertion. When present it must equal the
+            reservation's trusted pinned version; any other value is 409
+            price_version_conflict — a caller can never steer the settlement.
+        expected_price_version_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: >-
+            Optional client assertion (the reference the caller recorded).
+            Must equal the trusted pinned version when present; a divergence
+            is 409 price_version_conflict.
+        environment:
+          $ref: "./schemas/objects.yaml#/components/schemas/BillingEnvironment"
+          description: The caller's trusted deployment environment; production by default. Reservations of the other environment are invisible (404).
+        resources:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            required: [resource, quantity]
+            additionalProperties: false
+            properties:
+              resource:
+                $ref: "./schemas/objects.yaml#/components/schemas/ResourceKind"
+              quantity:
+                type: string
+                $ref: "./schemas/scalars.yaml#/components/schemas/UnsignedInt64"
+      examples:
+        - step_reservation_ref: "step_01hf3k8m2q.reservation"
+          resources:
+            - resource: model_input_tokens
+              quantity: "9007199254740993"
 
     QueryBillingPeriodRequest:
       type: object

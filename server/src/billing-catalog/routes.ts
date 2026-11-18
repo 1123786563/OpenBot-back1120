@@ -459,6 +459,92 @@ export function createBillingCatalogRoutes(deps: {
     }
   });
 
+  // -------------------------------------------------- step settlement quote
+  routes.post("/internal/v1/billing/step-settlement-quotes", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const ref = body.step_reservation_ref;
+    if (typeof ref !== "string" || !/^[\w.:-]{1,128}$/.test(ref)) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "step_reservation_ref must match ^[A-Za-z0-9._:-]{1,128}$",
+        [{ field: "step_reservation_ref", issue: "invalid_reservation_ref" }],
+      );
+    }
+    const resources = body.resources;
+    const linesOk =
+      Array.isArray(resources) &&
+      resources.length > 0 &&
+      (resources as unknown[]).every(
+        (r) =>
+          r !== null &&
+          typeof r === "object" &&
+          typeof (r as Record<string, unknown>).resource === "string" &&
+          typeof (r as Record<string, unknown>).quantity === "string" &&
+          DECIMAL_RE.test((r as Record<string, unknown>).quantity as string),
+      );
+    if (!linesOk) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "resources must be [{resource, quantity}] with contract decimal-string quantities",
+        [{ field: "resources", issue: "invalid_resource_vector" }],
+      );
+    }
+    // Optional client assertions: never authoritative, validated for shape and
+    // (in the service) for divergence from the reservation's pinned version.
+    for (const field of ["price_version_id", "expected_price_version_id"]) {
+      const v = body[field];
+      if (v !== undefined && v !== null) {
+        if (typeof v !== "string" || !UUID_RE.test(v)) {
+          return problem(c, 422, "invalid_integer", `${field} must be a UUID`, [
+            { field, issue: "not_a_uuid" },
+          ]);
+        }
+      }
+    }
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const quote = await deps.service.quoteStepSettlement({
+        organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
+        stepReservationRef: ref,
+        priceVersionId: body.price_version_id as string | undefined,
+        expectedPriceVersionId:
+          typeof body.expected_price_version_id === "string"
+            ? body.expected_price_version_id
+            : undefined,
+        resources: (resources as Record<string, string>[]).map((r) => ({
+          resource: r.resource,
+          quantity: r.quantity,
+        })),
+      });
+      return c.json({
+        step_reservation_ref: quote.stepReservationRef,
+        price_version_id: quote.priceVersionId,
+        rounding: quote.rounding,
+        lines: quote.lines.map((l) => ({
+          resource: l.resource,
+          quantity: l.quantity,
+          measurement_unit: l.measurementUnit,
+          unit_size: l.unitSize,
+          numerator: l.numerator,
+          denominator: l.denominator,
+        })),
+        total_microcredits: quote.totalMicrocredits,
+        total_display: quote.totalDisplay,
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
   // ------------------------------------------------------------ period query
   routes.post("/internal/v1/billing/period-queries", async (c) => {
     const body = await readJson(c);
@@ -535,11 +621,23 @@ export function createBillingCatalogRoutes(deps: {
         { field: "release_id", issue: "not_a_uuid" },
       ]);
     }
+    // The history path answers under the SAME environment authorization as
+    // the quote path: a test-environment release is readable only with
+    // environment=test under a test-authorized credential — history is never
+    // a side door to test amounts, credits or unit prices.
+    const rawEnvironment = c.req.query("environment");
+    let environment: "production" | "test" = "production";
+    if (rawEnvironment !== undefined) {
+      const parsed = parseEnvironment(c, rawEnvironment);
+      if (parsed instanceof Response) return parsed;
+      environment = parsed;
+    }
     const organizationId = c.get("trustedOrganizationId");
     try {
       const snapshot = await deps.service.getCatalogVersion({
         organizationId,
         billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
         releaseId,
       });
       return c.json({

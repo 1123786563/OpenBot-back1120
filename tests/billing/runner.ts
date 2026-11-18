@@ -379,12 +379,30 @@ async function catalogPhase(runId: string): Promise<number> {
     );
     const tail = test.out.trim().split("\n").slice(-6).join("\n");
     console.log(tail);
+    const passed = test.code === 0 && / 0 fail/.test(test.out);
+    if (!passed) {
+      // The tail only ever shows the summary. On failure, preserve the FIRST
+      // failure and its assertion context, so a red run is diagnosable from
+      // the runner log alone (this gap once hid a concurrency regression's
+      // actual assertion behind a bare test name).
+      const lines = test.out.split("\n");
+      const firstFail = lines.findIndex((l) => /\(fail\)/.test(l));
+      console.error("  ---- first failure context (runner) ----");
+      if (firstFail === -1) {
+        console.error(test.out.split("\n").slice(-60).join("\n"));
+      } else {
+        const start = Math.max(0, firstFail - 1);
+        const end = Math.min(lines.length, firstFail + 40);
+        console.error(lines.slice(start, end).join("\n"));
+      }
+      console.error("  ---- end failure context ----");
+    }
     ok(
       test.code === 0 && /0 fail/.test(test.out),
       "business-level catalog suite passes on real PostgreSQL (A1-A14)",
       `exit=${test.code}`,
     );
-    exit = test.code === 0 && / 0 fail/.test(test.out) ? 0 : 1;
+    exit = passed ? 0 : 1;
   } catch (e) {
     console.error(
       `  FAIL catalog phase: ${e instanceof Error ? e.message : String(e)}`,
@@ -436,10 +454,22 @@ async function lagoPhase(
   writeFileSync(envPath, content, { mode: 0o600 });
   let exit = 0;
   try {
-    const up = sh(
-      `docker-compose -f tests/billing/compose.yml --env-file ${envPath} -p ${project} up -d --wait`,
-      900_000,
-    );
+    // `up --wait` can fail when one service's health probe exhausts its
+    // retries while the machine is still busy pulling/booting the stack even
+    // though the service is on its way up. Re-probe the SAME stack before
+    // declaring it unhealthy: the second --wait only waits for health, it
+    // never recreates or redeploys anything.
+    let up = { code: 1, out: "" };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      up = sh(
+        `docker-compose -f tests/billing/compose.yml --env-file ${envPath} -p ${project} up -d --wait`,
+        900_000,
+      );
+      if (up.code === 0) break;
+      console.error(
+        `  compose up --wait attempt ${attempt} failed; re-probing stack health: ${up.out.slice(-200)}`,
+      );
+    }
     steps.push({
       step: "compose up --wait",
       ok: up.code === 0,
@@ -707,35 +737,52 @@ async function lagoPhase(
       detail: eventSetDetail,
     });
 
-    // Zero receivable over NONZERO usage: no invoices exist, the live period
-    // aggregates 2000 units, the currency is CNY and every amount is exactly
-    // 0 -- Lago aggregates without a second deduction (ADR 0003). Lago's
-    // aggregation is asynchronous: poll until the two events show up in the
-    // live window (bounded deadline, never a blind sleep-pass).
+    // Zero receivable over NONZERO usage: the invoice query AND the usage
+    // query must both answer HTTP 200 with the EXPECTED structure, the
+    // invoices array must be EXPLICITLY present and empty (a missing field or
+    // a JSON error object is never silently read as "no invoices"), every
+    // amount must be a present INTEGER zero (Number("") is 0 — stringified
+    // emptiness is not a zero receivable), the live period aggregates 2000
+    // units in CNY -- Lago aggregates without a second deduction (ADR 0003).
+    // Lago's aggregation is asynchronous: poll until the two events show up
+    // in the live window (bounded deadline, never a blind sleep-pass).
     let zeroReceivable = false;
     let receivableDetail = "";
+    let lastHttpStatus = 0;
+    const isIntegerZero = (v: unknown): boolean =>
+      typeof v === "number"
+        ? Number.isInteger(v) && v === 0
+        : typeof v === "string" && /^(0+)$/.test(v);
     for (let attempt = 0; attempt < 20 && !zeroReceivable; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+      const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
+      const usage = api(
+        `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
+      );
+      lastHttpStatus = inv.code === 200 ? usage.code : inv.code;
+      if (inv.code !== 200 || usage.code !== 200) {
+        receivableDetail = `http invoices=${inv.code} usage=${usage.code} (attempt ${attempt + 1})`;
+        continue;
+      }
       try {
-        const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
-        const usage = api(
-          `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
-        );
-        const invParsed = JSON.parse(inv.out) as { invoices?: unknown[] };
-        const u = (
-          JSON.parse(usage.out) as {
-            customer_usage?: {
-              currency?: string;
-              amount_cents?: number | string;
-              total_amount_cents?: number | string;
-              charges_usage?: {
-                units?: number | string;
-                billable_metric?: { code?: string };
-                charge?: { code?: string };
-              }[];
-            };
-          }
-        ).customer_usage;
+        const invParsed = JSON.parse(inv.out) as { invoices?: unknown };
+        const usageParsed = JSON.parse(usage.out) as {
+          customer_usage?: {
+            currency?: string;
+            amount_cents?: number | string;
+            total_amount_cents?: number | string;
+            charges_usage?: {
+              units?: number | string;
+              billable_metric?: { code?: string };
+              charge?: { code?: string };
+            }[];
+          };
+        };
+        // Explicit structure: invoices MUST be an array (a JSON error object
+        // has none, and would previously default to an empty array).
+        const invoicesOk =
+          Array.isArray(invParsed.invoices) && invParsed.invoices.length === 0;
+        const u = usageParsed.customer_usage;
         const charge = (u?.charges_usage ?? []).find(
           (c) =>
             c.billable_metric?.code === "model_input_tokens" ||
@@ -743,22 +790,23 @@ async function lagoPhase(
         );
         const units = charge ? Number(charge.units) : NaN;
         const amountsZero =
-          Number(u?.amount_cents ?? NaN) === 0 &&
-          Number(u?.total_amount_cents ?? NaN) === 0;
+          isIntegerZero(u?.amount_cents) &&
+          isIntegerZero(u?.total_amount_cents);
         zeroReceivable =
-          (invParsed.invoices ?? []).length === 0 &&
+          invoicesOk &&
           u?.currency === "CNY" &&
           amountsZero &&
+          Number.isFinite(units) &&
           units === 2000; // two nonzero events, aggregated WITHOUT deduction
-        receivableDetail = `units=${charge?.units} currency=${u?.currency} amount_cents=${u?.amount_cents} total=${u?.total_amount_cents} invoices=${(invParsed.invoices ?? []).length} (attempt ${attempt + 1})`;
+        receivableDetail = `units=${charge?.units} currency=${u?.currency} amount_cents=${JSON.stringify(u?.amount_cents)} total=${JSON.stringify(u?.total_amount_cents)} invoices=${Array.isArray(invParsed.invoices) ? invParsed.invoices.length : "MISSING"} (attempt ${attempt + 1})`;
       } catch (err) {
-        receivableDetail = `unparseable usage answer: ${err instanceof Error ? err.message : String(err)}`;
+        receivableDetail = `unparseable invoices/usage answer: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
     steps.push({
       step: "nonzero usage -> zero receivable (no second deduction)",
       ok: zeroReceivable,
-      detail: receivableDetail || `exit ${inv.code}`,
+      detail: receivableDetail || `last http status ${lastHttpStatus}`,
     });
 
     exit = steps.every((s) => s.ok) ? 0 : 2;

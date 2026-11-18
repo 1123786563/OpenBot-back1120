@@ -345,9 +345,29 @@ export interface paths {
         put?: never;
         /**
          * Quote the exact microcredit cost of one step against a pinned price version
-         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts any PUBLISHED version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement, while drafts and never-released configurations answer 404 like a missing row. New steps take their version from resolveCurrentBillingPrice and record it as the reserved fixed reference; replay/settlement must pass that reference as expected_price_version_id — a divergence is 409 price_version_conflict, never a silent reprice. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
+         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts any PUBLISHED version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement, while drafts and never-released configurations answer 404 like a missing row. New steps take their version from resolveCurrentBillingPrice and record it as the reserved fixed reference; replay/settlement must pass that reference as expected_price_version_id — a divergence is 409 price_version_conflict, never a silent reprice. This operation is the ESTIMATE/REPLAY path (any published version by id, caller-nominated); SETTLEMENT of a reserved step must use quoteBillingStepSettlement, which resolves the pinned version from the step's trusted reservation instead of trusting request fields. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
          */
         post: operations["quoteBillingStep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/step-settlement-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle one reserved step against the version its TRUSTED reservation pins
+         * @description The settlement path: the priced version is resolved from the step's reservation through the server's TRUSTED reservation reader — never from a caller-supplied version id, and never from the currently-active release. step_reservation_ref identifies the reservation/step record that resolveCurrentBillingPrice created at pricing time; the reader resolves its pinned fixed reference server-side, so a settlement can never be repriced by sending another version id. Any client-asserted price_version_id or expected_price_version_id that diverges from the trusted pinned version is 409 price_version_conflict (asserting the pinned value is allowed but never required — the trusted reference alone decides). The same exact arithmetic as quoteBillingStep applies: one exact rational summed over the merged resource vector, ONE HALF_UP rounding to whole microcredits. An unknown reservation answers 404 like a missing row; a reservation whose account is outside the credential's trusted authorization is 403 forbidden. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingStepSettlement"];
         delete?: never;
         options?: never;
         head?: never;
@@ -403,7 +423,7 @@ export interface paths {
         };
         /**
          * Full immutable catalog release snapshot for history replay
-         * @description Returns the complete referenced version bundle of one release, scoped to the caller's organization (cross-organization ids answer 404 without revealing existence). Historical reads answer retired releases — history never disappears — but a historical read can never be used to purchase against a retired price; new sales always select through quoteBillingProduct.
+         * @description Returns the complete referenced version bundle of one release, scoped to the caller's organization (cross-organization ids answer 404 without revealing existence) and to the caller's trusted deployment environment: a test-environment release is readable only with the environment=test request of an explicitly test-authorized credential — the same authorization quoteBillingProduct requires — so a caller without that trusted mark can never read test amounts, credits or unit prices out of the history path. Historical reads answer retired releases — history never disappears — but a historical read can never be used to purchase against a retired price; new sales always select through quoteBillingProduct.
          */
         get: operations["getBillingCatalogVersion"];
         put?: never;
@@ -639,6 +659,32 @@ export interface components {
             product_id?: string;
             /** @description The deployment environment to resolve; production by default, test only for test-authorized credentials. */
             environment?: components["schemas"]["BillingEnvironment"];
+        };
+        /**
+         * @description Settle one RESERVED step. The priced version comes from the trusted reservation reader keyed by step_reservation_ref; the request carries NO authoritative version. The optional assertion fields may confirm the pinned version, but a divergence from the trusted reference is 409 price_version_conflict and can never redirect the settlement to another configuration. The resource vector is the step's FINAL merged vector under the same merge semantics as QuoteBillingStepRequest.
+         * @example {
+         *       "step_reservation_ref": "step_01hf3k8m2q.reservation",
+         *       "resources": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993"
+         *         }
+         *       ]
+         *     }
+         */
+        QuoteBillingStepSettlementRequest: {
+            /** @description The trusted reservation/step identity recorded when the step was priced (resolveCurrentBillingPrice's pinned version was saved on it). Resolved server-side; an unknown reference answers 404. */
+            step_reservation_ref: string;
+            /** @description Optional client assertion. When present it must equal the reservation's trusted pinned version; any other value is 409 price_version_conflict — a caller can never steer the settlement. */
+            price_version_id?: components["schemas"]["Uuid"];
+            /** @description Optional client assertion (the reference the caller recorded). Must equal the trusted pinned version when present; a divergence is 409 price_version_conflict. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The caller's trusted deployment environment; production by default. Reservations of the other environment are invisible (404). */
+            environment?: components["schemas"]["BillingEnvironment"];
+            resources: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+            }[];
         };
         /**
          * @description Exactly one selector — an explicit period index or an occurrence time to locate.
@@ -1545,6 +1591,45 @@ export interface components {
          */
         StepQuote: {
             /** @description The version the cost was computed from; pinned at reservation, never the currently-active list. */
+            price_version_id: components["schemas"]["Uuid"];
+            /** @constant */
+            rounding: "half_up";
+            lines: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+            total_microcredits: components["schemas"]["Microcredits"];
+            /** @description The total rendered with the contract's exact six-decimal credit display. */
+            total_display: string;
+        };
+        /**
+         * @description Read-only exact settlement cost of one RESERVED step, priced against the version the step's TRUSTED reservation pins — resolved server-side from the reservation reader, never from a request field. Arithmetic and rounding are identical to StepQuote: one exact rational summed over the merged resource vector, ONE HALF_UP rounding to whole microcredits, with the full pricing basis echoed for offline recomputation. price_version_id is therefore the TRUSTED pinned version the settlement actually used; a settlement can never silently run under another configuration.
+         * @example {
+         *       "step_reservation_ref": "step_01hf3k8m2q.reservation",
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "rounding": "half_up",
+         *       "lines": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ],
+         *       "total_microcredits": "9007199254740993",
+         *       "total_display": "9007199254740993.000000"
+         *     }
+         */
+        StepSettlementQuote: {
+            /** @description Echo of the settled step's trusted reservation reference. */
+            step_reservation_ref: string;
+            /** @description The reservation's pinned version the cost was computed from (trusted, not caller-nominated). */
             price_version_id: components["schemas"]["Uuid"];
             /** @constant */
             rounding: "half_up";
@@ -2542,6 +2627,37 @@ export interface operations {
             503: components["responses"]["LedgerUnavailable"];
         };
     };
+    quoteBillingStepSettlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingStepSettlementRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact settlement cost of the reserved step and its trusted pricing basis. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepSettlementQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
     queryBillingPeriod: {
         parameters: {
             query?: never;
@@ -2603,7 +2719,10 @@ export interface operations {
     };
     getBillingCatalogVersion: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The deployment environment whose release is read; production by default. Requesting the test environment requires the credential's trusted test-catalog authorization (403 forbidden without it), and a release of the other environment answers 404 like a missing row. */
+                environment?: components["schemas"]["BillingEnvironment"];
+            };
             header?: never;
             path: {
                 catalog_version_id: components["parameters"]["CatalogVersionId"];

@@ -673,6 +673,13 @@
       "when": 1795008205171,
       "tag": "0095_billing_catalog_freeze_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1795015077309,
+      "tag": "0096_billing_basic_quota_freeze",
+      "breakpoints": true
     }
   ]
 }
