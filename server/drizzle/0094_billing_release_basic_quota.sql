@@ -1,0 +1,3 @@
+ALTER TABLE "billing_catalog_releases" ADD COLUMN "basic_quota_version_id" uuid;--> statement-breakpoint
+ALTER TABLE "billing_catalog_releases" ADD COLUMN "created_by_xact_id" bigint DEFAULT pg_current_xact_id()::text::bigint NOT NULL;--> statement-breakpoint
+ALTER TABLE "billing_catalog_releases" ADD CONSTRAINT "billing_catalog_releases_basic_quota_version_id_billing_quota_versions_id_fk" FOREIGN KEY ("basic_quota_version_id") REFERENCES "public"."billing_quota_versions"("id") ON DELETE restrict ON UPDATE no action;

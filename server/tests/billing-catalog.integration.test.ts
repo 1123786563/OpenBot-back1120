@@ -80,6 +80,8 @@ const ACCOUNT_A_TOKEN = "svc_billing_account_a_quote";
 const ACCOUNT_B_TOKEN = "svc_billing_account_b_quote";
 /** Same org, but the credential carries no billing:quote capability. */
 const NO_CAPABILITY_TOKEN = "svc_billing_no_capability";
+/** billing:quote but NOT trusted for test catalogs. */
+const TESTLESS_TOKEN = "svc_billing_no_test_catalog";
 
 /**
  * A publishable price version must price the WHOLE closed resource set in the
@@ -283,13 +285,24 @@ const APP = () =>
           organizationId: ORG,
           billingAccounts: null, // org-wide
           capabilities: ["billing:quote"],
+          testCatalogAuthorized: true,
         };
+      if (authorization === `Bearer ${TESTLESS_TOKEN}`) {
+        return {
+          ok: true,
+          organizationId: ORG,
+          billingAccounts: null,
+          capabilities: ["billing:quote"],
+          // deliberately NOT test-catalog authorized
+        };
+      }
       if (authorization === `Bearer ${ACCOUNT_A_TOKEN}`) {
         return {
           ok: true,
           organizationId: ORG,
           billingAccounts: [ACCOUNT_A],
           capabilities: ["billing:quote"],
+          testCatalogAuthorized: true,
         };
       }
       if (authorization === `Bearer ${ACCOUNT_B_TOKEN}`) {
@@ -298,6 +311,7 @@ const APP = () =>
           organizationId: ORG,
           billingAccounts: [ACCOUNT_B],
           capabilities: ["billing:quote"],
+          testCatalogAuthorized: true,
         };
       }
       if (authorization === `Bearer ${NO_CAPABILITY_TOKEN}`) {
@@ -349,6 +363,49 @@ beforeAll(async () => {
     },
   });
 
+  // The release-level BASIC quota: base ceilings of the scope, sold with
+  // every product of the release (explicit test numbers).
+  const fullQuotaSpec = {
+    quotas: [
+      { resource_key: "concurrent_runs", limit: "5", unit: "count" },
+      { resource_key: "automatic_task_seats", limit: "20", unit: "count" },
+    ],
+  };
+  const basicQuotaProd = await seedVersion("quota", {
+    organizationId: ORG,
+    tier: "basic",
+    spec: fullQuotaSpec,
+  });
+  basicQuotaProdId = basicQuotaProd;
+  const basicQuotaTest = await seedVersion("quota", {
+    organizationId: ORG,
+    environment: "test",
+    tier: "basic",
+    spec: fullQuotaSpec,
+  });
+  basicQuotaTestId = basicQuotaTest;
+  const basicQuotaA = await seedVersion("quota", {
+    organizationId: ORG,
+    billingAccountId: ACCOUNT_A,
+    tier: "basic",
+    spec: fullQuotaSpec,
+  });
+  basicQuotaAId = basicQuotaA;
+  const basicQuotaB = await seedVersion("quota", {
+    organizationId: ORG,
+    billingAccountId: ACCOUNT_B,
+    tier: "basic",
+    spec: fullQuotaSpec,
+  });
+  basicQuotaBId = basicQuotaB;
+  const basicQuotaTestOnly = await seedVersion("quota", {
+    organizationId: ORG_TEST_ONLY,
+    environment: "test",
+    tier: "basic",
+    spec: fullQuotaSpec,
+  });
+  basicQuotaTestOnlyId = basicQuotaTestOnly;
+
   // --- org-scoped TEST release (marked test_only; never a production sale) ---
   const capTest = await seedVersion("runCap", {
     organizationId: ORG,
@@ -382,6 +439,7 @@ beforeAll(async () => {
     environment: "test",
     effectiveFromUs: T0,
     effectiveToUs: null,
+    basicQuotaVersionId: basicQuotaTestId,
     items: [
       {
         productVersionId: packTest,
@@ -453,6 +511,7 @@ beforeAll(async () => {
     environment: "production",
     effectiveFromUs: T0,
     effectiveToUs: null,
+    basicQuotaVersionId: basicQuotaProdId,
     items: [
       {
         productVersionId: plan,
@@ -506,6 +565,7 @@ beforeAll(async () => {
     environment: "production",
     effectiveFromUs: T0,
     effectiveToUs: null,
+    basicQuotaVersionId: basicQuotaAId,
     items: [
       {
         productVersionId: packA,
@@ -546,6 +606,7 @@ beforeAll(async () => {
     environment: "test",
     effectiveFromUs: T0,
     effectiveToUs: null,
+    basicQuotaVersionId: basicQuotaTestOnlyId,
     items: [
       {
         productVersionId: packTestOnly,
@@ -563,6 +624,12 @@ beforeAll(async () => {
 
 let release1: { id: string; contentDigest: string };
 let releaseAccountA: { id: string; contentDigest: string };
+/** Release-level BASIC-tier quota versions per scope (P1-2). */
+let basicQuotaProdId = "";
+let basicQuotaTestId = "";
+let basicQuotaAId = "";
+let basicQuotaBId = "";
+let basicQuotaTestOnlyId = "";
 let priceV2Id = "";
 // Version ids of the first production release, for the immutability regressions.
 let priceV1Id = "";
@@ -743,6 +810,7 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
       environment: "production",
       effectiveFromUs: T0 + 86_400_000_000_000n,
       effectiveToUs: null,
+      basicQuotaVersionId: basicQuotaProdId,
       items: [
         {
           productVersionId: snapshot.items.find(
@@ -866,15 +934,47 @@ describe("step quotes: exact pricing against pinned versions (A5/A7/A6)", () => 
       billingAccountIds: null,
       releaseId: release1.id,
     });
-    const capId = snapshot.items[0].runCapVersionId;
     // A 1-microcredit-per-token price keeps a >2^53 quantity's total inside int64.
+    const bigQCap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 5_000_000n,
+    });
     const bigQPrice = await seedVersion("price", {
       organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
       effectiveFromUs: T0,
       effectiveToUs: null,
-      runCapId: capId,
+      runCapId: bigQCap,
       capMicrocredits: 5_000_000n,
       resources: fullPriceSet({ numerator: 1n, denominator: 1_000_000n }),
+    });
+    // Replay resolves only PUBLISHED versions: pin the >2^53 basis in its own
+    // account-scoped release (no overlap: no other ACCOUNT_B release exists).
+    const bigQPack = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "pack_bigq_test",
+      productType: "credit_pack",
+      displayName: "big quantity pack",
+      priceFen: 1n,
+      grantedMicrocredits: 1n,
+    });
+    await service.publishRelease({
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      environment: "production",
+      effectiveFromUs: T0,
+      effectiveToUs: null,
+      basicQuotaVersionId: basicQuotaBId,
+      items: [
+        {
+          productVersionId: bigQPack,
+          priceVersionId: bigQPrice,
+          quotaVersionId: null,
+        },
+      ],
+      createdAtUs: T0,
     });
     const app = APP();
     const good = await app.request(
@@ -1316,6 +1416,7 @@ describe("publish integrity and failure closure (A14)", () => {
         environment: "test",
         effectiveFromUs: T0 + 3_000n,
         effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaTestId,
         items: [
           {
             productVersionId: randomUUID(),
@@ -1342,6 +1443,7 @@ describe("publish integrity and failure closure (A14)", () => {
         environment: "production",
         effectiveFromUs: T0 + 1000n, // inside the active successor's interval
         effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaProdId,
         items: [
           {
             productVersionId: item.productVersionId,
@@ -1368,6 +1470,7 @@ describe("publish integrity and failure closure (A14)", () => {
       environment: "production",
       effectiveFromUs: boundary,
       effectiveToUs: null,
+      basicQuotaVersionId: basicQuotaProdId,
       items: [
         {
           productVersionId: item.productVersionId,
@@ -1383,6 +1486,7 @@ describe("publish integrity and failure closure (A14)", () => {
       environment: "production",
       effectiveFromUs: boundary, // same slot, same interval: exactly one may win
       effectiveToUs: null,
+      basicQuotaVersionId: basicQuotaProdId,
       items: [
         {
           productVersionId: item.productVersionId,
@@ -1849,6 +1953,7 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
         environment: "production",
         effectiveFromUs: T0,
         effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
         items: [
           {
             productVersionId: packB,
@@ -1862,19 +1967,18 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
   });
 
   test("a price version whose valid interval does not cover the release interval is rejected", async () => {
-    const capB = (
-      await database
-        .select()
-        .from(billingRunCapVersions)
-        .where(eq(billingRunCapVersions.billingAccountId, ACCOUNT_B))
-    )[0];
+    const capB = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
     const gapPrice = await seedVersion("price", {
       organizationId: ORG,
       billingAccountId: ACCOUNT_B,
       // Valid only up to T0+6d, while the release below runs to T0+9d.
       effectiveFromUs: T0 + 4n * 86_400_000_000_000n,
       effectiveToUs: T0 + 6n * 86_400_000_000_000n,
-      runCapId: capB.id,
+      runCapId: capB,
       capMicrocredits: 1_000_000n,
       resources: fullPriceSet(),
     });
@@ -1894,6 +1998,7 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
         environment: "production",
         effectiveFromUs: T0 + 5n * 86_400_000_000_000n,
         effectiveToUs: T0 + 9n * 86_400_000_000_000n,
+        basicQuotaVersionId: basicQuotaBId,
         items: [
           {
             productVersionId: packB2,
@@ -1907,17 +2012,16 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
   });
 
   test("a retired version cannot enter a new release", async () => {
-    const capB = (
-      await database
-        .select()
-        .from(billingRunCapVersions)
-        .where(eq(billingRunCapVersions.billingAccountId, ACCOUNT_B))
-    )[0];
+    const capB = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
     const retired = await seedVersion("price", {
       organizationId: ORG,
       billingAccountId: ACCOUNT_B,
       effectiveFromUs: T0,
-      runCapId: capB.id,
+      runCapId: capB,
       capMicrocredits: 1_000_000n,
       resources: fullPriceSet(),
     });
@@ -1941,6 +2045,7 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
         environment: "production",
         effectiveFromUs: T0,
         effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
         items: [
           {
             productVersionId: packB3,
@@ -1954,17 +2059,16 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
   });
 
   test("two versions of the same product in one release are rejected (selection must be deterministic)", async () => {
-    const capB = (
-      await database
-        .select()
-        .from(billingRunCapVersions)
-        .where(eq(billingRunCapVersions.billingAccountId, ACCOUNT_B))
-    )[0];
+    const capB = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
     const price = await seedVersion("price", {
       organizationId: ORG,
       billingAccountId: ACCOUNT_B,
       effectiveFromUs: T0,
-      runCapId: capB.id,
+      runCapId: capB,
       capMicrocredits: 1_000_000n,
       resources: fullPriceSet(),
     });
@@ -1993,6 +2097,7 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
         environment: "production",
         effectiveFromUs: T0 + 20n * 86_400_000_000_000n,
         effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
         items: [
           {
             productVersionId: dupV1,
@@ -2008,5 +2113,1070 @@ describe("publish integrity: an incomplete catalog can never go on sale (A1/A2)"
         createdAtUs: T0,
       }),
     ).rejects.toThrow(/more than one version/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rework round: trusted current-price selection and the reserved fixed
+// reference (P1-1) — new steps resolve the CURRENT published basis from the
+// trusted clock; old steps replay ONLY their own reserved reference, and
+// never-released / foreign-environment configurations are unreachable.
+// ---------------------------------------------------------------------------
+describe("trusted current-price resolution and reserved step pinning", () => {
+  test("current-prices resolves the release the trusted clock selects (production basis)", async () => {
+    const res = await APP().request(
+      "/internal/v1/billing/current-prices",
+      json({}, PROD_TOKEN),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sellable: boolean;
+      test_only: boolean;
+      release_id: string;
+      release_content_digest: string;
+      price_version_id: string;
+      run_cap_version_id: string;
+      run_cap_microcredits: string;
+      prices: { resource: string }[];
+    };
+    expect(body.sellable).toBe(true);
+    expect(body.test_only).toBe(false);
+    expect(body.release_id).toBe(release1.id);
+    expect(body.release_content_digest).toBe(release1.contentDigest);
+    // The clock (T0+1h) selects release1, which pins V1 for every product.
+    expect(body.price_version_id).toBe(priceV1Id);
+    expect(body.run_cap_microcredits).toBe("5000000");
+    expect(body.prices).toHaveLength(8); // the FULL closed resource set
+  });
+
+  test("a product-targeted resolution returns that item's pinned version; an unknown product is not sellable", async () => {
+    const hit = await APP().request(
+      "/internal/v1/billing/current-prices",
+      json({ product_id: "plan_pro_monthly" }, PROD_TOKEN),
+    );
+    expect(hit.status).toBe(200);
+    const hitBody = (await hit.json()) as {
+      sellable: boolean;
+      price_version_id?: string;
+    };
+    expect(hitBody.sellable).toBe(true);
+    expect(hitBody.price_version_id).toBe(priceV1Id);
+
+    const miss = await APP().request(
+      "/internal/v1/billing/current-prices",
+      json({ product_id: "plan_nonexistent_test" }, PROD_TOKEN),
+    );
+    expect(miss.status).toBe(200);
+    const missBody = (await miss.json()) as {
+      sellable: boolean;
+      not_sellable_reason: string;
+    };
+    expect(missBody.sellable).toBe(false);
+    expect(missBody.not_sellable_reason).toBe("product_not_in_release");
+  });
+
+  test("after the boundary the resolution moves to the successor; replaying the old step keeps its reserved reference", async () => {
+    const later = createBillingCatalogService({
+      database,
+      clock: new FixedClock(T0 + 2n * 86_400_000_000_000n),
+      trustedState: { readSubscriptionSnapshot: async () => trustedSnapshot },
+    });
+    const resolution = await later.resolveCurrentPrice({
+      organizationId: ORG,
+      billingAccountId: null,
+      environment: "production",
+    });
+    expect(resolution.sellable).toBe(true);
+    expect(resolution.priceVersionId).toBe(priceV2Id);
+
+    // The OLD step's reserved reference is v1: replay stays exact across the
+    // boundary, and ANY other version is rejected for it.
+    const replay = await later.quoteStep({
+      organizationId: ORG,
+      billingAccountIds: null,
+      priceVersionId: priceV1Id,
+      expectedPriceVersionId: priceV1Id,
+      resources: [{ resource: "model_input_tokens", quantity: "3" }],
+    });
+    expect(replay.totalMicrocredits).toBe("300000");
+    try {
+      await later.quoteStep({
+        organizationId: ORG,
+        billingAccountIds: null,
+        priceVersionId: priceV1Id,
+        expectedPriceVersionId: priceV2Id, // NOT the step's reserved reference
+        resources: [{ resource: "model_input_tokens", quantity: "3" }],
+      });
+      throw new Error("mismatched reserved reference was accepted");
+    } catch (e) {
+      expect((e as CatalogServiceError).status).toBe(409);
+      expect((e as CatalogServiceError).code).toBe("price_version_conflict");
+    }
+  });
+
+  test("the HTTP step quote rejects a reserved-reference divergence with 409", async () => {
+    const res = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceV1Id,
+          expected_price_version_id: priceV2Id,
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        PROD_TOKEN,
+      ),
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("price_version_conflict");
+    expect(res.headers.get("content-type")).toContain(
+      "application/problem+json",
+    );
+  });
+
+  test("draft and never-published price versions are unreachable from both resolution and replay", async () => {
+    const capId = capProdId;
+    // A DRAFT version: never sellable, never quotable.
+    const [draft] = await database
+      .insert(billingPriceVersions)
+      .values({
+        organizationId: ORG,
+        effectiveFromUs: T0,
+        defaultRootRunCapVersionId: capId,
+        defaultRootRunCapMicrocredits: 5_000_000n,
+        status: "draft",
+        createdAtUs: T0,
+        updatedAtUs: T0,
+      })
+      .returning({ id: billingPriceVersions.id });
+    // An ACTIVE version that NO release has ever pinned: equally unreachable
+    // — publishing, not the status column, decides reachability.
+    const orphan = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: capId,
+      capMicrocredits: 5_000_000n,
+      resources: fullPriceSet(),
+    });
+    for (const id of [draft.id, orphan]) {
+      try {
+        await service.quoteStep({
+          organizationId: ORG,
+          billingAccountIds: null,
+          priceVersionId: id,
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        });
+        throw new Error(`unpublished version ${id} was quotable`);
+      } catch (e) {
+        expect((e as CatalogServiceError).status).toBe(404);
+      }
+      const resolution = await service.resolveCurrentPrice({
+        organizationId: ORG,
+        billingAccountId: null,
+        environment: "production",
+      });
+      // The trusted resolution never hands out anything but the release pin.
+      expect(resolution.priceVersionId).not.toBe(id);
+      expect(resolution.priceVersionId).toBe(priceV1Id);
+    }
+  });
+
+  test("step quotes and resolutions are environment-isolated; test catalogs need trusted authorization", async () => {
+    // A test-environment, ACCOUNT_A-specific catalog (its production release
+    // and the org-global test release occupy different scopes, no overlap).
+    const capTestA = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_A,
+      environment: "test",
+      capMicrocredits: 777_000n,
+    });
+    const priceTestA = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_A,
+      environment: "test",
+      effectiveFromUs: T0,
+      runCapId: capTestA,
+      capMicrocredits: 777_000n,
+      resources: fullPriceSet({ numerator: 7n, denominator: 1_000_000n }),
+    });
+    const basicQuotaATest = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_A,
+      environment: "test",
+      tier: "basic",
+      spec: fullQuotaSpecLit(),
+    });
+    const packTestA = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_A,
+      environment: "test",
+      productId: "pack_account_a_test_env",
+      productType: "credit_pack",
+      displayName: "TEST ONLY: account A pack",
+      priceFen: 1n,
+      grantedMicrocredits: 1n,
+    });
+    await service.publishRelease({
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_A,
+      environment: "test",
+      effectiveFromUs: T0,
+      effectiveToUs: null,
+      basicQuotaVersionId: basicQuotaATest,
+      items: [
+        {
+          productVersionId: packTestA,
+          priceVersionId: priceTestA,
+          quotaVersionId: null,
+        },
+      ],
+      createdAtUs: T0,
+    });
+
+    // Test-authorized + account-authorized: the test price is quotable IN the
+    // test environment.
+    const okRes = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceTestA,
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "1000000" }],
+        },
+        ACCOUNT_A_TOKEN,
+      ),
+    );
+    expect(okRes.status).toBe(200);
+    const okBody = (await okRes.json()) as { total_microcredits: string };
+    // 1,000,000 tokens x 7/1,000,000 credits per token = 7 credits.
+    expect(okBody.total_microcredits).toBe("7000000");
+
+    // Same version, DEFAULT (production) environment: invisible.
+    const prodRes = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceTestA,
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        ACCOUNT_A_TOKEN,
+      ),
+    );
+    expect(prodRes.status).toBe(404);
+
+    // Org-wide credential (unrestricted within the organization), test
+    // environment: the account-specific test price is visible to it — account
+    // RESTRICTION (not org-wide reach) is what hides account-scoped content.
+    const orgWide = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceTestA,
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        PROD_TOKEN,
+      ),
+    );
+    expect(orgWide.status).toBe(200);
+    // A credential WITHOUT billing:quote is 403 on the operation itself.
+    const noCapability = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceTestA,
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        NO_CAPABILITY_TOKEN,
+      ),
+    );
+    expect(noCapability.status).toBe(403);
+    // ...and an account-RESTRICTED credential of ANOTHER account (with the
+    // capability and test authorization) still cannot see it.
+    const otherAccount = await APP().request(
+      "/internal/v1/billing/step-quotes",
+      json(
+        {
+          price_version_id: priceTestA,
+          environment: "test",
+          resources: [{ resource: "model_input_tokens", quantity: "3" }],
+        },
+        ACCOUNT_B_TOKEN,
+      ),
+    );
+    expect(otherAccount.status).toBe(404);
+
+    // Requesting the test environment WITHOUT trusted test authorization is
+    // 403 forbidden, never a silent production fallback.
+    const forbidden = await APP().request(
+      "/internal/v1/billing/product-quotes",
+      json(
+        {
+          product_id: "pack_1m_credits",
+          action: "initial_purchase",
+          environment: "test",
+        },
+        TESTLESS_TOKEN,
+      ),
+    );
+    expect(forbidden.status).toBe(403);
+    const forbiddenBody = (await forbidden.json()) as { code: string };
+    expect(forbiddenBody.code).toBe("forbidden");
+  });
+
+  test("explicitly-marked test catalogs quote through the business entry with test_only=true", async () => {
+    // The ORG whose catalog exists ONLY as a test release: sellable in the
+    // test environment (with the TEST numbers, marked test_only), never in
+    // production.
+    const testQuote = await APP().request(
+      "/internal/v1/billing/product-quotes",
+      json(
+        {
+          product_id: "pack_1m_credits_test",
+          action: "initial_purchase",
+          environment: "test",
+        },
+        PROD_TOKEN,
+      ),
+    );
+    expect(testQuote.status).toBe(200);
+    const testBody = (await testQuote.json()) as {
+      sellable: boolean;
+      test_only: boolean;
+      snapshot?: {
+        amount_fen: string;
+        granted_microcredits: string;
+        basic_quota_version_id: string;
+      };
+    };
+    expect(testBody.sellable).toBe(true);
+    expect(testBody.test_only).toBe(true);
+    expect(testBody.snapshot?.amount_fen).toBe("9900"); // the TEST number, visibly marked
+    expect(testBody.snapshot?.granted_microcredits).toBe("1000000");
+    expect(testBody.snapshot?.basic_quota_version_id).toBeTruthy();
+
+    // The same test product is unreachable from a PRODUCTION quote (which
+    // selects only production releases) — closed, never zero-priced.
+    const prodQuote = await APP().request(
+      "/internal/v1/billing/product-quotes",
+      json(
+        { product_id: "pack_1m_credits_test", action: "initial_purchase" },
+        PROD_TOKEN,
+      ),
+    );
+    expect(prodQuote.status).toBe(200);
+    const prodBody = (await prodQuote.json()) as {
+      sellable: boolean;
+      not_sellable_reason: string;
+    };
+    expect(prodBody.sellable).toBe(false);
+    expect(prodBody.not_sellable_reason).toBe("product_not_in_release");
+
+    // current-prices mirrors both closures.
+    const resolution = await APP().request(
+      "/internal/v1/billing/current-prices",
+      json({ environment: "test" }, PROD_TOKEN),
+    );
+    expect(resolution.status).toBe(200);
+    // PROD_TOKEN is org-scoped to ORG; ORG_TEST_ONLY is a different org —
+    // quote the OWN test catalog instead.
+    const ownResolution = await APP().request(
+      "/internal/v1/billing/current-prices",
+      json(
+        { environment: "test", product_id: "pack_1m_credits_test" },
+        PROD_TOKEN,
+      ),
+    );
+    expect(ownResolution.status).toBe(200);
+    const ownBody = (await ownResolution.json()) as {
+      sellable: boolean;
+      test_only: boolean;
+    };
+    expect(ownBody.sellable).toBe(true);
+    expect(ownBody.test_only).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quota tier and completeness gates (P1-2): both at publish and, defensively,
+// at current selection — a quota that misses one closed key, a mis-tiered
+// binding or a missing basic quota is an unfillable entitlement, and the
+// business entry answers it CLOSED.
+// ---------------------------------------------------------------------------
+describe("quota tier and completeness gates", () => {
+  test("a monthly plan bound to a BASIC-tier quota is rejected at publish", async () => {
+    const basic = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      tier: "basic",
+      spec: fullQuotaSpecLit(),
+    });
+    const plan = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "plan_basic_tier_test",
+      productType: "monthly_plan",
+      displayName: "mis-tiered plan",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+      periodMonths: 1,
+      quotaVersionId: basic,
+    });
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const price = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    await expect(
+      service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0,
+        effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
+        items: [
+          {
+            productVersionId: plan,
+            priceVersionId: price,
+            quotaVersionId: basic,
+          },
+        ],
+        createdAtUs: T0,
+      }),
+    ).rejects.toThrow(/tier/);
+  });
+
+  test("a release whose BASIC binding is a subscription-tier quota is rejected at publish", async () => {
+    const pack = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "pack_sub_as_basic_test",
+      productType: "credit_pack",
+      displayName: "pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const price = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const subQuota = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      tier: "subscription",
+      spec: fullQuotaSpecLit(),
+    });
+    await expect(
+      service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0,
+        effectiveToUs: null,
+        basicQuotaVersionId: subQuota, // WRONG tier for a basic binding
+        items: [
+          {
+            productVersionId: pack,
+            priceVersionId: price,
+            quotaVersionId: null,
+          },
+        ],
+        createdAtUs: T0,
+      }),
+    ).rejects.toThrow(/tier/);
+  });
+
+  test("a quota missing one of the closed keys is rejected at publish", async () => {
+    const incomplete = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      tier: "subscription",
+      spec: {
+        quotas: [
+          { resource_key: "concurrent_runs", limit: "5", unit: "count" },
+        ],
+      },
+    });
+    const plan = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "plan_incomplete_quota_test",
+      productType: "monthly_plan",
+      displayName: "incomplete quota plan",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+      periodMonths: 1,
+      quotaVersionId: incomplete,
+    });
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const price = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    await expect(
+      service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0,
+        effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
+        items: [
+          {
+            productVersionId: plan,
+            priceVersionId: price,
+            quotaVersionId: incomplete,
+          },
+        ],
+        createdAtUs: T0,
+      }),
+    ).rejects.toThrow(/required quota/);
+  });
+
+  test("a quota limit outside the contract decimal lexeme is rejected at publish", async () => {
+    const badLexeme = await seedVersion("quota", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      tier: "basic",
+      spec: {
+        quotas: [
+          { resource_key: "concurrent_runs", limit: "1e3", unit: "count" },
+          {
+            resource_key: "automatic_task_seats",
+            limit: "10",
+            unit: "count",
+          },
+        ],
+      },
+    });
+    const pack = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "pack_bad_lexeme_test",
+      productType: "credit_pack",
+      displayName: "pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const price = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    await expect(
+      service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0,
+        effectiveToUs: null,
+        basicQuotaVersionId: badLexeme,
+        items: [
+          {
+            productVersionId: pack,
+            priceVersionId: price,
+            quotaVersionId: null,
+          },
+        ],
+        createdAtUs: T0,
+      }),
+    ).rejects.toThrow(/decimal lexeme/);
+  });
+
+  test("through the business entry: a release with a missing, mis-tiered or key-incomplete basic quota is NOT sellable", async () => {
+    // Legacy / corrupted releases bypassing publish are built row-by-row in
+    // ONE transaction each (the append-once guard allows item inserts only in
+    // the release's own creating transaction). Current SELECTION must
+    // independently refuse them — the negative space is observable exactly
+    // where a caller sees it: at the quote.
+
+    // (a) basic quota binding MISSING (a pre-binding legacy row).
+    const orgMissing = randomUUID();
+    const capMissing = await seedVersion("runCap", {
+      organizationId: orgMissing,
+      capMicrocredits: 1_000_000n,
+    });
+    const priceMissing = await seedVersion("price", {
+      organizationId: orgMissing,
+      effectiveFromUs: T0,
+      runCapId: capMissing,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const packMissing = await seedVersion("product", {
+      organizationId: orgMissing,
+      productId: "pack_neg_missing_basic",
+      productType: "credit_pack",
+      displayName: "neg pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    await seedLegacyRelease(orgMissing, null, [
+      {
+        productVersionId: packMissing,
+        priceVersionId: priceMissing,
+        quotaVersionId: null,
+      },
+    ]);
+    const missingQuote = await service.quoteProduct({
+      organizationId: orgMissing,
+      billingAccountId: null,
+      productId: "pack_neg_missing_basic",
+      action: "initial_purchase",
+      includeEligibility: false,
+    });
+    expect(missingQuote.sellable).toBe(false);
+    expect(missingQuote.notSellableReason).toBe("release_incomplete");
+
+    // (b) basic binding points at a SUBSCRIPTION-tier quota (mis-tiered).
+    const orgMisTier = randomUUID();
+    const capMisTier = await seedVersion("runCap", {
+      organizationId: orgMisTier,
+      capMicrocredits: 1_000_000n,
+    });
+    const priceMisTier = await seedVersion("price", {
+      organizationId: orgMisTier,
+      effectiveFromUs: T0,
+      runCapId: capMisTier,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const packMisTier = await seedVersion("product", {
+      organizationId: orgMisTier,
+      productId: "pack_neg_mistier",
+      productType: "credit_pack",
+      displayName: "neg pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    const subQuota = await seedVersion("quota", {
+      organizationId: orgMisTier,
+      tier: "subscription",
+      spec: fullQuotaSpecLit(),
+    });
+    await seedLegacyRelease(orgMisTier, subQuota, [
+      {
+        productVersionId: packMisTier,
+        priceVersionId: priceMisTier,
+        quotaVersionId: null,
+      },
+    ]);
+    const misTierQuote = await service.quoteProduct({
+      organizationId: orgMisTier,
+      billingAccountId: null,
+      productId: "pack_neg_mistier",
+      action: "initial_purchase",
+      includeEligibility: false,
+    });
+    expect(misTierQuote.sellable).toBe(false);
+    expect(misTierQuote.notSellableReason).toBe("release_incomplete");
+
+    // (c) the sold monthly plan's quota misses one of the closed keys.
+    const orgIncomplete = randomUUID();
+    const capIncomplete = await seedVersion("runCap", {
+      organizationId: orgIncomplete,
+      capMicrocredits: 1_000_000n,
+    });
+    const priceIncomplete = await seedVersion("price", {
+      organizationId: orgIncomplete,
+      effectiveFromUs: T0,
+      runCapId: capIncomplete,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const incompleteQuota = await seedVersion("quota", {
+      organizationId: orgIncomplete,
+      tier: "subscription",
+      spec: {
+        quotas: [
+          { resource_key: "concurrent_runs", limit: "5", unit: "count" },
+        ],
+      },
+    });
+    const basicIncomplete = await seedVersion("quota", {
+      organizationId: orgIncomplete,
+      tier: "basic",
+      spec: fullQuotaSpecLit(),
+    });
+    const planIncomplete = await seedVersion("product", {
+      organizationId: orgIncomplete,
+      productId: "plan_neg_incomplete",
+      productType: "monthly_plan",
+      displayName: "neg plan",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+      periodMonths: 1,
+      quotaVersionId: incompleteQuota,
+    });
+    await seedLegacyRelease(orgIncomplete, basicIncomplete, [
+      {
+        productVersionId: planIncomplete,
+        priceVersionId: priceIncomplete,
+        quotaVersionId: incompleteQuota,
+      },
+    ]);
+    const incompleteQuote = await service.quoteProduct({
+      organizationId: orgIncomplete,
+      billingAccountId: null,
+      productId: "plan_neg_incomplete",
+      action: "initial_purchase",
+      includeEligibility: false,
+    });
+    expect(incompleteQuote.sellable).toBe(false);
+    expect(incompleteQuote.notSellableReason).toBe("release_incomplete");
+  });
+});
+
+/**
+ * Insert a legacy-style release row plus its items in ONE transaction (the
+ * append-once guard permits item inserts only inside the creating
+ * transaction). Used to arrange corrupted/pre-binding catalog states that
+ * publish would reject, so SELECTION's own completeness gates can be
+ * observed through the business entry.
+ */
+async function seedLegacyRelease(
+  organizationId: string,
+  basicQuotaVersionId: string | null,
+  items: {
+    productVersionId: string;
+    priceVersionId: string;
+    quotaVersionId: string | null;
+  }[],
+): Promise<string> {
+  return database.transaction(async (tx) => {
+    const [rel] = await tx
+      .insert(billingCatalogReleases)
+      .values({
+        organizationId,
+        environment: "production",
+        effectiveFromUs: T0,
+        effectiveToUs: null,
+        contentDigest: "0".repeat(64),
+        basicQuotaVersionId,
+        status: "active",
+        createdAtUs: T0,
+        updatedAtUs: T0,
+      })
+      .returning({ id: billingCatalogReleases.id });
+    for (const item of items) {
+      await tx.insert(billingCatalogReleaseItems).values({
+        releaseId: rel.id,
+        ...item,
+      });
+    }
+    return rel.id;
+  });
+}
+
+/** Closed quota spec with BOTH keys (test numbers). */
+function fullQuotaSpecLit() {
+  return {
+    quotas: [
+      { resource_key: "concurrent_runs", limit: "3", unit: "count" },
+      { resource_key: "automatic_task_seats", limit: "8", unit: "count" },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Publish-freeze hardening (P1-3): row moves, append-once across handovers,
+// persisted creating-transaction identity, and publish-vs-content-write
+// serialization on real PostgreSQL.
+// ---------------------------------------------------------------------------
+describe("publish-freeze hardening", () => {
+  test("a resource row cannot be moved between published versions, in either direction", async () => {
+    const v1row = (
+      await database
+        .select()
+        .from(billingPriceResources)
+        .where(eq(billingPriceResources.priceVersionId, priceV1Id))
+    )[0];
+    const v2row = (
+      await database
+        .select()
+        .from(billingPriceResources)
+        .where(eq(billingPriceResources.priceVersionId, priceV2Id))
+        .limit(1)
+    )[0];
+    // V1 -> V2 (out of a published set, INTO another): rejected.
+    await expectDbReject(
+      database
+        .update(billingPriceResources)
+        .set({ priceVersionId: priceV2Id })
+        .where(eq(billingPriceResources.id, v1row.id)),
+      /published/,
+    );
+    // V2 -> V1 (same shape, other direction): rejected.
+    await expectDbReject(
+      database
+        .update(billingPriceResources)
+        .set({ priceVersionId: priceV1Id })
+        .where(eq(billingPriceResources.id, v2row.id)),
+      /published/,
+    );
+  });
+
+  test("a row cannot be moved INTO a published version from an unpublished one", async () => {
+    // A price version that never entered a release owns its rows freely;
+    // moving one of them into the published V1 must be refused.
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    const unpublished = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources: fullPriceSet(),
+    });
+    const row = (
+      await database
+        .select()
+        .from(billingPriceResources)
+        .where(eq(billingPriceResources.priceVersionId, unpublished))
+    )[0];
+    await expectDbReject(
+      database
+        .update(billingPriceResources)
+        .set({ priceVersionId: priceV1Id })
+        .where(eq(billingPriceResources.id, row.id)),
+      /gain resources|published/,
+    );
+  });
+
+  test("release items stay append-once across handovers; the creating transaction is persisted", async () => {
+    // release1 has been closed by the successor handover; its stored creating
+    // xact id is a transaction long gone.
+    const [rel] = await database
+      .select()
+      .from(billingCatalogReleases)
+      .where(eq(billingCatalogReleases.id, release1.id));
+    expect(rel.createdByXactId).toBeGreaterThan(0n);
+    const item = (
+      await database
+        .select()
+        .from(billingCatalogReleaseItems)
+        .where(eq(billingCatalogReleaseItems.releaseId, release1.id))
+    )[0];
+    // Direct item insert in a LATER transaction (this test's) is refused —
+    // including into the handover-closed release whose row xmin was replaced
+    // by the handover update.
+    await expectDbReject(
+      database.insert(billingCatalogReleaseItems).values({
+        releaseId: release1.id,
+        productVersionId: item.productVersionId,
+        priceVersionId: item.priceVersionId,
+        quotaVersionId: item.quotaVersionId,
+      }),
+      /creates the release/,
+    );
+    // ...and into the successor release, created by the earlier test
+    // transaction, for the same reason.
+    const successor = (
+      await database
+        .select({ id: billingCatalogReleases.id })
+        .from(billingCatalogReleases)
+        .where(eq(billingCatalogReleases.organizationId, ORG))
+        .orderBy(billingCatalogReleases.effectiveFromUs)
+    ).at(-1)!.id;
+    await expectDbReject(
+      database.insert(billingCatalogReleaseItems).values({
+        releaseId: successor,
+        productVersionId: item.productVersionId,
+        priceVersionId: item.priceVersionId,
+        quotaVersionId: item.quotaVersionId,
+      }),
+      /creates the release/,
+    );
+    // The persisted creating-transaction id is itself immutable.
+    await expectDbReject(
+      database
+        .update(billingCatalogReleases)
+        .set({ createdByXactId: 123n })
+        .where(eq(billingCatalogReleases.id, release1.id)),
+      /immutable/,
+    );
+  });
+
+  test("a guarded content write during publish serializes: the digest always covers the committed content", async () => {
+    // A new publishable version; its LAST resource row is inserted by another
+    // session that holds the scope advisory lock (as every guarded write
+    // does), so publish BLOCKS until that writer commits and then validates
+    // the FULL content — the stored digest can never miss a committed row.
+    const cap = await seedVersion("runCap", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      capMicrocredits: 1_000_000n,
+    });
+    // Seven rows now; the eighth is inserted concurrently below.
+    const resources = fullPriceSet().slice(0, 7);
+    const almostComplete = await seedVersion("price", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      effectiveFromUs: T0,
+      runCapId: cap,
+      capMicrocredits: 1_000_000n,
+      resources,
+    });
+    const pack = await seedVersion("product", {
+      organizationId: ORG,
+      billingAccountId: ACCOUNT_B,
+      productId: "pack_serialized_publish_test",
+      productType: "credit_pack",
+      displayName: "serialized publish pack",
+      priceFen: 100n,
+      grantedMicrocredits: 1000n,
+    });
+    const writer = createDatabase(testDatabaseUrl(), { max: 1 });
+    try {
+      const writerTx = writer.transaction(async (tx) => {
+        await tx.insert(billingPriceResources).values({
+          priceVersionId: almostComplete,
+          resource: "tool_call_duration_ms",
+          measurementUnit: "millisecond",
+          unitSize: 1000n,
+          numerator: 1n,
+          denominator: 1n,
+        });
+        // Hold the write open (and with it the scope lock) while publish starts.
+        await new Promise((r) => setTimeout(r, 1200));
+      });
+      // Give the writer a moment to take the lock, then publish: it must wait
+      // for the writer's commit, see the eighth row, and publish COMPLETE.
+      await new Promise((r) => setTimeout(r, 400));
+      const published = await service.publishRelease({
+        organizationId: ORG,
+        billingAccountId: ACCOUNT_B,
+        environment: "production",
+        effectiveFromUs: T0 + 30n * 86_400_000_000_000n,
+        effectiveToUs: null,
+        basicQuotaVersionId: basicQuotaBId,
+        items: [
+          {
+            productVersionId: pack,
+            priceVersionId: almostComplete,
+            quotaVersionId: null,
+          },
+        ],
+        createdAtUs: T0,
+      });
+      await writerTx;
+      expect(published.contentDigest).toHaveLength(64);
+      // The committed content is quotable in FULL: the concurrently inserted
+      // row is part of what publish validated and digested.
+      const replay = await service.quoteStep({
+        organizationId: ORG,
+        billingAccountIds: null,
+        priceVersionId: almostComplete,
+        expectedPriceVersionId: almostComplete,
+        resources: [{ resource: "tool_call_duration_ms", quantity: "1000" }],
+      });
+      // 1000 ms at 1 credit per 1000 ms = 1 credit = 1000000 microcredits.
+      expect(replay.totalMicrocredits).toBe("1000000");
+      const rows = await database
+        .select({ resource: billingPriceResources.resource })
+        .from(billingPriceResources)
+        .where(eq(billingPriceResources.priceVersionId, almostComplete));
+      expect(rows).toHaveLength(8);
+    } finally {
+      await writer.$client.end({ timeout: 5 });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// History snapshot completeness and error media type (P2-2).
+// ---------------------------------------------------------------------------
+describe("history snapshot completeness and error media type", () => {
+  test("the catalog-version snapshot carries the full commerce content of every item", async () => {
+    const res = await APP().request(
+      `/internal/v1/billing/catalog-versions/${release1.id}`,
+      get(),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      basic_quota: {
+        quota_version_id: string;
+        tier: string;
+        quotas: { resource_key: string; limit: string; unit: string }[];
+      } | null;
+      items: {
+        product_id: string;
+        display_name: string;
+        amount_fen: string;
+        currency: string;
+        granted_microcredits: string | null;
+        period_months: string | null;
+        quota: {
+          quota_version_id: string;
+          tier: string;
+          quotas: { resource_key: string; limit: string }[];
+        } | null;
+      }[];
+    };
+    expect(body.basic_quota).not.toBeNull();
+    expect(body.basic_quota?.tier).toBe("basic");
+    expect(body.basic_quota?.quotas).toHaveLength(2);
+    const plan = body.items.find((i) => i.product_id === "plan_pro_monthly");
+    expect(plan?.display_name).toBe("Pro monthly");
+    expect(plan?.amount_fen).toBe("4900");
+    expect(plan?.granted_microcredits).toBe("2000000");
+    expect(plan?.period_months).toBe("1");
+    expect(plan?.quota?.tier).toBe("subscription");
+    expect(plan?.quota?.quotas).toHaveLength(2);
+    const pack = body.items.find((i) => i.product_id === "pack_1m_credits");
+    expect(pack?.quota).toBeNull();
+    expect(pack?.period_months).toBeNull();
+    expect(pack?.granted_microcredits).toBe("1000000");
+  });
+
+  test("errors answer application/problem+json", async () => {
+    const res = await APP().request(
+      "/internal/v1/billing/product-quotes",
+      json({}, "not-a-credential"),
+    );
+    expect(res.status).toBe(401);
+    expect(res.headers.get("content-type")).toContain(
+      "application/problem+json",
+    );
   });
 });

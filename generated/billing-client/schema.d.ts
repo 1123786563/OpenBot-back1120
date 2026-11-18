@@ -345,7 +345,7 @@ export interface paths {
         put?: never;
         /**
          * Quote the exact microcredit cost of one step against a pinned price version
-         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts ANY version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
+         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts any PUBLISHED version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement, while drafts and never-released configurations answer 404 like a missing row. New steps take their version from resolveCurrentBillingPrice and record it as the reserved fixed reference; replay/settlement must pass that reference as expected_price_version_id — a divergence is 409 price_version_conflict, never a silent reprice. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
          */
         post: operations["quoteBillingStep"];
         delete?: never;
@@ -368,6 +368,26 @@ export interface paths {
          * @description Given the trusted original activation anchor (original_purchased_at_us — the server-confirmed activation instant, never an order or payment time) and either an explicit target_period_index or an occurrence_us to locate, returns the half-open [B(n), B(n+1)) period with integer UTC microsecond boundaries, ISO renderings, and Asia/Shanghai local wall times. Month ends clamp to the target month's length and the original day number resumes; an event at exactly end_us belongs to the next period. Wall times that do not exist or occur twice in the timezone are rejected, never silently shifted. x-readonly: no write side effects.
          */
         post: operations["queryBillingPeriod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/current-prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve the CURRENT published unit prices and default Run cap for new steps
+         * @description The trusted path a settlement adapter uses for NEW steps: the release is selected by the SERVER's trusted clock over the server-resolved scope (organization from the credential, the requested billing account, the deployment environment) — never by a caller-chosen version id. Returns the pinned price version (the value to record as the step's reserved fixed reference), the default root Run cap, and the full price list so the caller can see the exact basis. Draft, never-released, foreign-environment and foreign-account configurations can never be resolved here; a missing or incomplete release answers sellable=false with a closed reason, never a zero price. x-readonly: no write side effects.
+         */
+        post: operations["resolveCurrentBillingPrice"];
         delete?: never;
         options?: never;
         head?: never;
@@ -579,6 +599,8 @@ export interface components {
             billing_account_id?: null | components["schemas"]["Uuid"];
             /** @description When present and not the pinned version, the quote answers 409 price_version_conflict. */
             expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The deployment environment to quote against; production by default. The test environment exists ONLY for explicitly test-authorized service credentials (acceptance fixtures are quoted there with test_only=true) — a request for it without that trusted authorization is 403 forbidden, and a production sale never selects a test release. */
+            environment?: components["schemas"]["BillingEnvironment"];
         };
         /**
          * @description The FINAL merged resource vector of one step. The trusted adapter owes the merge semantics: non-overlapping token classes, deduplicated stream fragments (same event id -> one contribution), and durations accumulated per resource and converted ONCE to whole milliseconds. Quantities are contract decimal strings; a stream without stable event identity cannot be settled at all.
@@ -593,12 +615,30 @@ export interface components {
          *     }
          */
         QuoteBillingStepRequest: {
-            /** @description The version to price against — the reservation's pinned version, or any historical version for replay. */
+            /** @description The version to price against — the reservation's pinned version, or any PUBLISHED historical version for replay (never-released drafts answer 404). */
             price_version_id: components["schemas"]["Uuid"];
+            /** @description The RESERVED fixed reference recorded on the step/reservation at pricing time. When present it must equal price_version_id; a divergence is 409 price_version_conflict, so settlement can never silently reprice a pinned step under another configuration. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The caller's trusted deployment environment; production by default. Versions of the other environment are invisible (404). */
+            environment?: components["schemas"]["BillingEnvironment"];
             resources: {
                 resource: components["schemas"]["ResourceKind"];
                 quantity: components["schemas"]["UnsignedInt64"];
             }[];
+        };
+        /**
+         * @description WHAT to resolve — never a price or a clock. The organization scope comes from the trusted service credential; billing_account_id narrows the scope when resolving an account-specific catalog; environment selects production (default) or a test-authorized test catalog.
+         * @example {
+         *       "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+         *       "product_id": "pack_1m_credits"
+         *     }
+         */
+        ResolveCurrentPriceRequest: {
+            billing_account_id?: null | components["schemas"]["Uuid"];
+            /** @description Resolve the pinned price of THIS product's release item. Absent, every item of the release must pin the same price version, and that shared version is resolved; a divergent release fails closed. */
+            product_id?: string;
+            /** @description The deployment environment to resolve; production by default, test only for test-authorized credentials. */
+            environment?: components["schemas"]["BillingEnvironment"];
         };
         /**
          * @description Exactly one selector — an explicit period index or an occurrence time to locate.
@@ -1290,6 +1330,12 @@ export interface components {
             message: string;
         };
         /**
+         * @description Configuration environment. A production request NEVER selects a test release; test_only configurations exist only for acceptance runs.
+         * @example production
+         * @enum {string}
+         */
+        BillingEnvironment: "production" | "test";
+        /**
          * @description Closed reasons a product quote answers sellable=false. Absence of a complete production release NEVER degrades to a zero price or a demo value.
          * @example no_published_release
          * @enum {string}
@@ -1423,6 +1469,7 @@ export interface components {
          *         "long_lived": true,
          *         "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
          *         "quota_version_id": null,
+         *         "basic_quota_version_id": "aa000000-0000-4000-8000-000000000005",
          *         "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
          *         "run_cap_microcredits": "5000000"
          *       },
@@ -1462,6 +1509,8 @@ export interface components {
                 long_lived: boolean;
                 price_version_id: components["schemas"]["Uuid"];
                 quota_version_id: components["schemas"]["UuidNullable"];
+                /** @description The release's BASIC-tier quota version — the base resource ceilings sold with this product. */
+                basic_quota_version_id: components["schemas"]["Uuid"];
                 run_cap_version_id: components["schemas"]["Uuid"];
                 run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
             };
@@ -1476,7 +1525,7 @@ export interface components {
          */
         MeasurementUnit: "token" | "request" | "call" | "millisecond";
         /**
-         * @description Read-only exact cost of one execution step against a PINNED price version. All resources are summed as ONE exact rational and rounded exactly once (HALF_UP to whole microcredits) — never per token, per line or per stream fragment. The full pricing basis is echoed so the total can be recomputed offline.
+         * @description Read-only exact cost of one execution step against a PINNED price version. All resources are summed as ONE exact rational and rounded exactly once (HALF_UP to whole microcredits) — never per token, per line or per stream fragment. The full pricing basis is echoed so the total can be recomputed offline. Only versions a release has pinned at least once are quotable — draft, never-released and foreign-environment configurations answer 404 like a missing row; an expected_price_version_id that diverges from the quoted version is 409 price_version_conflict (a step is always recomputed against its own reserved fixed reference).
          * @example {
          *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
          *       "rounding": "half_up",
@@ -1566,13 +1615,86 @@ export interface components {
             period: components["schemas"]["MonthPeriodDescriptor"];
         };
         /**
-         * @description Configuration environment. A production request NEVER selects a test release; test_only configurations exist only for acceptance runs.
-         * @example production
-         * @enum {string}
+         * @description The CURRENT published pricing basis for NEW steps, resolved by the SERVER's trusted clock, account authorization and deployment environment — never a caller-chosen version id. Returns the release the clock selects with its pinned price version and default Run cap; the caller uses price_version_id both for the step vector and as the reserved fixed reference recorded on the step. Draft, never-released, foreign-environment and foreign-account configurations can never be resolved here; an absent or incomplete release answers sellable=false with a closed reason, never a zero price. Read-only observation.
+         * @example {
+         *       "sellable": true,
+         *       "test_only": false,
+         *       "quoted_at_us": "1700003600000000",
+         *       "release_id": "aa000000-0000-4000-8000-000000000004",
+         *       "release_content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *       "scope_is_account_specific": false,
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *       "run_cap_microcredits": "5000000",
+         *       "prices": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ]
+         *     }
          */
-        BillingEnvironment: "production" | "test";
+        CurrentPriceResolution: {
+            sellable: boolean;
+            /** @description Present exactly when sellable=false. */
+            not_sellable_reason?: components["schemas"]["SellabilityReason"];
+            /** @description True when the resolved release is explicitly test-only. */
+            test_only: boolean;
+            quoted_at_us: components["schemas"]["TimestampUs"];
+            /** @description Present exactly when sellable=true. */
+            release_id?: components["schemas"]["Uuid"];
+            /** @description Present exactly when sellable=true. */
+            release_content_digest?: string;
+            /** @description Present exactly when sellable=true. */
+            scope_is_account_specific?: boolean;
+            /** @description The pinned price version NEW steps must quote (and reserve). */
+            price_version_id?: components["schemas"]["Uuid"];
+            run_cap_version_id?: components["schemas"]["Uuid"];
+            run_cap_microcredits?: components["schemas"]["PositiveMicrocredits"];
+            prices: {
+                resource: components["schemas"]["ResourceKind"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+        };
         /**
-         * @description Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price.
+         * @description The full content of one quota version — tier plus every closed-key ceiling, so a sold entitlement can be reconstructed from the snapshot alone.
+         * @example {
+         *       "quota_version_id": "aa000000-0000-4000-8000-000000000005",
+         *       "tier": "basic",
+         *       "quotas": [
+         *         {
+         *           "resource_key": "concurrent_runs",
+         *           "limit": "2",
+         *           "unit": "count"
+         *         },
+         *         {
+         *           "resource_key": "automatic_task_seats",
+         *           "limit": "10",
+         *           "unit": "count"
+         *         }
+         *       ]
+         *     }
+         */
+        QuotaContent: {
+            quota_version_id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            tier: "basic" | "subscription";
+            quotas: {
+                /** @enum {string} */
+                resource_key: "concurrent_runs" | "automatic_task_seats";
+                limit: components["schemas"]["UnsignedInt64"];
+                /** @constant */
+                unit: "count";
+            }[];
+        };
+        /**
+         * @description Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price. The snapshot carries the release's basic quota and every item's full commerce content (price, granted credits and quota), so a historical quote can be recomputed AND its sold entitlement reconstructed from this response alone.
          * @example {
          *       "release_id": "aa000000-0000-4000-8000-000000000004",
          *       "content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
@@ -1610,13 +1732,22 @@ export interface components {
             environment: components["schemas"]["BillingEnvironment"];
             effective_from_us: components["schemas"]["TimestampUs"];
             effective_to_us: components["schemas"]["TimestampUsNullable"];
+            /** @description The release's BASIC-tier quota content (the base resource ceilings of the scope); null only for releases created before the basic-quota binding existed. */
+            basic_quota: null | components["schemas"]["QuotaContent"];
             items: {
                 product_version_id: components["schemas"]["Uuid"];
                 product_id: string;
                 /** @enum {string} */
                 product_type: "monthly_plan" | "credit_pack";
+                display_name: string;
+                amount_fen: components["schemas"]["Fen"];
+                currency: components["schemas"]["CurrencyCode"];
+                granted_microcredits: components["schemas"]["MicrocreditsNullable"];
+                period_months: components["schemas"]["UnsignedInt64Nullable"];
                 price_version_id: components["schemas"]["Uuid"];
                 quota_version_id: components["schemas"]["UuidNullable"];
+                /** @description The SUBSCRIPTION-tier quota content this monthly plan sold; null for credit packs. */
+                quota: null | components["schemas"]["QuotaContent"];
                 run_cap_version_id: components["schemas"]["Uuid"];
                 run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
                 prices: {
@@ -2406,6 +2537,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["LedgerUnavailable"];
         };
@@ -2435,6 +2567,36 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    resolveCurrentBillingPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveCurrentPriceRequest"];
+            };
+        };
+        responses: {
+            /** @description The current pricing basis (business closure is sellable=false with a reason, not an HTTP error). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentPriceResolution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["LedgerUnavailable"];
         };

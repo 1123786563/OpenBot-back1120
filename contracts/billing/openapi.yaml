@@ -912,13 +912,18 @@ paths:
       description: >-
         Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged
         resource vector as ONE exact rational and rounds exactly once
-        (HALF_UP to whole microcredits). Accepts ANY version by id — retired
-        versions stay quotable forever so pinned steps replay after restarts,
-        repricing and retirement. Quantities travel as contract decimal
-        strings; a quantity outside the closed lexeme/range or a resource with
-        no price in the version is rejected. Historical replay may use this
-        operation; purchasing against a retired version is decided by the
-        order service, never by this quote. x-readonly: no write side effects.
+        (HALF_UP to whole microcredits). Accepts any PUBLISHED version by id —
+        retired versions stay quotable forever so pinned steps replay after
+        restarts, repricing and retirement, while drafts and never-released
+        configurations answer 404 like a missing row. New steps take their
+        version from resolveCurrentBillingPrice and record it as the reserved
+        fixed reference; replay/settlement must pass that reference as
+        expected_price_version_id — a divergence is 409
+        price_version_conflict, never a silent reprice. Quantities travel as
+        contract decimal strings; a quantity outside the closed lexeme/range
+        or a resource with no price in the version is rejected. Historical
+        replay may use this operation; purchasing against a retired version is
+        decided by the order service, never by this quote. x-readonly: no write side effects.
       security:
         - ServiceCredentialAuth: []
       x-internal: true
@@ -945,11 +950,13 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
         "503":
           $ref: "#/components/responses/LedgerUnavailable"
-      x-error-codes: [unauthenticated, forbidden, resource_not_found, invalid_integer, out_of_range, ledger_unavailable]
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, price_version_conflict, invalid_integer, out_of_range, ledger_unavailable]
 
   /internal/v1/billing/period-queries:
     post:
@@ -996,6 +1003,55 @@ paths:
         "503":
           $ref: "#/components/responses/LedgerUnavailable"
       x-error-codes: [unauthenticated, forbidden, invalid_integer, out_of_range, ledger_unavailable]
+
+  /internal/v1/billing/current-prices:
+    post:
+      operationId: resolveCurrentBillingPrice
+      tags: [internal-billing]
+      summary: Resolve the CURRENT published unit prices and default Run cap for new steps
+      description: >-
+        The trusted path a settlement adapter uses for NEW steps: the release
+        is selected by the SERVER's trusted clock over the server-resolved
+        scope (organization from the credential, the requested billing
+        account, the deployment environment) — never by a caller-chosen
+        version id. Returns the pinned price version (the value to record as
+        the step's reserved fixed reference), the default root Run cap, and
+        the full price list so the caller can see the exact basis. Draft,
+        never-released, foreign-environment and foreign-account configurations
+        can never be resolved here; a missing or incomplete release answers
+        sellable=false with a closed reason, never a zero price. x-readonly:
+        no write side effects.
+      security:
+        - ServiceCredentialAuth: []
+      x-internal: true
+      x-required-capability: billing:quote
+      x-readonly: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveCurrentPriceRequest"
+      responses:
+        "200":
+          description: The current pricing basis (business closure is sellable=false with a reason, not an HTTP error).
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/objects.yaml#/components/schemas/CurrentPriceResolution"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "503":
+          $ref: "#/components/responses/LedgerUnavailable"
+      x-error-codes: [unauthenticated, forbidden, resource_not_found, invalid_integer, out_of_range, ledger_unavailable]
 
   /internal/v1/billing/catalog-versions/{catalog_version_id}:
     get:
@@ -1680,6 +1736,15 @@ components:
         expected_price_version_id:
           $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
           description: When present and not the pinned version, the quote answers 409 price_version_conflict.
+        environment:
+          $ref: "./schemas/objects.yaml#/components/schemas/BillingEnvironment"
+          description: >-
+            The deployment environment to quote against; production by
+            default. The test environment exists ONLY for explicitly
+            test-authorized service credentials (acceptance fixtures are
+            quoted there with test_only=true) — a request for it without that
+            trusted authorization is 403 forbidden, and a production sale
+            never selects a test release.
       examples:
         - product_id: "pack_1m_credits"
           action: initial_purchase
@@ -1698,7 +1763,17 @@ components:
       properties:
         price_version_id:
           $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
-          description: The version to price against — the reservation's pinned version, or any historical version for replay.
+          description: The version to price against — the reservation's pinned version, or any PUBLISHED historical version for replay (never-released drafts answer 404).
+        expected_price_version_id:
+          $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+          description: >-
+            The RESERVED fixed reference recorded on the step/reservation at
+            pricing time. When present it must equal price_version_id; a
+            divergence is 409 price_version_conflict, so settlement can never
+            silently reprice a pinned step under another configuration.
+        environment:
+          $ref: "./schemas/objects.yaml#/components/schemas/BillingEnvironment"
+          description: The caller's trusted deployment environment; production by default. Versions of the other environment are invisible (404).
         resources:
           type: array
           minItems: 1
@@ -1718,6 +1793,36 @@ components:
           resources:
             - resource: model_input_tokens
               quantity: "9007199254740993"
+    ResolveCurrentPriceRequest:
+      type: object
+      description: >-
+        WHAT to resolve — never a price or a clock. The organization scope
+        comes from the trusted service credential; billing_account_id narrows
+        the scope when resolving an account-specific catalog; environment
+        selects production (default) or a test-authorized test catalog.
+      required: []
+      additionalProperties: false
+      properties:
+        billing_account_id:
+          oneOf:
+            - type: "null"
+            - $ref: "./schemas/scalars.yaml#/components/schemas/Uuid"
+        product_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          description: >-
+            Resolve the pinned price of THIS product's release item. Absent,
+            every item of the release must pin the same price version, and
+            that shared version is resolved; a divergent release fails closed.
+        environment:
+          $ref: "./schemas/objects.yaml#/components/schemas/BillingEnvironment"
+          description: The deployment environment to resolve; production by default, test only for test-authorized credentials.
+      examples:
+        - billing_account_id: "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+          product_id: "pack_1m_credits"
+
     QueryBillingPeriodRequest:
       type: object
       description: Exactly one selector — an explicit period index or an occurrence time to locate.

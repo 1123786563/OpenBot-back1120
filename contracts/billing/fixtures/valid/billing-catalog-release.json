@@ -18,6 +18,7 @@
         "quota_version_id": null,
         "run_cap_version_id": "aa000000-0000-4000-8000-000000000003"
       }
-    ]
+    ],
+    "basic_quota_version_id": "aa000000-0000-4000-8000-000000000005"
   }
 }

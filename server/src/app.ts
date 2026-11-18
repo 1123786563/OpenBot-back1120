@@ -580,7 +580,9 @@ export function createApp(
    * the app without any /internal/v1/billing route — deployments that do not
    * run the billing catalog expose nothing.
    */
-  billingCatalogApp?: Hono,
+  // biome-ignore lint/suspicious/noExplicitAny: the sub-app carries its own
+  // trusted-context Variables; the host app only routes it verbatim.
+  billingCatalogApp?: HonoApp<any>,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);

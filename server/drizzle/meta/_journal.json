@@ -659,6 +659,20 @@
       "when": 1795006035290,
       "tag": "0093_billing_catalog_freeze",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1795008198528,
+      "tag": "0094_billing_release_basic_quota",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1795008205171,
+      "tag": "0095_billing_catalog_freeze_hardening",
+      "breakpoints": true
     }
   ]
 }

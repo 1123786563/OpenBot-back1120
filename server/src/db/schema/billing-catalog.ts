@@ -305,7 +305,27 @@ export const billingCatalogReleases = pgTable(
      * Quotes return it so callers can detect configuration drift.
      */
     contentDigest: text("content_digest").notNull(),
+    /**
+     * The release-level BASIC-tier quota version (the base resource ceilings
+     * every account of the scope has regardless of subscription tier). A
+     * release without it is not sellable — a legacy row without the binding
+     * answers release_incomplete on selection, never a partial catalog.
+     */
+    basicQuotaVersionId: uuid("basic_quota_version_id").references(
+      () => billingQuotaVersions.id,
+      { onDelete: "restrict" },
+    ),
     status: billingConfigStatus("status").notNull().default("draft"),
+    /**
+     * The xid8 of the transaction that created the release, persisted at
+     * insert. Release items may only be appended inside THIS transaction —
+     * a comparison against a live xmin cannot distinguish the create tx from
+     * a later handover UPDATE of the same row (an UPDATE replaces xmin), but
+     * this stored id never changes, so append-once holds across handovers.
+     */
+    createdByXactId: contractInteger("created_by_xact_id")
+      .notNull()
+      .default(sql`pg_current_xact_id()::text::bigint`),
     createdAtUs: contractInteger("created_at_us").notNull(),
     updatedAtUs: contractInteger("updated_at_us").notNull(),
     revision: contractInteger("revision").notNull().default(sql`1`),

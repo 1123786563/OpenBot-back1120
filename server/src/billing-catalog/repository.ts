@@ -70,6 +70,13 @@ export interface ScopeKey {
 export interface PublishReleaseInput extends ScopeKey {
   effectiveFromUs: bigint;
   effectiveToUs: bigint | null;
+  /**
+   * The BASIC-tier quota version of this release: the base resource ceilings
+   * every account of the scope carries regardless of subscription. A release
+   * cannot go on sale without it — missing base ceilings are an unfillable
+   * promise, exactly like a missing price.
+   */
+  basicQuotaVersionId: string;
   /** product_version_id -> price_version_id for this release. */
   items: {
     productVersionId: string;
@@ -258,9 +265,22 @@ export async function publishRelease(
     );
   }
   return db.transaction(async (tx) => {
-    // Serialize publishes per scope so interval bookkeeping cannot race.
+    // Serialize publishes per scope so interval bookkeeping cannot race. The
+    // SAME scope lock is taken by every freeze trigger (see migration 0095),
+    // so a concurrent guarded content write blocks until this transaction
+    // commits — validation and commit are atomic against catalog writes.
     const slot = `${input.organizationId}|${input.billingAccountId ?? "-"}|${input.environment}`;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${slot}))`);
+
+    // The release-level BASIC quota: validated with the same strictness as
+    // the per-product bindings, inside the same serialized transaction.
+    const basicQuota = await loadQuotaVersion(
+      tx,
+      input.basicQuotaVersionId,
+      input,
+      "basic",
+      "release basic quota version",
+    );
 
     const seen = new Set<string>();
     const seenProductIds = new Set<string>();
@@ -324,24 +344,13 @@ export async function publishRelease(
         toUs: input.effectiveToUs,
       });
       if (item.quotaVersionId !== null) {
-        const [quota] = await tx
-          .select()
-          .from(billingQuotaVersions)
-          .where(eq(billingQuotaVersions.id, item.quotaVersionId));
-        if (!quota) {
-          throw new CatalogConfigurationError(
-            `quota version ${item.quotaVersionId} does not exist`,
-          );
-        }
-        if (
-          quota.organizationId !== input.organizationId ||
-          quota.billingAccountId !== input.billingAccountId ||
-          quota.environment !== input.environment
-        ) {
-          throw new CatalogConfigurationError(
-            `quota version ${item.quotaVersionId} is outside the release scope`,
-          );
-        }
+        const quota = await loadQuotaVersion(
+          tx,
+          item.quotaVersionId,
+          input,
+          "subscription",
+          "quota version",
+        );
         if (
           product.productType !== "monthly_plan" ||
           product.quotaVersionId === null
@@ -355,12 +364,6 @@ export async function publishRelease(
             `release quota ${quota.id} diverges from the product version's own quota reference`,
           );
         }
-        if (quota.status !== "active") {
-          throw new CatalogConfigurationError(
-            `quota version ${quota.id} is ${quota.status}; only an active quota may enter a release`,
-          );
-        }
-        validateQuotaSpec(quota.spec);
       } else if (product.productType === "monthly_plan") {
         throw new CatalogConfigurationError(
           `monthly plan ${product.productId} needs its quota version in the release`,
@@ -430,6 +433,18 @@ export async function publishRelease(
       }
     }
 
+    // The basic quota is part of the release's CONTENT: its id, revision and
+    // spec all feed the digest so selection can detect drift on the base
+    // ceilings exactly like on a price.
+    digestParts.push(
+      JSON.stringify([
+        "basic_quota",
+        basicQuota.id,
+        basicQuota.revision.toString(),
+        basicQuota.tier,
+        basicQuota.spec,
+      ]),
+    );
     const digest = hashDigest(digestParts.sort());
     const [release] = await tx
       .insert(billingCatalogReleases)
@@ -440,6 +455,7 @@ export async function publishRelease(
         effectiveFromUs: input.effectiveFromUs,
         effectiveToUs: input.effectiveToUs,
         contentDigest: digest,
+        basicQuotaVersionId: basicQuota.id,
         status: "active",
         createdAtUs: input.createdAtUs,
         updatedAtUs: input.createdAtUs,
@@ -495,6 +511,8 @@ export async function publishRelease(
 }
 
 const QUOTA_KEYS = ["concurrent_runs", "automatic_task_seats"] as const;
+/** Contract decimal lexeme: a quota limit is never "1e3", " 5" or "+5". */
+const QUOTA_LIMIT_RE = /^(0|[1-9][0-9]{0,18})$/;
 
 export function validateQuotaSpec(spec: BillingQuotaSpec): void {
   if (!Array.isArray(spec.quotas) || spec.quotas.length === 0) {
@@ -515,8 +533,13 @@ export function validateQuotaSpec(spec: BillingQuotaSpec): void {
       );
     }
     seen.add(q.resource_key);
+    if (typeof q.limit !== "string" || !QUOTA_LIMIT_RE.test(q.limit)) {
+      throw new CatalogConfigurationError(
+        `quota limit ${String(q.limit)} is not a contract decimal lexeme`,
+      );
+    }
     const limit = BigInt(q.limit);
-    if (limit < 0n || limit > 9223372036854775807n) {
+    if (limit > 9223372036854775807n) {
       throw new CatalogConfigurationError(
         `quota limit ${q.limit} outside the int64 range`,
       );
@@ -525,6 +548,68 @@ export function validateQuotaSpec(spec: BillingQuotaSpec): void {
       throw new CatalogConfigurationError(`quota unit must be count`);
     }
   }
+}
+
+/**
+ * A quota version entering (or keeping serving) a release must carry the
+ * WHOLE closed key set exactly once — the base ceilings are a bundle, and a
+ * quota missing `automatic_task_seats` (for example) is not a smaller quota,
+ * it is a missing entitlement.
+ */
+function assertCompleteQuotaContent(
+  id: string,
+  tier: "basic" | "subscription",
+  spec: BillingQuotaSpec,
+): void {
+  validateQuotaSpec(spec);
+  for (const key of QUOTA_KEYS) {
+    if (!spec.quotas.some((q) => q.resource_key === key)) {
+      throw new CatalogConfigurationError(
+        `${tier} quota version ${id} does not define required quota ${key}`,
+      );
+    }
+  }
+}
+
+/**
+ * Resolve and validate the quota version a release or product references:
+ * same scope, active, the expected tier, and the complete closed key set.
+ */
+async function loadQuotaVersion(
+  tx: TxLike,
+  id: string,
+  scope: ScopeKey,
+  expectedTier: "basic" | "subscription",
+  role: string,
+) {
+  const [quota] = await tx
+    .select()
+    .from(billingQuotaVersions)
+    .where(eq(billingQuotaVersions.id, id));
+  if (!quota) {
+    throw new CatalogConfigurationError(`${role} ${id} does not exist`);
+  }
+  if (
+    quota.organizationId !== scope.organizationId ||
+    quota.billingAccountId !== scope.billingAccountId ||
+    quota.environment !== scope.environment
+  ) {
+    throw new CatalogConfigurationError(
+      `${role} ${id} is outside the release scope (cross-scope references are rejected)`,
+    );
+  }
+  if (quota.status !== "active") {
+    throw new CatalogConfigurationError(
+      `${role} ${id} is ${quota.status}; only an active quota may enter a release`,
+    );
+  }
+  if (quota.tier !== expectedTier) {
+    throw new CatalogConfigurationError(
+      `${role} ${id} has tier ${quota.tier}, but this binding requires a ${expectedTier}-tier quota`,
+    );
+  }
+  assertCompleteQuotaContent(quota.id, quota.tier, quota.spec);
+  return quota;
 }
 
 export type SelectedRelease = Awaited<ReturnType<typeof selectReleaseForQuote>>;
@@ -546,6 +631,7 @@ export async function selectReleaseForQuote(
         id: string;
         contentDigest: string;
         scopeIsAccountSpecific: boolean;
+        basicQuota: typeof billingQuotaVersions.$inferSelect | null;
         items: {
           productVersion: typeof billingProductVersions.$inferSelect;
           priceVersion: typeof billingPriceVersions.$inferSelect;
@@ -646,6 +732,7 @@ async function resolveReleaseItems(
         id: string;
         contentDigest: string;
         scopeIsAccountSpecific: boolean;
+        basicQuota: typeof billingQuotaVersions.$inferSelect | null;
         items: {
           productVersion: typeof billingProductVersions.$inferSelect;
           priceVersion: typeof billingPriceVersions.$inferSelect;
@@ -662,6 +749,34 @@ async function resolveReleaseItems(
     .from(billingCatalogReleases)
     .where(eq(billingCatalogReleases.id, releaseId));
   if (!release) return { ok: false, reason: "release_vanished" };
+  // The release-level basic quota: history mode resolves it for the snapshot
+  // (missing is answered null by the caller); selection mode REQUIRES it —
+  // a release without base ceilings is not sellable.
+  const [basicQuota] = release.basicQuotaVersionId
+    ? await db
+        .select()
+        .from(billingQuotaVersions)
+        .where(eq(billingQuotaVersions.id, release.basicQuotaVersionId))
+    : [];
+  if (mode === "selection") {
+    if (
+      basicQuota?.status !== "active" ||
+      (() => {
+        try {
+          assertCompleteQuotaContent(
+            basicQuota.id,
+            basicQuota.tier,
+            basicQuota.spec,
+          );
+        } catch {
+          return true;
+        }
+        return basicQuota.tier !== "basic";
+      })()
+    ) {
+      return { ok: false, reason: "release_incomplete" };
+    }
+  }
   const items = await db
     .select()
     .from(billingCatalogReleaseItems)
@@ -738,6 +853,26 @@ async function resolveReleaseItems(
       ) {
         return { ok: false, reason: "release_incomplete" };
       }
+      // The subscription quota a monthly plan sells must be a complete
+      // SUBSCRIPTION-tier quota — a basic-tier binding or a quota missing one
+      // of the closed keys is an unfillable entitlement, never a smaller one.
+      if (quotaVersion !== null) {
+        try {
+          assertCompleteQuotaContent(
+            quotaVersion.id,
+            quotaVersion.tier,
+            quotaVersion.spec,
+          );
+        } catch {
+          return { ok: false, reason: "release_incomplete" };
+        }
+        if (
+          quotaVersion.tier !== "subscription" ||
+          productVersion.productType !== "monthly_plan"
+        ) {
+          return { ok: false, reason: "release_incomplete" };
+        }
+      }
       if (
         runCap.capMicrocredits !== priceVersion.defaultRootRunCapMicrocredits
       ) {
@@ -758,27 +893,35 @@ async function resolveReleaseItems(
       id: release.id,
       contentDigest: release.contentDigest,
       scopeIsAccountSpecific: release.billingAccountId !== null,
+      basicQuota: basicQuota ?? null,
       items: resolved,
     },
   };
 }
 
 /**
- * Historical replay: resolve ANY price version by id regardless of status or
- * effective interval. Retired versions stay quotable forever — pinned steps
- * and orders recompute their exact cost from the same rows after restarts,
- * repricing and retirement. A version of another organization is invisible
- * (resource_not_found at the service boundary, never an existence leak), and
- * so is a version scoped to another billing account: `allowedBillingAccountIds`
- * carries the caller's trusted account authorization (null = unrestricted
- * within the organization); a version bound to an account outside it answers
- * null exactly like a missing row.
+ * Historical replay: resolve a PUBLISHED price version by id regardless of
+ * its current status or effective interval. "Published" means some release
+ * has pinned it at least once — a draft, a never-released future version or
+ * another environment's configuration was never a sellable price, and replay
+ * refuses it exactly like a missing row (no existence leak). Retired versions
+ * stay quotable forever — pinned steps and orders recompute their exact cost
+ * from the same rows after restarts, repricing and retirement. A version of
+ * another organization is invisible (resource_not_found at the service
+ * boundary, never an existence leak), and so is a version scoped to another
+ * billing account: `allowedBillingAccountIds` carries the caller's trusted
+ * account authorization (null = unrestricted within the organization); a
+ * version bound to an account outside it answers null exactly like a missing
+ * row. `environment` is the caller's trusted deployment environment: a
+ * production settlement never replays a test-environment price (and a test
+ * run never replays production prices).
  */
 export async function loadPriceVersionForReplay(
   db: DatabaseLike,
   organizationId: string,
   priceVersionId: string,
   allowedBillingAccountIds: string[] | null,
+  environment: ScopeKey["environment"],
 ): Promise<{
   priceVersion: typeof billingPriceVersions.$inferSelect;
   resources: (typeof billingPriceResources.$inferSelect)[];
@@ -800,10 +943,31 @@ export async function loadPriceVersionForReplay(
       and(
         eq(billingPriceVersions.id, priceVersionId),
         eq(billingPriceVersions.organizationId, organizationId),
+        eq(billingPriceVersions.environment, environment),
         ...(accountFilter ? [accountFilter] : []),
       ),
     );
   if (!priceVersion) return null;
+  // Replay resolves only versions a release has pinned at least once: an
+  // arbitrary id that was never a sellable configuration must not become one
+  // through the replay path (drafts and never-published future versions are
+  // 404 here, indistinguishable from a missing row).
+  const [pinned] = await db
+    .select({ x: billingCatalogReleaseItems.id })
+    .from(billingCatalogReleaseItems)
+    .innerJoin(
+      billingCatalogReleases,
+      eq(billingCatalogReleases.id, billingCatalogReleaseItems.releaseId),
+    )
+    .where(
+      and(
+        eq(billingCatalogReleaseItems.priceVersionId, priceVersionId),
+        eq(billingCatalogReleases.organizationId, organizationId),
+        eq(billingCatalogReleases.environment, environment),
+      ),
+    )
+    .limit(1);
+  if (!pinned) return null;
   const resources = await db
     .select()
     .from(billingPriceResources)
@@ -847,5 +1011,9 @@ export async function loadReleaseSnapshot(
   if (!release) return null;
   const resolved = await resolveReleaseItems(db, releaseId, "history");
   if (!resolved.ok) return null;
-  return { release, items: resolved.release.items };
+  return {
+    release,
+    basicQuota: resolved.release.basicQuota,
+    items: resolved.release.items,
+  };
 }

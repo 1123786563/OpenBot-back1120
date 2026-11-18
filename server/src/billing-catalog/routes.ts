@@ -28,6 +28,8 @@ type CatalogEnv = {
     trustedOrganizationId: string;
     /** Trusted account authorization: null = unrestricted in the organization. */
     trustedBillingAccountIds: string[] | null;
+    /** Trusted authorization to select explicitly-marked test catalogs. */
+    trustedTestCatalogAuthorized: boolean;
   };
 };
 
@@ -54,6 +56,13 @@ export interface TrustedCredentialVerifierResult {
    * without it is 403 forbidden.
    */
   capabilities?: string[];
+  /**
+   * Whether the credential is trusted to see explicitly-marked TEST catalogs
+   * (environment: "test"). Test configurations are acceptance fixtures by
+   * definition — a credential without this authorization never selects them,
+   * and requesting the test environment is 403 forbidden.
+   */
+  testCatalogAuthorized?: boolean;
 }
 
 export function createBillingCatalogRoutes(deps: {
@@ -87,6 +96,10 @@ export function createBillingCatalogRoutes(deps: {
         ...(fieldErrors ? { field_errors: fieldErrors } : {}),
       },
       status,
+      // The contract declares problem+json; Hono's c.json defaults to
+      // application/json, which would quietly break content-type-sensitive
+      // consumers.
+      { "Content-Type": "application/problem+json" },
     );
   }
 
@@ -132,6 +145,10 @@ export function createBillingCatalogRoutes(deps: {
     }
     c.set("trustedOrganizationId", verdict.organizationId);
     c.set("trustedBillingAccountIds", verdict.billingAccounts ?? null);
+    c.set(
+      "trustedTestCatalogAuthorized",
+      verdict.testCatalogAuthorized === true,
+    );
     await next();
   });
 
@@ -158,6 +175,38 @@ export function createBillingCatalogRoutes(deps: {
       );
     }
     return null;
+  }
+
+  /**
+   * Parse the optional `environment` selector. Defaults to production; the
+   * test environment exists only for explicitly test-authorized credentials
+   * (acceptance fixtures — never a production sale), and a request for it
+   * without that trusted authorization is 403 forbidden.
+   */
+  function parseEnvironment(
+    c: Context<CatalogEnv>,
+    raw: unknown,
+  ): "production" | "test" | Response {
+    if (raw === undefined || raw === null) return "production";
+    if (raw !== "production" && raw !== "test") {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        'environment must be "production" or "test"',
+        [{ field: "environment", issue: "invalid_environment" }],
+      );
+    }
+    if (raw === "test" && !c.get("trustedTestCatalogAuthorized")) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential is not authorized to quote explicitly-marked test configurations.",
+        [{ field: "environment", issue: "forbidden" }],
+      );
+    }
+    return raw;
   }
 
   async function readJson(
@@ -237,16 +286,91 @@ export function createBillingCatalogRoutes(deps: {
     const requestedAccount = typeof rawAccount === "string" ? rawAccount : null;
     const accountCheck = accountForbidden(c, requestedAccount);
     if (accountCheck) return accountCheck;
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
     try {
       const quote = await deps.service.quoteProduct({
         organizationId,
         billingAccountId: requestedAccount,
+        environment,
         productId,
         action,
         expectedPriceVersionId:
           typeof expected === "string" ? expected : undefined,
       });
       return c.json(serializeQuote(quote));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // --------------------------------------------------- current price basis
+  routes.post("/internal/v1/billing/current-prices", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const rawAccount = body.billing_account_id;
+    if (rawAccount !== undefined && rawAccount !== null) {
+      if (typeof rawAccount !== "string" || !UUID_RE.test(rawAccount)) {
+        return problem(
+          c,
+          422,
+          "invalid_integer",
+          "billing_account_id must be a UUID or null",
+          [{ field: "billing_account_id", issue: "not_a_uuid" }],
+        );
+      }
+    }
+    const rawProduct = body.product_id;
+    if (
+      rawProduct !== undefined &&
+      (typeof rawProduct !== "string" || !PRODUCT_ID_RE.test(rawProduct))
+    ) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "product_id must match ^[A-Za-z0-9._:-]{1,128}$",
+        [{ field: "product_id", issue: "invalid_product_id" }],
+      );
+    }
+    const requestedAccount = typeof rawAccount === "string" ? rawAccount : null;
+    const accountCheck = accountForbidden(c, requestedAccount);
+    if (accountCheck) return accountCheck;
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const resolution = await deps.service.resolveCurrentPrice({
+        organizationId,
+        billingAccountId: requestedAccount,
+        environment,
+        productId: typeof rawProduct === "string" ? rawProduct : undefined,
+      });
+      return c.json({
+        sellable: resolution.sellable,
+        ...(resolution.notSellableReason
+          ? { not_sellable_reason: resolution.notSellableReason }
+          : {}),
+        test_only: resolution.testOnly,
+        quoted_at_us: resolution.quotedAtUs,
+        ...(resolution.sellable
+          ? {
+              release_id: resolution.releaseId,
+              release_content_digest: resolution.releaseContentDigest,
+              scope_is_account_specific: resolution.scopeIsAccountSpecific,
+              price_version_id: resolution.priceVersionId,
+              run_cap_version_id: resolution.runCapVersionId,
+              run_cap_microcredits: resolution.runCapMicrocredits,
+              prices: resolution.prices.map((p) => ({
+                resource: p.resource,
+                measurement_unit: p.measurementUnit,
+                unit_size: p.unitSize,
+                numerator: p.numerator,
+                denominator: p.denominator,
+              })),
+            }
+          : {}),
+      });
     } catch (e) {
       return fail(c, e);
     }
@@ -288,11 +412,29 @@ export function createBillingCatalogRoutes(deps: {
         [{ field: "resources", issue: "invalid_resource_vector" }],
       );
     }
+    const expected = body.expected_price_version_id;
+    if (
+      expected !== undefined &&
+      (typeof expected !== "string" || !UUID_RE.test(expected))
+    ) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "expected_price_version_id must be a UUID",
+        [{ field: "expected_price_version_id", issue: "not_a_uuid" }],
+      );
+    }
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
     try {
       const quote = await deps.service.quoteStep({
         organizationId,
         billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
         priceVersionId,
+        expectedPriceVersionId:
+          typeof expected === "string" ? expected : undefined,
         resources: (resources as Record<string, string>[]).map((r) => ({
           resource: r.resource,
           quantity: r.quantity,
@@ -407,12 +549,41 @@ export function createBillingCatalogRoutes(deps: {
         environment: snapshot.environment,
         effective_from_us: snapshot.effectiveFromUs,
         effective_to_us: snapshot.effectiveToUs,
+        basic_quota: snapshot.basicQuota
+          ? {
+              quota_version_id: snapshot.basicQuota.quotaVersionId,
+              tier: snapshot.basicQuota.tier,
+              quotas: snapshot.basicQuota.quotas.map((q) => ({
+                resource_key: q.resource_key,
+                limit: q.limit,
+                unit: q.unit,
+              })),
+            }
+          : null,
         items: snapshot.items.map((item) => ({
           product_version_id: item.productVersionId,
           product_id: item.productId,
           product_type: item.productType,
+          display_name: item.displayName,
+          amount_fen: item.amountFen,
+          currency: item.currency,
+          granted_microcredits: item.grantedMicrocredits,
+          // Contract scalar UnsignedInt64Nullable: a decimal string, never a JS number.
+          period_months:
+            item.periodMonths === null ? null : String(item.periodMonths),
           price_version_id: item.priceVersionId,
           quota_version_id: item.quotaVersionId,
+          quota: item.quota
+            ? {
+                quota_version_id: item.quota.quotaVersionId,
+                tier: item.quota.tier,
+                quotas: item.quota.quotas.map((q) => ({
+                  resource_key: q.resource_key,
+                  limit: q.limit,
+                  unit: q.unit,
+                })),
+              }
+            : null,
           run_cap_version_id: item.runCapVersionId,
           run_cap_microcredits: item.runCapMicrocredits,
           prices: item.prices.map((p) => ({
@@ -479,10 +650,12 @@ function serializeQuote(quote: ProductQuote): Record<string, unknown> {
             amount_fen: s.amountFen,
             currency: s.currency,
             granted_microcredits: s.grantedMicrocredits,
-            period_months: s.periodMonths,
+            period_months:
+              s.periodMonths === null ? null : String(s.periodMonths),
             long_lived: s.longLived,
             price_version_id: s.priceVersionId,
             quota_version_id: s.quotaVersionId,
+            basic_quota_version_id: s.basicQuotaVersionId,
             run_cap_version_id: s.runCapVersionId,
             run_cap_microcredits: s.runCapMicrocredits,
           },

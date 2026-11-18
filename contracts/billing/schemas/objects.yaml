@@ -1713,6 +1713,7 @@ components:
         - effective_from_us
         - effective_to_us
         - content_digest
+        - basic_quota_version_id
         - status
         - items
       additionalProperties: false
@@ -1736,7 +1737,10 @@ components:
           minLength: 64
           maxLength: 128
           pattern: "^[0-9a-f]{64,128}$"
-          description: SHA-256 over the sorted referenced-version content.
+          description: SHA-256 over the sorted referenced-version content, INCLUDING the basic quota below.
+        basic_quota_version_id:
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+          description: The release-level BASIC-tier quota version (base resource ceilings of the scope); null only for releases created before the binding existed, which selection refuses as incomplete.
         status:
           type: string
           enum: [draft, active, retired]
@@ -2027,6 +2031,7 @@ components:
             - long_lived
             - price_version_id
             - quota_version_id
+            - basic_quota_version_id
             - run_cap_version_id
             - run_cap_microcredits
           additionalProperties: false
@@ -2070,6 +2075,9 @@ components:
               $ref: "./scalars.yaml#/components/schemas/Uuid"
             quota_version_id:
               $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+            basic_quota_version_id:
+              $ref: "./scalars.yaml#/components/schemas/Uuid"
+              description: The release's BASIC-tier quota version — the base resource ceilings sold with this product.
             run_cap_version_id:
               $ref: "./scalars.yaml#/components/schemas/Uuid"
             run_cap_microcredits:
@@ -2101,6 +2109,7 @@ components:
             long_lived: true
             price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
             quota_version_id: null
+            basic_quota_version_id: "aa000000-0000-4000-8000-000000000005"
             run_cap_version_id: "aa000000-0000-4000-8000-000000000003"
             run_cap_microcredits: "5000000"
           period_preview: null
@@ -2112,6 +2121,89 @@ components:
             state_revision: "3"
             existing_commitment: null
 
+    CurrentPriceResolution:
+      type: object
+      description: >-
+        The CURRENT published pricing basis for NEW steps, resolved by the
+        SERVER's trusted clock, account authorization and deployment
+        environment — never a caller-chosen version id. Returns the release
+        the clock selects with its pinned price version and default Run cap;
+        the caller uses price_version_id both for the step vector and as the
+        reserved fixed reference recorded on the step. Draft, never-released,
+        foreign-environment and foreign-account configurations can never be
+        resolved here; an absent or incomplete release answers sellable=false
+        with a closed reason, never a zero price. Read-only observation.
+      required: [sellable, test_only, quoted_at_us, prices]
+      additionalProperties: false
+      properties:
+        sellable:
+          type: boolean
+        not_sellable_reason:
+          $ref: "#/components/schemas/SellabilityReason"
+          description: Present exactly when sellable=false.
+        test_only:
+          type: boolean
+          description: True when the resolved release is explicitly test-only.
+        quoted_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+        release_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: Present exactly when sellable=true.
+        release_content_digest:
+          type: string
+          minLength: 64
+          maxLength: 128
+          pattern: "^[0-9a-f]{64,128}$"
+          description: Present exactly when sellable=true.
+        scope_is_account_specific:
+          type: boolean
+          description: Present exactly when sellable=true.
+        price_version_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: The pinned price version NEW steps must quote (and reserve).
+        run_cap_version_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        run_cap_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+        prices:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [resource, measurement_unit, unit_size, numerator, denominator]
+            additionalProperties: false
+            properties:
+              resource:
+                $ref: "#/components/schemas/ResourceKind"
+              measurement_unit:
+                $ref: "#/components/schemas/MeasurementUnit"
+              unit_size:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              numerator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              denominator:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+      examples:
+        - sellable: true
+          test_only: false
+          quoted_at_us: "1700003600000000"
+          release_id: "aa000000-0000-4000-8000-000000000004"
+          release_content_digest: "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182"
+          scope_is_account_specific: false
+          price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+          run_cap_version_id: "aa000000-0000-4000-8000-000000000003"
+          run_cap_microcredits: "5000000"
+          prices:
+            - resource: model_input_tokens
+              measurement_unit: token
+              unit_size: "1"
+              numerator: "1"
+              denominator: "1000000"
+
     StepQuote:
       type: object
       description: >-
@@ -2119,7 +2211,12 @@ components:
         version. All resources are summed as ONE exact rational and rounded
         exactly once (HALF_UP to whole microcredits) — never per token, per
         line or per stream fragment. The full pricing basis is echoed so the
-        total can be recomputed offline.
+        total can be recomputed offline. Only versions a release has pinned
+        at least once are quotable — draft, never-released and
+        foreign-environment configurations answer 404 like a missing row; an
+        expected_price_version_id that diverges from the quoted version is 409
+        price_version_conflict (a step is always recomputed against its own
+        reserved fixed reference).
       required: [price_version_id, rounding, lines, total_microcredits, total_display]
       additionalProperties: false
       properties:
@@ -2239,9 +2336,49 @@ components:
               second: 15
               microsecond: 123456
 
+    QuotaContent:
+      type: object
+      description: The full content of one quota version — tier plus every closed-key ceiling, so a sold entitlement can be reconstructed from the snapshot alone.
+      required: [quota_version_id, tier, quotas]
+      additionalProperties: false
+      properties:
+        quota_version_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        tier:
+          type: string
+          enum: [basic, subscription]
+        quotas:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: object
+            required: [resource_key, limit, unit]
+            additionalProperties: false
+            properties:
+              resource_key:
+                type: string
+                enum: [concurrent_runs, automatic_task_seats]
+              limit:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+              unit:
+                type: string
+                const: count
+      examples:
+        - quota_version_id: "aa000000-0000-4000-8000-000000000005"
+          tier: basic
+          quotas:
+            - resource_key: concurrent_runs
+              limit: "2"
+              unit: count
+            - resource_key: automatic_task_seats
+              limit: "10"
+              unit: count
+
     CatalogVersionSnapshot:
       type: object
-      description: Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price.
+      description: Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price. The snapshot carries the release's basic quota and every item's full commerce content (price, granted credits and quota), so a historical quote can be recomputed AND its sold entitlement reconstructed from this response alone.
       required:
         - release_id
         - content_digest
@@ -2249,6 +2386,7 @@ components:
         - environment
         - effective_from_us
         - effective_to_us
+        - basic_quota
         - items
       additionalProperties: false
       properties:
@@ -2268,6 +2406,11 @@ components:
           $ref: "./scalars.yaml#/components/schemas/TimestampUs"
         effective_to_us:
           $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
+        basic_quota:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/QuotaContent"
+          description: The release's BASIC-tier quota content (the base resource ceilings of the scope); null only for releases created before the basic-quota binding existed.
         items:
           type: array
           minItems: 1
@@ -2277,8 +2420,14 @@ components:
               - product_version_id
               - product_id
               - product_type
+              - display_name
+              - amount_fen
+              - currency
+              - granted_microcredits
+              - period_months
               - price_version_id
               - quota_version_id
+              - quota
               - run_cap_version_id
               - run_cap_microcredits
               - prices
@@ -2294,10 +2443,28 @@ components:
               product_type:
                 type: string
                 enum: [monthly_plan, credit_pack]
+              display_name:
+                type: string
+                minLength: 1
+                maxLength: 200
+              amount_fen:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/Fen"
+              currency:
+                $ref: "./scalars.yaml#/components/schemas/CurrencyCode"
+              granted_microcredits:
+                $ref: "./scalars.yaml#/components/schemas/MicrocreditsNullable"
+              period_months:
+                $ref: "./scalars.yaml#/components/schemas/UnsignedInt64Nullable"
               price_version_id:
                 $ref: "./scalars.yaml#/components/schemas/Uuid"
               quota_version_id:
                 $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+              quota:
+                oneOf:
+                  - type: "null"
+                  - $ref: "#/components/schemas/QuotaContent"
+                description: The SUBSCRIPTION-tier quota content this monthly plan sold; null for credit packs.
               run_cap_version_id:
                 $ref: "./scalars.yaml#/components/schemas/Uuid"
               run_cap_microcredits:

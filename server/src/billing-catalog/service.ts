@@ -72,6 +72,10 @@ export interface BillingCatalogService {
     input: PublishReleaseInput,
   ): Promise<{ id: string; contentDigest: string }>;
   quoteProduct(input: QuoteProductInput): Promise<ProductQuote>;
+  /** The CURRENT published unit prices + default Run cap for new steps. */
+  resolveCurrentPrice(
+    input: ResolveCurrentPriceInput,
+  ): Promise<CurrentPriceResolution>;
   quoteStep(input: QuoteStepInput): Promise<StepQuote>;
   queryPeriod(input: QueryPeriodInput): Promise<PeriodAnswer>;
   getCatalogVersion(input: {
@@ -85,12 +89,51 @@ export interface BillingCatalogService {
 export interface QuoteProductInput {
   organizationId: string;
   billingAccountId: string | null;
+  /**
+   * The deployment environment to quote against: production (the default)
+   * or an explicitly test-authorized test catalog. A production sale never
+   * selects a test release and vice versa.
+   */
+  environment?: "production" | "test";
   productId: string;
   /** The purchase action the order service intends; eligibility is evaluated for it. */
   action: "initial_purchase" | "renewal" | "change_tier";
   /** Optional client-chosen version; a divergence from the selected release is 409. */
   expectedPriceVersionId?: string;
   includeEligibility?: boolean;
+}
+
+export interface ResolveCurrentPriceInput {
+  organizationId: string;
+  billingAccountId: string | null;
+  /** The deployment environment to resolve (test requires trusted authorization). */
+  environment?: "production" | "test";
+  /**
+   * Optional product to resolve the pinned price for. Absent, every item of
+   * the release must pin the SAME price version, and that shared version is
+   * resolved; a divergent catalog fails closed.
+   */
+  productId?: string;
+}
+
+export interface CurrentPriceResolution {
+  sellable: boolean;
+  notSellableReason?: string;
+  testOnly: boolean;
+  releaseId?: string;
+  releaseContentDigest?: string;
+  scopeIsAccountSpecific?: boolean;
+  priceVersionId?: string;
+  runCapVersionId?: string;
+  runCapMicrocredits?: string;
+  prices: {
+    resource: string;
+    measurementUnit: string;
+    unitSize: string;
+    numerator: string;
+    denominator: string;
+  }[];
+  quotedAtUs: string;
 }
 
 export interface SellableSnapshot {
@@ -108,6 +151,7 @@ export interface SellableSnapshot {
   longLived: boolean;
   priceVersionId: string;
   quotaVersionId: string | null;
+  basicQuotaVersionId: string;
   runCapVersionId: string;
   runCapMicrocredits: string;
 }
@@ -138,7 +182,17 @@ export interface QuoteStepInput {
    * another account is invisible, exactly like a cross-organization one.
    */
   billingAccountIds: string[] | null;
+  /** The caller's trusted deployment environment; foreign-environment versions are invisible. */
+  environment?: "production" | "test";
   priceVersionId: string;
+  /**
+   * The RESERVED fixed reference recorded on the step/reservation when the
+   * step was priced. When present it must equal price_version_id — replaying
+   * (or settling) a step against any other version is 409
+   * price_version_conflict, so a settlement can never silently reprice a
+   * pinned step under a different configuration.
+   */
+  expectedPriceVersionId?: string;
   /** Final merged resource vector for one step: resource -> quantity string. */
   resources: { resource: string; quantity: string }[];
 }
@@ -194,12 +248,27 @@ export interface CatalogVersionSnapshot {
   environment: string;
   effectiveFromUs: string;
   effectiveToUs: string | null;
+  basicQuota: {
+    quotaVersionId: string;
+    tier: string;
+    quotas: { resource_key: string; limit: string; unit: string }[];
+  } | null;
   items: {
     productVersionId: string;
     productId: string;
     productType: string;
+    displayName: string;
+    amountFen: string;
+    currency: string;
+    grantedMicrocredits: string | null;
+    periodMonths: number | null;
     priceVersionId: string;
     quotaVersionId: string | null;
+    quota: {
+      quotaVersionId: string;
+      tier: string;
+      quotas: { resource_key: string; limit: string; unit: string }[];
+    } | null;
     runCapVersionId: string;
     runCapMicrocredits: string;
     prices: {
@@ -210,6 +279,27 @@ export interface CatalogVersionSnapshot {
       denominator: string;
     }[];
   }[];
+}
+
+/** Serialize a quota spec into the contract's closed quota-content shape. */
+function serializeQuotaContent(
+  quotaVersionId: string,
+  tier: string,
+  spec: { quotas: { resource_key: string; limit: string; unit: string }[] },
+): {
+  quotaVersionId: string;
+  tier: string;
+  quotas: { resource_key: string; limit: string; unit: string }[];
+} {
+  return {
+    quotaVersionId,
+    tier,
+    quotas: spec.quotas.map((q) => ({
+      resource_key: q.resource_key,
+      limit: q.limit,
+      unit: q.unit,
+    })),
+  };
 }
 
 export class CatalogServiceError extends Error {
@@ -270,7 +360,7 @@ export function createBillingCatalogService(deps: {
       const scope: ScopeKey = {
         organizationId: input.organizationId,
         billingAccountId: input.billingAccountId,
-        environment: "production",
+        environment: input.environment ?? "production",
       };
       let selection: Awaited<ReturnType<typeof selectReleaseForQuote>>;
       try {
@@ -279,7 +369,11 @@ export function createBillingCatalogService(deps: {
         throw mapStorageError(e);
       }
       const quotedAtUs = now.toString();
-      const testOnly = false;
+      // The test-only marker reflects the environment the release was
+      // actually selected from: a test-authorized quote of a test catalog
+      // carries test_only=true so a test number can never masquerade as a
+      // production price downstream.
+      const testOnly = (input.environment ?? "production") === "test";
       if (!selection.ok) {
         return {
           sellable: false,
@@ -319,6 +413,16 @@ export function createBillingCatalogService(deps: {
           quotedAtUs,
         };
       }
+      if (!selection.release.basicQuota) {
+        // Selection mode rejects this closed; the guard is defensive for
+        // type-narrowing only.
+        return {
+          sellable: false,
+          notSellableReason: "release_incomplete",
+          testOnly,
+          quotedAtUs,
+        };
+      }
       const snapshot: SellableSnapshot = {
         releaseId: selection.release.id,
         releaseContentDigest: selection.release.contentDigest,
@@ -337,6 +441,7 @@ export function createBillingCatalogService(deps: {
         longLived: item.productVersion.productType === "credit_pack",
         priceVersionId: item.priceVersion.id,
         quotaVersionId: item.quotaVersion?.id ?? null,
+        basicQuotaVersionId: selection.release.basicQuota.id,
         runCapVersionId: item.runCap.id,
         runCapMicrocredits: item.runCap.capMicrocredits.toString(),
       };
@@ -392,12 +497,102 @@ export function createBillingCatalogService(deps: {
       };
     },
 
+    async resolveCurrentPrice(input) {
+      const now = clock.nowUs();
+      const scope: ScopeKey = {
+        organizationId: input.organizationId,
+        billingAccountId: input.billingAccountId,
+        environment: input.environment ?? "production",
+      };
+      let selection: Awaited<ReturnType<typeof selectReleaseForQuote>>;
+      try {
+        selection = await selectReleaseForQuote(database, scope, now);
+      } catch (e) {
+        throw mapStorageError(e);
+      }
+      const quotedAtUs = now.toString();
+      const testOnly = (input.environment ?? "production") === "test";
+      if (!selection.ok) {
+        return {
+          sellable: false,
+          notSellableReason: selection.reason,
+          testOnly,
+          prices: [],
+          quotedAtUs,
+        };
+      }
+      let item = selection.release.items[0];
+      if (input.productId !== undefined) {
+        const found = selection.release.items.find(
+          (i) => i.productVersion.productId === input.productId,
+        );
+        if (!found) {
+          return {
+            sellable: false,
+            notSellableReason: "product_not_in_release",
+            testOnly,
+            prices: [],
+            quotedAtUs,
+          };
+        }
+        item = found;
+      } else {
+        // One price per step basis: a release whose items pin different price
+        // versions has no single current price to resolve — fail closed.
+        const version = selection.release.items[0].priceVersion.id;
+        if (
+          selection.release.items.some((i) => i.priceVersion.id !== version)
+        ) {
+          return {
+            sellable: false,
+            notSellableReason: "ambiguous_release_configuration",
+            testOnly,
+            prices: [],
+            quotedAtUs,
+          };
+        }
+      }
+      return {
+        sellable: true,
+        testOnly,
+        releaseId: selection.release.id,
+        releaseContentDigest: selection.release.contentDigest,
+        scopeIsAccountSpecific: selection.release.scopeIsAccountSpecific,
+        priceVersionId: item.priceVersion.id,
+        runCapVersionId: item.runCap.id,
+        runCapMicrocredits: item.runCap.capMicrocredits.toString(),
+        prices: item.priceResources
+          .slice()
+          .sort((a, b) => (a.resource < b.resource ? -1 : 1))
+          .map((r) => ({
+            resource: r.resource,
+            measurementUnit: r.measurementUnit,
+            unitSize: r.unitSize.toString(),
+            numerator: r.numerator.toString(),
+            denominator: r.denominator.toString(),
+          })),
+        quotedAtUs,
+      };
+    },
+
     async quoteStep(input) {
       if (input.resources.length === 0) {
         throw new CatalogServiceError(
           "out_of_range",
           "a step quote requires at least one resource line",
           "resources",
+        );
+      }
+      if (
+        input.expectedPriceVersionId !== undefined &&
+        input.expectedPriceVersionId !== input.priceVersionId
+      ) {
+        // The reserved fixed reference recorded at pricing time is the ONLY
+        // version a step may be (re)computed against; a divergence means the
+        // caller is trying to price the step under another configuration.
+        throw new CatalogServiceError(
+          "price_version_conflict",
+          `step is pinned to reserved price version ${input.expectedPriceVersionId}; quoting ${input.priceVersionId} would reprice it`,
         );
       }
       let replay: Awaited<ReturnType<typeof loadPriceVersionForReplay>>;
@@ -407,6 +602,7 @@ export function createBillingCatalogService(deps: {
           input.organizationId,
           input.priceVersionId,
           input.billingAccountIds,
+          input.environment ?? "production",
         );
       } catch (e) {
         throw mapStorageError(e);
@@ -414,7 +610,7 @@ export function createBillingCatalogService(deps: {
       if (!replay) {
         throw new CatalogServiceError(
           "resource_not_found",
-          `price version ${input.priceVersionId} does not exist in this organization`,
+          `no published price version ${input.priceVersionId} is quotable in this organization and environment`,
         );
       }
       const priced = new Map(
@@ -551,12 +747,32 @@ export function createBillingCatalogService(deps: {
         environment: snapshot.release.environment,
         effectiveFromUs: snapshot.release.effectiveFromUs.toString(),
         effectiveToUs: snapshot.release.effectiveToUs?.toString() ?? null,
+        basicQuota: snapshot.basicQuota
+          ? serializeQuotaContent(
+              snapshot.basicQuota.id,
+              snapshot.basicQuota.tier,
+              snapshot.basicQuota.spec,
+            )
+          : null,
         items: snapshot.items.map((item) => ({
           productVersionId: item.productVersion.id,
           productId: item.productVersion.productId,
           productType: item.productVersion.productType,
+          displayName: item.productVersion.displayName,
+          amountFen: item.productVersion.priceFen.toString(),
+          currency: item.productVersion.currency,
+          grantedMicrocredits:
+            item.productVersion.grantedMicrocredits?.toString() ?? null,
+          periodMonths: item.productVersion.periodMonths ?? null,
           priceVersionId: item.priceVersion.id,
           quotaVersionId: item.quotaVersion?.id ?? null,
+          quota: item.quotaVersion
+            ? serializeQuotaContent(
+                item.quotaVersion.id,
+                item.quotaVersion.tier,
+                item.quotaVersion.spec,
+              )
+            : null,
           runCapVersionId: item.runCap.id,
           runCapMicrocredits: item.runCap.capMicrocredits.toString(),
           prices: item.priceResources.map((r) => ({

@@ -367,7 +367,7 @@ async function catalogPhase(runId: string): Promise<number> {
     }
     if (!migrated)
       throw new Error(`migrations never applied: ${migrateDetail}`);
-    ok(true, "migrations applied (0000..0093 including billing catalog)");
+    ok(true, "migrations applied (0000..0095 including billing catalog)");
 
     const test = sh(
       `TEST_DATABASE_URL=${url} bun test ` +
@@ -500,6 +500,8 @@ async function lagoPhase(
       return { code: Number(r.out.trim() || "0"), out: out.out };
     };
 
+    let windowStartSec = NaN;
+    let windowEndSec = NaN;
     const customer = `cust_${runId}`;
     const c = api("/api/v1/customers", {
       customer: {
@@ -574,19 +576,85 @@ async function lagoPhase(
       detail: sub.out.slice(0, 120),
     });
 
-    // Two events across a Beijing period boundary, 1 microsecond apart, with
-    // the ORIGINAL integer microseconds carried in properties (occurrence_us)
-    // and decimal epoch seconds derived from the SAME integer -- never a
-    // float round trip.
+    // The subscription's CURRENT billing window, read back from Lago itself,
+    // so the events below land INSIDE the window that the zero-receivable
+    // assertion later queries (a stale/empty window cannot pass by accident).
+    const subRead = api(
+      `/api/v1/subscriptions?external_customer_id=${customer}`,
+    );
+    let windowOk = false;
+    try {
+      const subs =
+        (
+          JSON.parse(subRead.out) as {
+            subscriptions?: {
+              plan_code?: string;
+              status?: string;
+              current_billing_period_starting_at?: string;
+              current_billing_period_ending_at?: string;
+            }[];
+          }
+        ).subscriptions ?? [];
+      const mine = subs.find(
+        (x) => x.plan_code === planCode && x.status === "active",
+      );
+      // Lago v1.57 names the boundaries current_billing_period_started_at /
+      // _ending_at (calendar-aligned); older builds used _starting_at.
+      const start = mine?.current_billing_period_started_at
+        ? Date.parse(mine.current_billing_period_started_at) / 1000
+        : mine?.current_billing_period_starting_at
+          ? Date.parse(mine.current_billing_period_starting_at) / 1000
+          : NaN;
+      const end = mine?.current_billing_period_ending_at
+        ? Date.parse(mine.current_billing_period_ending_at) / 1000
+        : NaN;
+      windowStartSec = Number.isFinite(start) ? Math.ceil(start) : NaN;
+      windowEndSec = Number.isFinite(end) ? Math.floor(end) - 1 : NaN;
+      windowOk =
+        Number.isFinite(windowStartSec) &&
+        Number.isFinite(windowEndSec) &&
+        windowStartSec <= Date.now() / 1000 &&
+        Date.now() / 1000 <= windowEndSec;
+    } catch {
+      windowOk = false;
+    }
+    steps.push({
+      step: "read current billing window",
+      ok: windowOk,
+      detail: windowOk
+        ? `active window covers now (${windowStartSec}..${windowEndSec})`
+        : subRead.out.slice(0, 200),
+    });
+    if (!windowOk)
+      throw new Error("no active current billing window to meter into");
+
+    // NON-ZERO usage INSIDE the queried window: two events, 1000 tokens each
+    // (2000 aggregated), with the ORIGINAL integer microseconds carried in
+    // properties (occurrence_us) and a decimal epoch seconds timestamp
+    // derived from the SAME integer -- never a float round trip. The zero
+    // amounts asserted below are therefore the answer to REAL nonzero usage,
+    // not to an empty window.
+    // Both instants are in the PAST (now and now-1s): Lago accepts but does
+    // not aggregate a future-dated event, and the live window began when the
+    // subscription started, so both land inside it.
+    const nowSecInt = BigInt(Math.floor(Date.now() / 1000));
     const events: [string, string, string][] = [
-      [`evt_${runId}_before`, "1709170215.123455", "1709170215123455"],
-      [`evt_${runId}_at`, "1709170215.123456", "1709170215123456"],
+      [
+        `evt_${runId}_a`,
+        `${nowSecInt - 1n}`,
+        `${(nowSecInt - 1n) * 1_000_000n}`,
+      ],
+      [`evt_${runId}_b`, `${nowSecInt}`, `${nowSecInt * 1_000_000n}`],
     ];
+    // Events name the SUBSCRIPTION explicitly: Lago routes metering to the
+    // subscription's live window deterministically (a customer-only event is
+    // not attached to the running aggregation).
     for (const [id, ts, us] of events) {
       const e = api("/api/v1/events", {
         event: {
           transaction_id: id,
           external_customer_id: customer,
+          external_subscription_id: `sub_${runId.slice(-8)}`,
           code: "model_input_tokens",
           timestamp: ts,
           properties: { tokens: 1000, occurrence_us: us },
@@ -594,35 +662,103 @@ async function lagoPhase(
       });
       steps.push({
         step: `event ${id}`,
-        ok: e.code === 200 && e.out.includes(id),
+        ok: e.code === 200,
         detail: e.out.slice(0, 120),
       });
     }
 
-    // Full-page rescan: the event ID set must be EXACTLY the two ids.
-    const list = api("/api/v1/events?per_page=100");
-    const gotIds = events.filter(([id]) => list.out.includes(id));
+    // Structured rescan of THIS customer's events: the set must be EXACTLY
+    // the two transaction ids, each carrying the original integer
+    // microseconds and the nonzero field value Lago will aggregate.
+    const list = api(
+      `/api/v1/events?external_customer_id=${customer}&per_page=100`,
+    );
+    let eventSetOk = false;
+    let eventSetDetail = "";
+    try {
+      const parsed = JSON.parse(list.out) as {
+        events?: {
+          transaction_id?: string;
+          code?: string;
+          timestamp?: number | string;
+          properties?: Record<string, unknown>;
+        }[];
+      };
+      const got = parsed.events ?? [];
+      const expected = new Map(events.map(([id, , us]) => [id, us]));
+      const mine = got.filter((e) => expected.has(e.transaction_id ?? ""));
+      eventSetOk =
+        got.length === 2 &&
+        mine.length === 2 &&
+        mine.every(
+          (e) =>
+            e.code === "model_input_tokens" &&
+            e.properties?.tokens === 1000 &&
+            String(e.properties?.occurrence_us) ===
+              expected.get(e.transaction_id ?? ""),
+        );
+      eventSetDetail = `exact set of ${mine.length}/2 events, nonzero fields and integer microseconds verified`;
+    } catch (err) {
+      eventSetDetail = `unparseable event list: ${err instanceof Error ? err.message : String(err)}`;
+    }
     steps.push({
-      step: "event set rescan",
-      ok: gotIds.length === 2,
-      detail: `found ${gotIds.length}/2 ids`,
+      step: "structured event set rescan",
+      ok: eventSetOk,
+      detail: eventSetDetail,
     });
 
-    // Zero receivable: no invoices exist and the live period usage totals
-    // 0 CNY while the customer carries nonzero usage events -- Lago
-    // aggregates without a second deduction (ADR 0003).
-    const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
-    const usage = api(
-      `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
-    );
-    const zeroReceivable =
-      inv.out.includes('"total_count":0') &&
-      usage.out.includes('"amount_cents":0') &&
-      usage.out.includes('"total_amount_cents":0');
+    // Zero receivable over NONZERO usage: no invoices exist, the live period
+    // aggregates 2000 units, the currency is CNY and every amount is exactly
+    // 0 -- Lago aggregates without a second deduction (ADR 0003). Lago's
+    // aggregation is asynchronous: poll until the two events show up in the
+    // live window (bounded deadline, never a blind sleep-pass).
+    let zeroReceivable = false;
+    let receivableDetail = "";
+    for (let attempt = 0; attempt < 20 && !zeroReceivable; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
+        const usage = api(
+          `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
+        );
+        const invParsed = JSON.parse(inv.out) as { invoices?: unknown[] };
+        const u = (
+          JSON.parse(usage.out) as {
+            customer_usage?: {
+              currency?: string;
+              amount_cents?: number | string;
+              total_amount_cents?: number | string;
+              charges_usage?: {
+                units?: number | string;
+                billable_metric?: { code?: string };
+                charge?: { code?: string };
+              }[];
+            };
+          }
+        ).customer_usage;
+        const charge = (u?.charges_usage ?? []).find(
+          (c) =>
+            c.billable_metric?.code === "model_input_tokens" ||
+            c.charge?.code === "model_input_tokens",
+        );
+        const units = charge ? Number(charge.units) : NaN;
+        const amountsZero =
+          Number(u?.amount_cents ?? NaN) === 0 &&
+          Number(u?.total_amount_cents ?? NaN) === 0;
+        zeroReceivable =
+          (invParsed.invoices ?? []).length === 0 &&
+          u?.currency === "CNY" &&
+          amountsZero &&
+          units === 2000; // two nonzero events, aggregated WITHOUT deduction
+        receivableDetail = `units=${charge?.units} currency=${u?.currency} amount_cents=${u?.amount_cents} total=${u?.total_amount_cents} invoices=${(invParsed.invoices ?? []).length} (attempt ${attempt + 1})`;
+      } catch (err) {
+        receivableDetail = `unparseable usage answer: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
     steps.push({
-      step: "zero-amount receivable (no second deduction)",
+      step: "nonzero usage -> zero receivable (no second deduction)",
       ok: zeroReceivable,
-      detail: usage.out.slice(0, 160) || `exit ${inv.code}`,
+      detail: receivableDetail || `exit ${inv.code}`,
     });
 
     exit = steps.every((s) => s.ok) ? 0 : 2;
