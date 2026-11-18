@@ -26,7 +26,7 @@
  */
 import { join } from "node:path";
 import postgres from "postgres";
-import { applyMigrations, MigrationsJournal } from "../src/db/apply-migrations";
+import { applyMigrations, MIGRATION_LOCK, MigrationsJournal } from "../src/db/apply-migrations";
 
 export const BILLING_MIGRATIONS_JOURNAL: MigrationsJournal = {
   migrationsSchema: "billing",
@@ -44,7 +44,26 @@ const MIGRATIONS_FOLDER = join(import.meta.dir, "..", "billing-drizzle");
  * blocks UPDATE/DELETE for every role on the append-only history, while the
  * projections the ledger legitimately maintains (account status/revision,
  * credit_lot components/status/revision, outbox_delivery) stay writable.
+ *
+ * Every trigger is ensured by a SINGLE atomic `DO` statement that creates it
+ * only when absent — there is deliberately NO `DROP TRIGGER` here. A
+ * drop-then-recreate split across statements would leave, if the process died
+ * between the two, a database whose journal says "migrated" while its history
+ * sits unprotected. Create-if-absent inside one statement can only leave the
+ * trigger present or untouched, never half-installed.
  */
+function ensureTrigger(table: string, name: string, fn: string, ops: string): string {
+  return `DO $do$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = '${name}' AND tgrelid = 'billing.${table}'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER ${name} ${ops} ON billing.${table}
+    FOR EACH ROW EXECUTE FUNCTION billing.${fn}();
+  END IF;
+END $do$`;
+}
+
 const HARDENING_STATEMENTS: string[] = [
   // append-only history: no UPDATE, no DELETE for ANY role
   `CREATE OR REPLACE FUNCTION billing.refuse_rewrite() RETURNS trigger AS $$
@@ -74,25 +93,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql`,
   ...[
-    ["ledger_event", "billing_ledger_event_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-    ["ledger_line", "billing_ledger_line_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-    ["adjustment", "billing_adjustment_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-    ["business_event", "billing_business_event_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-    ["idempotency", "billing_idempotency_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-    ["outbox_event", "billing_outbox_event_immutable", "refuse_rewrite", "UPDATE OR DELETE"],
-  ].flatMap(([table, name, fn, ops]) => [
-    `DROP TRIGGER IF EXISTS ${name} ON billing.${table}`,
-    `CREATE TRIGGER ${name} BEFORE ${ops} ON billing.${table} FOR EACH ROW EXECUTE FUNCTION billing.${fn}()`,
-  ]),
+    ["ledger_event", "billing_ledger_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["ledger_line", "billing_ledger_line_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["adjustment", "billing_adjustment_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["business_event", "billing_business_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["idempotency", "billing_idempotency_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+    ["outbox_event", "billing_outbox_event_immutable", "refuse_rewrite", "BEFORE UPDATE OR DELETE"],
+  ].map(([table, name, fn, ops]) => ensureTrigger(table, name, fn, ops)),
   // credit_lot: components/status/revision updatable, source identity not; no delete
-  `DROP TRIGGER IF EXISTS billing_credit_lot_source_protected ON billing.credit_lot`,
-  `CREATE TRIGGER billing_credit_lot_source_protected BEFORE UPDATE ON billing.credit_lot FOR EACH ROW EXECUTE FUNCTION billing.refuse_lot_source_rewrite()`,
-  `DROP TRIGGER IF EXISTS billing_credit_lot_immutable ON billing.credit_lot`,
-  `CREATE TRIGGER billing_credit_lot_immutable BEFORE DELETE ON billing.credit_lot FOR EACH ROW EXECUTE FUNCTION billing.refuse_rewrite()`,
+  ensureTrigger(
+    "credit_lot",
+    "billing_credit_lot_source_protected",
+    "refuse_lot_source_rewrite",
+    "BEFORE UPDATE",
+  ),
+  ensureTrigger("credit_lot", "billing_credit_lot_immutable", "refuse_rewrite", "BEFORE DELETE"),
 ];
 
 export async function ensureRuntimeRole(
-  ownerClient: postgres.Sql,
+  ownerClient: Pick<postgres.Sql, "unsafe">,
   password: string,
 ): Promise<void> {
   // A fixed role name; the password is one-time per isolated run and never
@@ -139,12 +158,22 @@ export async function runBillingMigrations(
   const owner = postgres(ownerUrl, { max: 1, onnotice: () => {} });
   try {
     await applyMigrations(owner, MIGRATIONS_FOLDER, BILLING_MIGRATIONS_JOURNAL);
-    for (const stmt of HARDENING_STATEMENTS) {
-      await owner.unsafe(stmt);
-    }
-    if (opts.appPassword) {
-      await ensureRuntimeRole(owner, opts.appPassword);
-    }
+    // Hardening and authorization converge inside ONE transaction that holds
+    // the SAME advisory lock the versioned migration uses: a concurrent or
+    // crashed run can never leave triggers dropped while the journal claims
+    // migrated, and the whole protection surface (functions, triggers, role
+    // grants/revokes) commits or rolls back together.
+    await owner.begin(async (tx) => {
+      await tx.unsafe(
+        `select pg_advisory_xact_lock(hashtextextended('${MIGRATION_LOCK}', 0))`,
+      );
+      for (const stmt of HARDENING_STATEMENTS) {
+        await tx.unsafe(stmt);
+      }
+      if (opts.appPassword) {
+        await ensureRuntimeRole(tx, opts.appPassword);
+      }
+    });
     console.info(
       JSON.stringify({ type: "billing-migrations-applied", status: "ok" }),
     );

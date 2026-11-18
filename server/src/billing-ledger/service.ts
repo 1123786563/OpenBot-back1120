@@ -31,6 +31,14 @@ import * as schema from "./schema.js";
 
 export const SCHEMA_VERSION = "billing.v1";
 
+/**
+ * Compensation lots live 30 days from the moment their grant arrives. The
+ * window is computed by THIS service from its own clock; the request field is
+ * only allowed to echo it (within a small skew tolerance for transport time).
+ */
+export const COMPENSATION_WINDOW_US = 30n * 24n * 60n * 60n * 1_000_000n;
+const COMPENSATION_EXPIRY_TOLERANCE_US = 5n * 60n * 1_000_000n;
+
 /** Contract-mapped failure; `code` is the closed problem+json enum. */
 export class LedgerError extends Error {
   constructor(
@@ -195,13 +203,19 @@ function snakeToCamel(key: string): string {
   return key.replaceAll(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
-/** Deterministic JSON (sorted keys) for normalized content and hashing. */
+/**
+ * Deterministic JSON (sorted keys) for normalized content and hashing.
+ * `undefined` properties are OMITTED (absent ≡ undefined): a literal
+ * `undefined` token would make the output invalid JSON, which is exactly how
+ * the signed cursors became un-decodable on their first real round trip.
+ */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value))
     return `[${value.map(canonicalJson).join(",")}]`;
   const obj = value as Record<string, unknown>;
   return `{${Object.keys(obj)
+    .filter((k) => obj[k] !== undefined)
     .sort()
     .map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`)
     .join(",")}}`;
@@ -476,8 +490,11 @@ export class BillingLedger {
     const actor = requireString(body, "actor_subject_id", false)!;
     if (!ID_RE.test(sourceEventId))
       throw new LedgerError("invalid_integer", "source_event_id violates the identifier lexical rule");
-    if (actor !== credential.subject && !SUBJECT_RE.test(actor))
-      throw new LedgerError("unknown_payer", "actor_subject_id is not a stable subject id");
+    // The audited operator IS the authenticated credential subject. There is
+    // no delegation in this ticket: a trusted credential cannot write history
+    // on behalf of a subject it does not hold.
+    if (actor !== credential.subject)
+      throw new LedgerError("forbidden", "actor_subject_id must be the authenticated credential subject");
     const amount = parseAmount(amountStr, true);
     const validFrom = parseInstant(validFromStr);
     const expiresAt = expiresStr === null ? null : parseInstant(expiresStr);
@@ -579,13 +596,68 @@ export class BillingLedger {
       const nowInTx = this.clock.nowUs();
       await this.materialiseExpiry(tx, acc, nowInTx);
 
-      // 4. Compensation: the original deduction must exist INSIDE this account.
+      // A grant whose expiry instant is already in the past is refused in the
+      // SAME transaction that would have stored it: history never answers a
+      // first response that counts dead credits as spendable.
+      if (sourceType === "subscription" && expiresAt !== null && expiresAt <= nowInTx)
+        throw new LedgerError(
+          "state_conflict",
+          "this grant's expiry has already passed; issue a fresh lot instead of an already-expired one",
+        );
+
+      // 4. Compensation: the original deduction must exist INSIDE this
+      //    account, must actually be a deduction, and the amount cannot
+      //    exceed what that deduction still leaves recoverable. The expiry is
+      //    computed by THIS server (arrival + 30 days), never taken from the
+      //    caller; the original period is the original event's period.
       let originalEvent: EventRow | null = null;
+      let effectiveExpires = expiresAt;
+      let eventPeriodId = sourcePeriodId;
       if (sourceType === "compensation") {
         const rows = await this.eventById(tx, credential.organizationId, accountId, originalEventId!);
         if (rows.length === 0)
           throw new LedgerError("resource_not_found", "original deduction event not found in this account");
         originalEvent = rows[0]!;
+        const consumedLines = await tx<LedgerLineRow[]>`
+          SELECT * FROM billing.ledger_line
+          WHERE event_id = ${originalEvent.id} AND delta_consumed_microcredits > 0
+          ORDER BY lot_id`;
+        if (consumedLines.length === 0)
+          throw new LedgerError(
+            "state_conflict",
+            "the referenced original event is not a deduction; compensation must link an original deduction",
+          );
+        let capacity = 0n;
+        for (const line of consumedLines) {
+          const srcLot = await this.lotById(tx, credential.organizationId, accountId, line.lotId);
+          const taken = BigInt(line.deltaConsumedMicrocredits);
+          capacity += taken < srcLot.consumedMicrocredits ? taken : srcLot.consumedMicrocredits;
+        }
+        const compensatedRows = await tx<{ g: string }[]>`
+          SELECT COALESCE(SUM(granted_microcredits), 0)::text AS g FROM billing.credit_lot
+          WHERE compensation_for_event_id = ${originalEvent.id}`;
+        capacity -= BigInt(compensatedRows[0]!.g);
+        if (amount > capacity)
+          throw new LedgerError(
+            "state_conflict",
+            "compensation exceeds the deduction capacity still recoverable for this original event; nothing was written",
+          );
+        effectiveExpires = nowInTx + COMPENSATION_WINDOW_US;
+        if (validFrom >= effectiveExpires)
+          throw new LedgerError(
+            "state_conflict",
+            "valid_from lies beyond the server-computed compensation expiry",
+          );
+        if (
+          expiresAt === null ||
+          expiresAt < effectiveExpires - COMPENSATION_EXPIRY_TOLERANCE_US ||
+          expiresAt > effectiveExpires + COMPENSATION_EXPIRY_TOLERANCE_US
+        )
+          throw new LedgerError(
+            "state_conflict",
+            "compensation expiry is computed by the server as grant arrival + 30 days; the request value must match it",
+          );
+        eventPeriodId = originalEvent.originalPeriodId;
       }
 
       // 5. Lot + ledger event + line + outbox + first-result + idempotency.
@@ -598,7 +670,7 @@ export class BillingLedger {
            granted_microcredits, available_microcredits, valid_from_us, expires_at_us, status,
            revision, compensation_for_event_id, created_at_us, updated_at_us)
         VALUES (${lotId}, ${credential.organizationId}, ${accountId}, ${sourceType}, ${sourceEventId},
-           ${sourcePeriodId}, ${amount}, ${amount}, ${validFrom}, ${expiresAt}, ${status},
+           ${sourcePeriodId}, ${amount}, ${amount}, ${validFrom}, ${effectiveExpires}, ${status},
            1, ${originalEvent?.id ?? null}, ${nowInTx}, ${nowInTx})
         RETURNING *`;
       const lot = insertLot[0]!;
@@ -608,7 +680,7 @@ export class BillingLedger {
           (id, organization_id, account_id, event_type, account_seq, source_namespace, source_event_id,
            actor_subject_id, original_period_id, occurred_at_us, committed_at_us)
         VALUES (${eventId}, ${credential.organizationId}, ${accountId}, 'credit.granted', ${seq},
-           ${credential.namespace}, ${sourceEventId}, ${actor}, ${sourcePeriodId}, ${validFrom}, ${nowInTx})`;
+           ${credential.namespace}, ${sourceEventId}, ${actor}, ${eventPeriodId}, ${validFrom}, ${nowInTx})`;
       const balancesAfter = this.lotComponents(lot);
       await tx`
         INSERT INTO billing.ledger_line
@@ -621,7 +693,7 @@ export class BillingLedger {
         event_type: "credit.granted",
         ledger_event_id: eventId,
         account_seq: String(seq),
-        original_period_id: sourcePeriodId,
+        original_period_id: eventPeriodId,
         granted_microcredits: amountStr,
         lines: [
           {
@@ -696,8 +768,9 @@ export class BillingLedger {
       throw new LedgerError("invalid_integer", "event identifiers violate the lexical rule");
     if (reason.length === 0 || reason.length > 512)
       throw new LedgerError("invalid_integer", "reason length outside 1..512");
-    if (!SUBJECT_RE.test(actor))
-      throw new LedgerError("unknown_payer", "actor_subject_id is not a stable subject id");
+    // Same subject binding as grants: the audited operator is the credential.
+    if (actor !== credential.subject)
+      throw new LedgerError("forbidden", "actor_subject_id must be the authenticated credential subject");
     if (periodId !== null && !ID_RE.test(periodId))
       throw new LedgerError("invalid_integer", "original_period_id violates the lexical rule");
     const delta = parseDelta(deltaStr);
@@ -782,7 +855,23 @@ export class BillingLedger {
             "idempotency_conflict",
             "this (account, original event, adjustment type) is already posted with different content",
           );
-        const replayBody = await this.adjustmentResult(tx, credential.organizationId, accountId, stored, idem.requestId);
+        // Replay the FIRST stored response snapshot, never a recomputation:
+        // the stored compensation-lot projection would otherwise drift with
+        // the lot's later component/revision changes. Every successful
+        // idempotency row for this scope stores the first body verbatim
+        // (only request_id ever differs), so the earliest row IS that first
+        // response. The rebuild below is a legacy fallback only.
+        const snapRows = await tx<{ response: Record<string, unknown> }[]>`
+          SELECT response FROM billing.idempotency
+          WHERE organization_id = ${credential.organizationId} AND account_id = ${accountId}
+            AND operation = 'createAdjustment'
+            AND logical_resource_id = ${`${originalEventId}+${adjustmentType}`}
+          ORDER BY created_at_us, key
+          LIMIT 1`;
+        const replayBody =
+          snapRows.length > 0
+            ? { ...snapRows[0]!.response, request_id: idem.requestId }
+            : await this.adjustmentResult(tx, credential.organizationId, accountId, stored, idem.requestId);
         await this.recordIdempotency(tx, {
           organizationId: credential.organizationId,
           accountId,
@@ -817,57 +906,66 @@ export class BillingLedger {
 
       if (delta > 0n) {
         // Positive: restore the original deduction's consumed allocations.
+        // Allocation is PER ORIGINAL DEDUCTION LINE: each line limits what it
+        // can give (its consumed delta), so a restoration never exceeds what
+        // that specific deduction took. Expired source lots are never revived
+        // — their per-line share becomes one server-side 30-day compensation
+        // lot. Only the genuinely unmatched remainder rejects the whole
+        // adjustment (zero writes); an expired share alone is compensable.
         const lines = await tx<LedgerLineRow[]>`
           SELECT * FROM billing.ledger_line
           WHERE event_id = ${originalEventId} AND delta_consumed_microcredits > 0
           ORDER BY lot_id`;
         let remaining = delta;
-        let expiredNeed = 0n;
+        let expiredComp = 0n;
+        let unmatched = 0n;
         for (const line of lines) {
           if (remaining === 0n) break;
           const consumed = BigInt(line.deltaConsumedMicrocredits);
-          const take = consumed < remaining ? consumed : remaining;
+          const limit = consumed < remaining ? consumed : remaining;
+          remaining -= limit;
           const lotRows = await this.lotByIdForUpdate(tx, credential.organizationId, accountId, line.lotId);
-          if (lotRows.length === 0) continue;
+          if (lotRows.length === 0) {
+            unmatched += limit;
+            continue;
+          }
           const lot = lotRows[0]!;
-          const expiredNow = lot.expiresAtUs !== null && lot.expiresAtUs <= nowUs;
-          if (expiredNow) {
-            // Expired source: do NOT revive the original lot; a compensation
-            // lot valid 30 days from now takes the whole remaining need.
-            expiredNeed = remaining;
-            remaining = 0n;
+          if (lot.expiresAtUs !== null && lot.expiresAtUs <= nowUs) {
+            // Expired source lot: its recoverable share is compensated with a
+            // fresh lot instead of reviving the expired one.
+            expiredComp += limit;
           } else {
             // Restore consumed -> available within the original lot, limited
             // by the lot's still-consumed amount (a prior compensation may
             // already have restored part of it).
-            const movable = lot.consumedMicrocredits < take ? lot.consumedMicrocredits : take;
+            const movable = lot.consumedMicrocredits < limit ? lot.consumedMicrocredits : limit;
             bump(lot.id, { available: movable, consumed: -movable });
-            remaining -= movable;
+            unmatched += limit - movable;
           }
         }
-        if (remaining > 0n || expiredNeed > 0n) {
-          const shortfall = remaining + expiredNeed;
-          if (shortfall > 0n)
-            throw new LedgerError(
-              "state_conflict",
-              "the original deduction does not carry enough recoverable consumed credits",
-            );
-        }
-        if (expiredNeed > 0n) {
+        // Whatever the event never consumed (or lots that vanished) cannot be
+        // restored from history at all.
+        unmatched += remaining;
+        if (unmatched > 0n)
+          throw new LedgerError(
+            "state_conflict",
+            "the original deduction does not carry enough recoverable consumed credits; nothing was written",
+          );
+        if (expiredComp > 0n) {
           const lotId = randomUUID();
-          const expiresAt = nowUs + 30n * 24n * 60n * 60n * 1_000_000n;
+          const expiresAt = nowUs + COMPENSATION_WINDOW_US;
           const inserted = await tx<LotRow[]>`
             INSERT INTO billing.credit_lot
               (id, organization_id, account_id, source_type, source_event_id, source_period_id,
                granted_microcredits, available_microcredits, valid_from_us, expires_at_us, status,
                revision, compensation_for_event_id, created_at_us, updated_at_us)
             VALUES (${lotId}, ${credential.organizationId}, ${accountId}, 'compensation', ${sourceEventId},
-               ${original.originalPeriodId}, ${expiredNeed}, ${expiredNeed}, ${nowUs}, ${expiresAt}, 'active',
+               ${original.originalPeriodId}, ${expiredComp}, ${expiredComp}, ${nowUs}, ${expiresAt}, 'active',
                1, ${originalEventId}, ${nowUs}, ${nowUs})
             RETURNING *`;
           compensationLotRow = inserted[0]!;
           compensationLotId = lotId;
-          bump(lotId, { granted: expiredNeed, available: expiredNeed });
+          bump(lotId, { granted: expiredComp, available: expiredComp });
         }
       } else if (delta < 0n) {
         // Negative: withdraw revocable available from the original event's
@@ -903,9 +1001,26 @@ export class BillingLedger {
       const adjId = randomUUID();
       const eventId = randomUUID();
       for (const lotId of affectedIds) {
+        const d = deltas.get(lotId)!;
+        // The fresh compensation lot was INSERTed with its final components
+        // (its granted amount is immutable from birth, per the lot trigger),
+        // so it contributes a ledger line but no second UPDATE.
+        if (compensationLotId !== null && lotId === compensationLotId && compensationLotRow) {
+          eventLines.push({
+            lot_id: lotId,
+            delta_granted_microcredits: S(d.granted ?? 0n),
+            delta_available_microcredits: S(d.available ?? 0n),
+            delta_reserved_microcredits: S(d.reserved ?? 0n),
+            delta_refund_frozen_microcredits: S(d.refundFrozen ?? 0n),
+            delta_consumed_microcredits: S(d.consumed ?? 0n),
+            delta_expired_microcredits: S(d.expired ?? 0n),
+            delta_revoked_microcredits: S(d.revoked ?? 0n),
+            balances_after: this.balancesObject(this.lotComponents(compensationLotRow)),
+          });
+          continue;
+        }
         const lotRows = await this.lotByIdForUpdate(tx, credential.organizationId, accountId, lotId);
         const lot = lotRows[0]!;
-        const d = deltas.get(lotId)!;
         const next = {
           granted: lot.grantedMicrocredits + (d.granted ?? 0n),
           available: lot.availableMicrocredits + (d.available ?? 0n),
@@ -1058,8 +1173,12 @@ export class BillingLedger {
         ORDER BY created_at_us, id
         LIMIT ${page.limit + 1}`;
       const hasMore = rows.length > page.limit;
-      const items = rows.slice(0, page.limit).map((r) => this.lotJson(r));
-      const last = hasMore ? rows[page.limit]! : null;
+      const pageRows = rows.slice(0, page.limit);
+      const items = pageRows.map((r) => this.lotJson(r));
+      // The cursor anchors on the LAST ROW ACTUALLY RETURNED; the extra
+      // (limit+1)-th row only proves a next page exists. Anchoring on the
+      // extra row with a strict `>` seek would skip exactly that row.
+      const last = hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1]! : null;
       return {
         items,
         next_cursor:
@@ -1096,9 +1215,10 @@ export class BillingLedger {
         ORDER BY created_at_us, id
         LIMIT ${page.limit + 1}`;
       const hasMore = rows.length > page.limit;
-      const last = hasMore ? rows[page.limit]! : null;
+      const pageRows = rows.slice(0, page.limit);
+      const last = hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1]! : null;
       return {
-        items: rows.slice(0, page.limit).map((r) => this.adjustmentJson(r)),
+        items: pageRows.map((r) => this.adjustmentJson(r)),
         next_cursor:
           last === null
             ? null
@@ -1150,7 +1270,7 @@ export class BillingLedger {
             .map((l) => this.lineJson(l)),
         ),
       );
-      const last = hasMore ? events[page.limit]! : null;
+      const last = hasMore && pageEvents.length > 0 ? pageEvents[pageEvents.length - 1]! : null;
       return {
         items,
         next_cursor:
@@ -1404,12 +1524,16 @@ export class BillingLedger {
     account: Record<string, unknown>,
     nowUs: bigint,
   ): Promise<AccountSnapshot> {
-    // Spendable = available on lots whose validity window covers `now`;
-    // scheduled lots are NOT spendable yet. Summed over numeric so several
-    // bigint terms cannot overflow the int64 aggregate.
+    // Spendable = available on lots whose validity window COVERS `now`
+    // (half-open: arrived, not yet expired); scheduled lots are NOT spendable
+    // yet, and an already-expired instant contributes nothing even before the
+    // expiry projection has run. Reserved/refund-frozen stay in flight
+    // regardless of validity. Summed over numeric so several bigint terms
+    // cannot overflow the int64 aggregate.
     const rows = await tx<Record<string, string>[]>`
       SELECT
-        COALESCE(SUM(available_microcredits) FILTER (WHERE valid_from_us <= ${nowUs}), 0)::text AS avail,
+        COALESCE(SUM(available_microcredits) FILTER (
+          WHERE valid_from_us <= ${nowUs} AND (expires_at_us IS NULL OR expires_at_us > ${nowUs})), 0)::text AS avail,
         COALESCE(SUM(reserved_microcredits), 0)::text AS reserved,
         COALESCE(SUM(refund_frozen_microcredits), 0)::text AS frozen
       FROM billing.credit_lot WHERE account_id = ${account.id}`;

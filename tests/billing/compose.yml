@@ -50,8 +50,12 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 3s
-      retries: 30
+      timeout: 5s
+      # The amd64 images run emulated on arm64 hosts and a busy docker host
+      # can leave single probes hanging long past init; tolerate a long
+      # flapping window instead of declaring a healthy server down.
+      start_period: 90s
+      retries: 60
 
   # ------------------------------------------------ #64 isolated ledger driver
   # The repo is bind-mounted READ-ONLY: the acceptance driver and the ledger
@@ -90,8 +94,12 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 3s
-      retries: 30
+      timeout: 5s
+      # The amd64 images run emulated on arm64 hosts and a busy docker host
+      # can leave single probes hanging long past init; tolerate a long
+      # flapping window instead of declaring a healthy server down.
+      start_period: 90s
+      retries: 60
 
   lago-redis:
     image: redis:7-alpine@sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446 # redis:7-alpine, linux/amd64

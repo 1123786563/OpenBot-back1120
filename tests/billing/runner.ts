@@ -545,11 +545,19 @@ async function runFull(): Promise<number> {
     }
 
     console.log("  phase: identity + health verification");
-    const pgIdentity = composeArgs(project, [
-      "exec", "-T", "postgres",
-      "psql", "-U", pgUser, "-d", `billing62_${runId}`, "-tAc",
-      "'select version()'",
-    ]);
+    // A first boot's initdb runs a temporary server that can satisfy the
+    // container healthcheck just before the real server restarts; retry the
+    // identity probe through that window instead of failing the run on it.
+    let pgIdentity = { code: 1, out: "" };
+    for (let attempt = 0; attempt < 30; attempt++) {
+      pgIdentity = composeArgs(project, [
+        "exec", "-T", "postgres",
+        "psql", "-U", pgUser, "-d", `billing62_${runId}`, "-tAc",
+        "'select version()'",
+      ]);
+      if (pgIdentity.code === 0 && pgIdentity.out.includes("PostgreSQL 17")) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
     console.log(`    postgres: ${pgIdentity.out.trim().slice(0, 100)}`);
     if (pgIdentity.code !== 0 || !pgIdentity.out.includes("PostgreSQL 17")) {
       console.error("  FAIL the database is not the pinned PostgreSQL 17 (identity check)");
