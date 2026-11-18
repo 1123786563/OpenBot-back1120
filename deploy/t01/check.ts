@@ -16,6 +16,12 @@ for (const key of required)
     `BLOCKED: dedicated test ${key} is required`,
   );
 assert.equal(process.env.OPENBOT_SINGLE_USER, "false");
+assert.equal(process.env.AUTH_MODE, undefined);
+for (const key of Object.keys(process.env))
+  assert(
+    !key.startsWith("CASDOOR_OAUTH_"),
+    `T01 fixes the Okta-compatible Casdoor mode; unexpected ${key}`,
+  );
 assert.equal(process.env.DEPLOYMENT_ID, "openbot-t01");
 assert.equal(process.env.BETTER_AUTH_URL, "http://localhost:13001");
 assert.equal(process.env.OKTA_OAUTH_ISSUER, "http://localhost:18000");
