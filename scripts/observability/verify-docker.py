@@ -243,6 +243,128 @@ class CaptureForwarder:
         return out
 
 
+class ModelMock:
+    """Speaks OpenAI streaming completions and the tool callback, on the host.
+
+    The Bots dial this as their model endpoint and, for a deployment-run tool, as the callback the
+    platform grants (`OPENBOT_TOOL_URL`). Everything a real turn produces therefore crosses a real
+    boundary — model input leaves a Bot over HTTP, model output comes back streamed, tool arguments
+    travel to a callback and the result returns into the model — which is what makes the redaction
+    check about the paths, not about fixtures a script wrote to stdout itself.
+
+    Request bodies are kept only as the marker keys they carried, never verbatim, and headers are
+    not read at all: a live credential riding a request is forwarded nowhere and recorded nowhere.
+    """
+
+    def __init__(self, marker_keys, crash_trigger, tool_trigger, tool_delay_seconds=10):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.marker_keys = marker_keys          # key -> value; recorded as keys only
+        self.crash_trigger = crash_trigger
+        self.tool_trigger = tool_trigger
+        self.tool_delay_seconds = tool_delay_seconds
+        # {"path": ..., "marker_keys_seen": [...], "tool_callback": bool, "completed": bool}
+        self.received = []
+        self.lock = threading.Lock()
+        mock = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def _note(self, body_text, callback):
+                seen = sorted(key for key, value in mock.marker_keys.items()
+                              if value in body_text)
+                triggers = [name for name, needle in (("crash", mock.crash_trigger),
+                                                      ("tool", mock.tool_trigger))
+                            if needle in body_text]
+                with mock.lock:
+                    mock.received.append({"path": self.path, "marker_keys_seen": seen,
+                                          "triggers": triggers, "tool_callback": callback,
+                                          "completed": False})
+
+            def _sse(self, chunks):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for delta, finish in chunks:
+                    chunk = {"id": "chatcmpl-verify", "object": "chat.completion.chunk",
+                             "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                try:
+                    text, payload = body.decode("utf-8", "ignore"), json.loads(body or b"{}")
+                except ValueError:
+                    text, payload = body.decode("utf-8", "ignore"), {}
+                if self.path.endswith("/chat/completions"):
+                    self._note(text, callback=False)
+                    messages = payload.get("messages") or []
+                    saw_tool_result = any(m.get("role") == "tool" for m in messages)
+                    if saw_tool_result:
+                        # The turn after a tool callback: the model answers on what it got back.
+                        self._sse([({"role": "assistant",
+                                     "content": mock.marker_keys["model-output"]}, "stop")])
+                    elif mock.tool_trigger in text:
+                        # The tool boundary: the model reaches for a deployment tool, arguments and all.
+                        self._sse([({"role": "assistant", "tool_calls": [{
+                            "id": "call_verify_1", "type": "function", "index": 0,
+                            "function": {"name": "get_current_time",
+                                         "arguments": json.dumps(
+                                             {"query": mock.marker_keys["tool-params"]})}}]},
+                            "tool_calls")])
+                    else:
+                        if mock.crash_trigger in text:
+                            # Hold the turn open so the run is provably in flight when the
+                            # database is stopped underneath it.
+                            time.sleep(mock.tool_delay_seconds)
+                        self._sse([({"role": "assistant",
+                                     "content": mock.marker_keys["model-output"]}, "stop")])
+                    with mock.lock:
+                        mock.received[-1]["completed"] = True
+                elif "agent-tools/call" in self.path:
+                    # A real tool callback: the Bot forwarded {name, args, run} to the deployment.
+                    self._note(text, callback=True)
+                    data = json.dumps({"text": mock.marker_keys["tool-result"]}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    with mock.lock:
+                        mock.received[-1]["completed"] = True
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"{}")
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    @property
+    def port(self):
+        return self.server.server_address[1]
+
+    def start(self):
+        self.thread.start()
+
+    def stop(self):
+        self.server.shutdown()
+
+    def state(self):
+        with self.lock:
+            return [dict(entry) for entry in self.received]
+
+
 def verify(work, build, keep):
     stack = f"oo-verify-{secrets.token_hex(4)}"
     (query_port, forward_port, app_port, server_port, postgres_port, bot_port,
@@ -301,6 +423,11 @@ services:
   worker:
     environment:
       COPILOTKIT_TELEMETRY_DISABLED: "true"
+  agent-bot:
+    # The server, the framework Bot and the computer service already declare the host gateway in
+    # the base file; the proof-of-concept Bot does not, and its model endpoint lives on this host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   supervisor:
     environment:
       # This host may run a real deployment beside this test; a namespace of its own keeps the
@@ -346,18 +473,32 @@ services:
     secret_note = {"kind": "capture-forwarder", "upstream": query_url}
     old_id, edge_id = (str(uuid4()) for _ in range(2))
     markers = {key: f"private-{key}-{uuid4()}" for key in
-               ("conversation", "prompt", "tool-input", "nested", "encoded", "exception", "plain", "outage")}
+               ("conversation", "prompt", "tool-input", "tool-params", "tool-result",
+                "model-output", "nested", "encoded", "exception", "plain", "outage")}
+    # Correlation triggers, not secrets: they mark which real turn is the crash window and which
+    # direct Bot run must reach for a deployment tool. They ride inside real model input, so the
+    # scan treats them like the markers — absent from every outbound payload and stored record.
+    crash_trigger, tool_trigger = f"crash-window-{uuid4()}", f"tool-loop-{uuid4()}"
     credentials = {"computer_token": computer_token, "worker_shared_secret": worker_secret,
                    "managed_agent_token": managed_token, "key_encryption_key": key_encryption_key}
     evidence_sources = {}
+    # The isolated model/tool endpoint the real Bots call. Started before any app container, so a
+    # Bot's first real turn crosses a real model boundary inside this run.
+    mock = ModelMock(markers, crash_trigger, tool_trigger)
+    mock.start()
+    env["OPENAI_CONTAINER_BASE_URL"] = f"http://host.docker.internal:{mock.port}/v1"
+    # Where the framework Bot runs a deployment tool: the same mock, playing the platform's
+    # callback endpoint, so the arguments travel a real HTTP callback and the result returns
+    # through the model a second time.
+    env["OPENBOT_TOOL_URL"] = f"http://host.docker.internal:{mock.port}/agent-tools/call"
     (work / "test-run.json").write_text(json.dumps(
         {"project": stack, "query_port": query_port, "required_sources": SOURCES,
          "forwarder": secret_note}, indent=2) + "\n")
 
-    def search(sql, auth=operator, send=urlopen, start_time=start):
+    def search(sql, auth=operator, send=urlopen, start_time=start, end_time=None):
         return http(query_url, "/api/default/_search",
                     {"query": {"sql": sql, "start_time": start_time,
-                               "end_time": int(time.time() * 1_000_000), "size": 1000}},
+                               "end_time": end_time or int(time.time() * 1_000_000), "size": 1000}},
                     auth, send=send)
 
     def hits(sql, **kwargs):
@@ -611,12 +752,146 @@ services:
         require(len(run_rows.splitlines()) >= 2,
                 "both the scheduled firing and the manual run opened real run rows")
 
-        # A controlled real error: with PostgreSQL stopped, the server's responsibility sweep and
-        # the worker's tick fail on the real database path. These are genuine stderr errors from
-        # the running services, not injected lines. Recovery is part of the check.
+        # Real operations on the two fixed Bots, over their real AG-UI boundary with the isolated
+        # model endpoint. These are the model and tool paths exercised as the platform runs them:
+        # the Bots dial the model themselves, and the framework Bot runs a deployment tool by
+        # calling back through the deployment's tool endpoint.
+        agui_input = {
+            "threadId": f"verify-{uuid4()}",
+            "messages": [{"id": f"m-{uuid4()}", "role": "user",
+                          "content": f"Report the time. {markers['conversation']}"}],
+            "tools": [{"name": "get_current_time", "description": "returns the current time",
+                       "parameters": {"type": "object", "properties": {"query": {"type": "string"}},
+                                      "required": ["query"]}}],
+            "state": {}, "forwardedProps": {},
+        }
+        bot_run = dict(agui_input, runId=f"botprobe-{uuid4()}",
+                       messages=[{"id": f"m-{uuid4()}", "role": "user",
+                                  "content": f"Report the time. {markers['conversation']} {tool_trigger}"}])
+        with urlopen(Request(f"http://127.0.0.1:{bot_port}/ag-ui", json.dumps(bot_run).encode(),
+                             {"Content-Type": "application/json",
+                              "x-openbot-agent-token": managed_token}, method="POST"),
+                     timeout=120) as response:
+            bot_stream = response.read().decode("utf-8", "ignore")
+        require("RUN_FINISHED" in bot_stream and "TOOL_CALL_START" in bot_stream,
+                "agent-bot ran a real turn through the model boundary (tool call streamed, run finished)")
+        langgraph_run = dict(agui_input, runId=f"lgprobe-{uuid4()}",
+                             messages=[{"id": f"m-{uuid4()}", "role": "user",
+                                        "content": f"Report the time. {tool_trigger}"}],
+                             forwardedProps={"openbotDeploymentTools": ["get_current_time"],
+                                             "openbotRun": f"lgassert-{uuid4()}"})
+        with urlopen(Request(f"http://127.0.0.1:{langgraph_port}/ag-ui",
+                             json.dumps(langgraph_run).encode(),
+                             {"Content-Type": "application/json",
+                              "x-openbot-agent-token": managed_token}, method="POST"),
+                     timeout=120) as response:
+            langgraph_stream = response.read().decode("utf-8", "ignore")
+        require("RUN_FINISHED" in langgraph_stream and
+                markers["tool-result"] in langgraph_stream and
+                markers["model-output"] in langgraph_stream,
+                "agent-langgraph ran a real tool loop: callback executed, result re-entered the model")
+        mock_state = mock.state()
+        langgraph_calls = [r for r in mock_state if r["tool_callback"]]
+        require(langgraph_calls and "tool-params" in langgraph_calls[0]["marker_keys_seen"],
+                "the real tool callback carried the tool arguments across the deployment boundary")
+        bot_model_calls = [r for r in mock_state if not r["tool_callback"]
+                           and "conversation" in r["marker_keys_seen"]]
+        require(bool(bot_model_calls),
+                "agent-bot's real model request carried the conversation body across the model boundary")
+
+        # A real operation on the computer gateway: the pre-seat profile of a private Bot handed to
+        # its owner's seat, asked the way the server asks, with the profile planted in the gateway's
+        # own volume first and its arrival checked there afterwards.
+        legacy_profile_dir = carry_bot
+        seat_dir = f"ada2~{carry_bot}"
+        docker(*app, "exec", "-T", "agent-computer", "sh", "-c",
+               f"mkdir -p /profiles/{legacy_profile_dir}/Default && "
+               f"printf carried > /profiles/{legacy_profile_dir}/Default/marker")
+        carry_code, carry_body = 0, {}
+        try:
+            with urlopen(Request(f"http://127.0.0.1:{computer_port}/computers/carry-over",
+                                 json.dumps({}).encode(),
+                                 {"Content-Type": "application/json",
+                                  "x-openbot-computer-token": computer_token,
+                                  "x-openbot-bot-id": legacy_profile_dir,
+                                  "x-openbot-person-id": "ada2"}, method="POST"),
+                         timeout=60) as response:
+                carry_code, carry_body = response.status, json.load(response)
+        except HTTPError as error:
+            carry_code, carry_body = error.code, {}
+        require(carry_code == 200 and carry_body.get("outcome") == "moved",
+                "agent-computer moved the legacy profile to the owner's seat for real")
+        seat_listing = docker(*app, "exec", "-T", "agent-computer", "sh", "-c",
+                              f"cat /profiles/{seat_dir}/Default/marker 2>/dev/null; "
+                              f"test -d /profiles/{legacy_profile_dir} && echo still-there || echo gone")
+        require("carried" in seat_listing.stdout and "gone" in seat_listing.stdout,
+                "the moved profile is on the owner's seat and the old one is gone")
+        # The Bots log no per-turn lines by design (their operations live in the server's run rows
+        # and the audit stream), so the per-agent queryable record is their real startup event plus
+        # this captured boundary traffic. Recorded, not claimed.
+        (work / "bot-operations.json").write_text(json.dumps({
+            "agent-bot": {"operation": "real AG-UI run through the model endpoint",
+                          "run_finished": "RUN_FINISHED" in bot_stream,
+                          "model_boundary_captured": bool(bot_model_calls),
+                          "per_turn_stdout_logs": "none by design; queryable record is the "
+                                                 "agent-listening startup event"},
+            "agent-langgraph": {"operation": "real AG-UI run with a deployment tool callback",
+                                "run_finished": "RUN_FINISHED" in langgraph_stream,
+                                "tool_result_returned_by_model":
+                                    markers["tool-result"] in langgraph_stream,
+                                "tool_callback_captured": bool(langgraph_calls)},
+            "agent-computer": {"operation": "real pre-seat profile carry-over on the gateway",
+                               "outcome": carry_body.get("outcome"),
+                               "seat": seat_dir,
+                               "profile_on_seat": "carried" in seat_listing.stdout,
+                               "old_profile_removed": "gone" in seat_listing.stdout},
+            "marker_values_note": "only marker keys are recorded here, never their values",
+        }, indent=2) + "\n")
+
+        # The crash window: a real routine run is triggered, and while its model turn is genuinely
+        # in flight the database is stopped underneath it. The runner then fails to close the run
+        # and logs the real run id on stderr — the source record the runtime stream is checked
+        # against, value by value.
+        code, crash_routine = http(app_url, "/api/routines",
+                                   {"agentId": agent_id, "channelId": channel_id, "cron": cron,
+                                    "title": "verification crash window",
+                                    "instruction": f"Summarise nothing. {markers['prompt']} {crash_trigger}"})
+        require(code == 201 and crash_routine.get("routine", {}).get("id"),
+                "created the crash-window routine")
+        code, crash_run = http(app_url, f"/api/routines/{crash_routine['routine']['id']}/run", {})
+        require(code == 202 and crash_run.get("runId"), "run now accepted the crash-window run")
+        crash_run_id = crash_run["runId"]
+
+        def crash_turn_in_flight():
+            received = mock.state()
+            return [r for r in received if "crash" in r["triggers"]] or None
+        retry(crash_turn_in_flight, "the crash-window turn reached the model endpoint", timeout=240)
         pg_container = docker(*app, "ps", "-q", "postgres").stdout.strip()
         docker("stop", pg_container)
         error_window_start = int((time.time() - 5) * 1_000_000)
+
+        def crash_turn_done():
+            received = [r for r in mock.state() if "crash" in r["triggers"]]
+            return received if received and all(r["completed"] for r in received) else None
+        retry(crash_turn_done, "the crash-window model reply arrived with the database down")
+        # The source record: the server's own stderr, read from the container that wrote it.
+        server_log = docker(*app, "logs", "--since", "120s", "server")
+        crashed_lines = [line for line in (server_log.stdout + server_log.stderr).splitlines()
+                         if '"routine-run-crashed"' in line and crash_run_id in line]
+        unrecorded_lines = [line for line in (server_log.stdout + server_log.stderr).splitlines()
+                            if '"routine-activity-unrecorded"' in line and crash_run_id in line]
+        (work / "crash-window-source-log.txt").write_text(server_log.stdout + server_log.stderr)
+        require(bool(crashed_lines) and bool(unrecorded_lines),
+                "the server logged the real run id as a crashed run with an unrecorded reply")
+        retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
+                                       f"AND run_id = '{crash_run_id}' "
+                                       "AND openbot_log_type = 'routine-run-crashed' "
+                                       "AND severity = 'Error'")] or None,
+              "the runtime stream stores the real run id from the source record")
+        retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'server\' '
+                                       f"AND run_id = '{crash_run_id}' "
+                                       "AND openbot_log_type = 'routine-activity-unrecorded'")] or None,
+              "the runtime stream stores the unrecorded-reply event under the same run id")
         retry(lambda: hits("SELECT * FROM \"openbot_runtime\" WHERE service_name = 'server' "
                            "AND openbot_log_type = 'responsibility-dispatch-error' "
                            "AND severity = 'Error'", start_time=error_window_start),
@@ -630,12 +905,13 @@ services:
         require(True, "controlled real Error and Warn from a live database outage")
 
         # Value-by-value correlation: the run id the API returned is the one in the authoritative
-        # audit row and the one stored in OpenObserve.
+        # audit row and the one stored in OpenObserve. Selected by the API's own id, because the
+        # crash-window routine's audit row is a different real run with its own id.
         def audit_row():
             row = docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
-                         "-tAc", "SELECT event_type, payload->>'runId' FROM audit_events "
-                         "WHERE event_type = 'routines.run_requested' AND payload->>'runId' IS NOT NULL "
-                         "ORDER BY created_at DESC LIMIT 1", check=False).stdout.strip()
+                         "-tAc", f"SELECT event_type, payload->>'runId' FROM audit_events "
+                         f"WHERE event_type = 'routines.run_requested' AND payload->>'runId' = '{manual_run_id}' "
+                         f"ORDER BY created_at DESC LIMIT 1", check=False).stdout.strip()
             return row or None
         event_type, db_run_id = retry(audit_row, "audit row for the real run").split("|", 1)
         require(db_run_id == manual_run_id,
@@ -655,10 +931,25 @@ services:
             raise
         correlation = {"event_type": event_type, "api_run_id": manual_run_id,
                        "audit_db_run_id": db_run_id, "match": True,
+                       "runtime_stream": {
+                           "api_run_id": crash_run_id,
+                           "source_record": "server stderr line routine-run-crashed, read from the "
+                                            "server container after the crash window",
+                           "source_log_evidence": "crash-window-source-log.txt",
+                           "stored_under": ["routine-run-crashed", "routine-activity-unrecorded"],
+                           "match": True,
+                           "note": "run id compared value-by-value: run-now API response -> server "
+                                   "stderr source record -> openbot_runtime record"},
+                       "request_id_inventory": {
+                           "emitting_sources": [],
+                           "basis": "no first-phase service writes a requestId field to stdout or "
+                                    "stderr (checked across server, worker and supervisor); audit "
+                                    "payloads mint none, and the collector keeps the whitelist + "
+                                    "UUID format guard for requestId keys wherever a producer "
+                                    "does emit one",
+                       },
                        "note": "run id compared value-by-value: API response -> PostgreSQL audit row "
-                               "-> openbot_audit record; request ids are not minted by any first-phase "
-                               "audit payload, and the collector keeps the whitelist + format guard "
-                               "for requestId keys wherever a producer does emit one"}
+                               "-> openbot_audit record; runtime chain above covers the run stream"}
         require(not hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'postgres\' '
                          'AND run_id IS NOT NULL'),
                 "system events without a run keep an empty run id")
@@ -725,6 +1016,14 @@ services:
                                  "events": sorted({r.get("openbot_log_type") or "runtime-unclassified"
                                                    for r in rows}),
                                  "severities": sorted({r.get("severity") for r in rows})}
+        # The Bots log nothing per turn, so their real operations are matched to their real
+        # startup events by name, and to the captured model/tool boundary in bot-operations.json.
+        for source, operation in (("agent-bot", "real AG-UI model turn"),
+                                  ("agent-langgraph", "real AG-UI model turn with a tool callback"),
+                                  ("agent-computer", "real profile carry-over on the gateway")):
+            require(any(r.get("openbot_log_type") == "agent-listening"
+                        for r in runtime if r.get("service_name") == source),
+                    f"{source}'s real startup event is stored under its own name")
         worker_business = [r for r in runtime if r.get("service_name") == "worker" and
                            r.get("openbot_log_type") in ("routine-sweep", "routine-sweep-purge")]
         require(worker_business, "real worker business events are stored as named events, not only summaries")
@@ -745,9 +1044,15 @@ services:
                 "PostgreSQL readiness on the real Docker log stream")
         require({r.get("severity") for r in runtime} >= {"Info", "Warn", "Error"},
                 "Info, Warn and Error severities all queryable from real events")
+        operations = {"agent-bot": "real AG-UI model turn (see bot-operations.json)",
+                      "agent-langgraph": "real AG-UI model turn with a deployment tool callback "
+                                         "(see bot-operations.json)",
+                      "agent-computer": "real pre-seat profile carry-over on the gateway "
+                                        "(see bot-operations.json)"}
         record("sources.json", {
             source: {**by_source[source],
                      "collection": "docker fluentd driver (fixed tag) -> collector -> openbot_runtime",
+                     **({"real_operation": operations[source]} if source in operations else {}),
                      "verified": True}
             for source in SOURCES} | {
             "spire-init": {"verified": "boundary", "reason": "one-shot chown produces no log lines; "
@@ -801,10 +1106,12 @@ services:
         bodies = retry(seen_streams, "the capture forwarder saw both streams", timeout=120)
         all_sent = "\n".join("\n".join(chunks) for chunks in bodies.values())
         positives = ["routine-sweep", "routine-sweep-purge", "responsibility-dispatch",
-                     "computer-profile-carried-over", "configuration.changed", manual_run_id]
+                     "computer-profile-carried-over", "configuration.changed", manual_run_id,
+                     crash_run_id]
         require(all(p in all_sent for p in positives),
-                "captured OTLP bodies contain the registered events and the real run id")
-        leaked = [name for name in list(markers.values()) + list(credentials.values())
+                "captured OTLP bodies contain the registered events and the real run ids of both streams")
+        leaked = [name for name in list(markers.values()) + list(credentials.values()) +
+                  [crash_trigger, tool_trigger]
                   if name in all_sent]
         require(not leaked, f"sensitive markers and live credentials absent from the actual sent payloads (checked {sum(len(v) for v in bodies.values())} fields)")
         payload = work / "payload.json"
@@ -832,7 +1139,8 @@ services:
         stored_runtime = all_hits('SELECT * FROM "openbot_runtime"')
         stored_audit = all_hits('SELECT * FROM "openbot_audit"')
         stored_blob = json.dumps(stored_runtime) + json.dumps(stored_audit)
-        leaked_stored = [name for name in list(markers.values()) + list(credentials.values())
+        leaked_stored = [name for name in list(markers.values()) + list(credentials.values()) +
+                         [crash_trigger, tool_trigger]
                          if name in stored_blob]
         require(not leaked_stored, "sensitive markers and credentials absent from all stored records")
         require(str(manual_run_id) in stored_blob, "the real run id is present in stored records")
@@ -840,7 +1148,7 @@ services:
             "runtime_services": sorted({r["service_name"] for r in stored_runtime}),
             "runtime_records": len(stored_runtime), "audit_records": len(stored_audit),
             "redaction": {"edge_fixtures": len(markers), "live_credentials": len(credentials),
-                          "leaked": leaked_stored},
+                          "boundary_triggers": 2, "leaked": leaked_stored},
             "capture": {"requests": len(forwarder_summary)},
             "correlation": correlation,
         })
@@ -889,6 +1197,33 @@ services:
         require(all(statuses[label] in {401, 403} for label in ("other_organization_search", "other_organization_ui_search")),
                 "authenticated user from a different organization cannot query OpenBot data")
 
+        # An OpenBot session cookie, presented to OpenObserve as if it were a credential: whatever
+        # OpenBot may issue its users, none of it opens this query path. A real non-admin OpenBot
+        # session cannot exist in this stack by design — `OPENBOT_SINGLE_USER` mints no sessions and
+        # a second identity needs an external IdP — so this is the boundary the deployment actually
+        # has, verified rather than assumed.
+        cookie_request = Request(query_url + "/api/default/_search",
+                                 json.dumps({"query": {"sql": plan, "start_time": start,
+                                                       "end_time": int(time.time() * 1_000_000),
+                                                       "size": 10}}).encode(),
+                                 {"Content-Type": "application/json",
+                                  "Cookie": "better-auth.session_token=not-a-real-openbot-session"},
+                                 method="POST")
+        try:
+            with urlopen(cookie_request, timeout=8) as response:
+                statuses["openbot_session_cookie_search"] = response.status
+        except HTTPError as error:
+            statuses["openbot_session_cookie_search"] = error.code
+        require(statuses["openbot_session_cookie_search"] in {401, 403},
+                "an OpenBot session cookie is not a credential for the log store")
+        statuses["ordinary_openbot_session_boundary"] = (
+            "OPENBOT_EDITION=personal runs one administrator with OPENBOT_SINGLE_USER=true, which "
+            "issues no sessions and admits no second identity; a non-admin OpenBot session requires "
+            "an external IdP (team edition), out of this stack's scope. Verified instead: OpenBot-"
+            "shaped cookies are rejected above, the app surface below carries no OpenObserve "
+            "reference or credential, and a real authenticated OpenObserve user from another "
+            "organization is denied (this matrix).")
+
         # Client surface: what the OpenBot app serves to a browser must not carry OpenObserve
         # credentials, and no application container may hold the ingestion token.
         with urlopen(Request(app_url + "/"), timeout=10) as response:
@@ -900,6 +1235,13 @@ services:
         client_leaks = [name for name in credentials.values() if name in client_text]
         require(client_code == 200 and not client_leaks,
                 f"the app's served HTML and bundles contain no OpenObserve credentials ({len(assets)} assets checked)")
+        # And no way in at all: the app never names the log store or its port, so an OpenBot user
+        # is not handed an entry point the access matrix then has to police.
+        oo_surface = [needle for needle in ("openobserve", f"127.0.0.1:{query_port}",
+                                            f"localhost:{query_port}")
+                      if needle.lower() in client_text.lower()]
+        require(not oo_surface, "the app's served surface names no OpenObserve endpoint")
+        statuses["client_surface_references"] = oo_surface
         # Only the ingestion token is an OpenObserve credential; the other minted secrets are the
         # deployment's own (they legitimately live in application environments and are already
         # covered as redaction fixtures). Both the raw token and its Basic form are scanned.
@@ -921,6 +1263,9 @@ services:
         record("access-status.json", statuses)
 
         # ---- Short outage: business and the authoritative audit continue, the copy follows. ----
+        # The queued-delivery proof is bounded on both ends: every record asserted below carries a
+        # timestamp from inside the outage window, so it was produced while OpenObserve was down
+        # and can only have arrived through the collector's queue.
         oo_container = docker(*obs, "ps", "-q", "openobserve").stdout.strip()
         docker("stop", oo_container)
         outage_start = int((time.time() - 5) * 1_000_000)
@@ -929,43 +1274,70 @@ services:
                        {"instructions": f"outage-window {markers['outage']}"}, method="PUT")
         require(code == 200, "real settings operation succeeded with OpenObserve stopped")
         outage_count = int(docker(*app, "exec", "-T", "postgres", "psql", "-U", "openbot", "-d", "openbot",
-                                  "-tAc", "SELECT count(*) FROM audit_events", check=False).stdout.strip() or 0)
-        require(outage_count >= 1, "authoritative PostgreSQL audit rows present during the outage")
+                                  "-tAc", f"SELECT count(*) FROM audit_events "
+                                          f"WHERE created_at >= to_timestamp({outage_start} / 1000000.0)",
+                                  check=False).stdout.strip() or 0)
+        require(outage_count >= 1, "authoritative PostgreSQL audit rows written during the outage window")
+        # Held open past the worker's 30-second sweep cadence, so at least one real runtime record
+        # is provably produced inside the window and its arrival can only be the queue's work.
+        time.sleep(35)
         docker("start", oo_container)
         retry(lambda: http(query_url, "/healthz")[0] == 200, "OpenObserve health after the outage", timeout=240)
-        outage_audit = retry(lambda: hits('SELECT * FROM "openbot_audit" WHERE openbot_event_type = '
-                                          f"'configuration.changed'", start_time=outage_start) or None,
-                             "audit events queued during the outage arrived after recovery")
+        recovery_time = int(time.time() * 1_000_000)
+        outage_audit = retry(lambda: [h for h in hits('SELECT * FROM "openbot_audit" WHERE openbot_event_type = '
+                                                      "'configuration.changed'",
+                                                      start_time=outage_start, end_time=recovery_time)
+                                      if h.get("_timestamp", 0) >= outage_start] or None,
+                             "the audit copy written during the outage window arrived through the queue")
         require(markers["outage"] not in json.dumps(outage_audit),
                 "outage-window audit copy arrived sanitized")
-        outage_runtime = retry(lambda: hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'worker\' '
-                                            "AND openbot_log_type = 'routine-sweep'",
-                                            start_time=outage_start) or None,
-                               "worker runtime logs queued during the outage arrived after recovery")
+        outage_runtime = retry(lambda: [h for h in hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'worker\' '
+                                                        "AND openbot_log_type = 'routine-sweep'",
+                                                        start_time=outage_start, end_time=recovery_time)
+                                        if h.get("_timestamp", 0) >= outage_start] or None,
+                               "worker runtime logs produced during the outage window arrived after recovery")
         require(bool(outage_runtime), "worker runtime logs queued during the outage arrived after recovery")
         record("outage.json", {
-            "settings_http_status": code, "audit_rows": outage_count,
+            "settings_http_status": code, "audit_rows_in_window": outage_count,
             "queued_records_delivered": {"audit": len(outage_audit), "runtime": len(outage_runtime or [])},
+            "window_bounds_us": {"start": outage_start, "recovery": recovery_time},
+            "queued_record_timestamps_within_window": True,
             "outage_seconds": round(time.monotonic() - outage_started, 1),
             "boundary": "a brief stop is verified here; sustained-failure and disk-pressure tests "
                         "belong to the follow-up fault ticket",
         })
 
         # ---- Restart persistence, with real records on both sides. ----
+        # The retained records are bounded to before the restart, the fresh one to after it, so a
+        # query cannot be satisfied by a row that merely predates the restart.
+        restart_started = int(time.time() * 1_000_000)
         docker(*obs, "restart", "openobserve", "otel-collector")
         retry(lambda: http(query_url, "/healthz")[0] == 200, "OpenObserve after restart", timeout=240)
-        retry(lambda: hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'supervisor\' '
-                           "AND openbot_log_type = 'computer-profile-carried-over'"),
-              "retained record after restart")
-        retry(lambda: hits(f'SELECT * FROM "openbot_audit" WHERE run_id = \'{manual_run_id}\''),
-              "retained audit record after restart")
+        retained_runtime = retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_runtime" WHERE service_name = \'supervisor\' '
+                                                          "AND openbot_log_type = 'computer-profile-carried-over'",
+                                                          start_time=start, end_time=restart_started)
+                                          if h.get("_timestamp", 0) < restart_started] or None,
+                                 "record stored before the restart is still queryable afterwards")
+        retained_audit = retry(lambda: [h for h in hits(f'SELECT * FROM "openbot_audit" WHERE run_id = \'{manual_run_id}\'',
+                                                        start_time=start, end_time=restart_started)
+                                        if h.get("_timestamp", 0) < restart_started] or None,
+                               "audit record stored before the restart is still queryable afterwards")
         # routine-sweep fires every tick (30s); purge only fires on the first tick of a run, which
         # is long past by the time this restart happens.
-        restart_marker = retry(lambda: hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'worker\' '
-                                            "AND openbot_log_type = 'routine-sweep'",
-                                            start_time=int((time.time() - 30) * 1_000_000)) or None,
-                               "new real record after restart", timeout=180)
+        restart_marker = retry(lambda: [h for h in hits('SELECT * FROM "openbot_runtime" WHERE service_name = \'worker\' '
+                                                        "AND openbot_log_type = 'routine-sweep'",
+                                                        start_time=restart_started)
+                                        if h.get("_timestamp", 0) > restart_started] or None,
+                               "new real record written after the restart", timeout=180)
         require(bool(restart_marker), "new real record after restart")
+        record("restart.json", {
+            "restart_started_us": restart_started,
+            "retained_before_restart": {"runtime": len(retained_runtime or []),
+                                        "audit": len(retained_audit or [])},
+            "new_after_restart": len(restart_marker or []),
+            "bounded_queries": "retained records constrained to _timestamp < restart; new record "
+                               "constrained to _timestamp > restart",
+        })
         require(True, "stored records survive restart and new ones arrive")
         if keep:
             # Debugging aid for a retained stack only: the UI evidence check needs to sign in and
@@ -987,6 +1359,7 @@ services:
         raise
     finally:
         forwarder.stop()
+        mock.stop()
         if not keep:
             leftovers = [unrelated, failing_worker, legacy_container, cutover_container, person_container]
             docker("container", "rm", "-f", *leftovers, check=False)

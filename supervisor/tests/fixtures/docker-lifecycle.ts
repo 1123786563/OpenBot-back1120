@@ -882,3 +882,106 @@ describe("a private Bot's login, carried over to its owner", () => {
     ).toBe(LEGACY.profileVolume);
   }, 120_000);
 });
+
+describe("a computer's log driver", () => {
+  /*
+   * The comparison behind the cutover is `logIsCurrent`, and its inputs come from two processes:
+   * the supervisor builds the options in its own order, while the daemon echoes the effective
+   * `HostConfig.LogConfig` back in the engine's order. Docker 29.x puts `fluentd-request-ack`
+   * between `fluentd-max-retries` and `fluentd-buffer-limit`, wherever the caller put it. So the
+   * idempotence cases below feed back an option map built in a scrambled order — same entries,
+   * different serialization — against a container the daemon really created, which is the only way
+   * to exercise the echo order that bit.
+   */
+  function scrambled(address: string): supervisor.LogConfig {
+    const fluent = supervisor.fluentdLogConfig(address, "openbot.computer");
+    const keys = Object.keys(fluent.Config).reverse();
+    return {
+      Type: fluent.Type,
+      Config: Object.fromEntries(keys.map((key) => [key, fluent.Config[key]])),
+    };
+  }
+
+  const effective = async () =>
+    (await withDocker().docker.getContainer(names.container).inspect())
+      .HostConfig?.LogConfig;
+
+  test("is added by replacing the computer once, and every later ensure keeps it", async () => {
+    // Born on the default driver, the way computers existed before a deployment turned forwarding on.
+    await withDocker().supervisor.ensure(names, { image: IMAGE, environment: [] });
+    const before = await withDocker().docker.getContainer(names.container).inspect();
+    expect(before.HostConfig?.LogConfig?.Type).not.toBe("fluentd");
+
+    // Turning forwarding on replaces the computer, keeping its volumes.
+    const volumes = await Promise.all(
+      [names.profileVolume, names.workspaceVolume].map((volume) =>
+        withDocker().docker.getVolume(volume).inspect(),
+      ),
+    );
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer"),
+    });
+    const after = await withDocker().docker.getContainer(names.container).inspect();
+    expect(after.Id).not.toBe(before.Id);
+    expect(after.HostConfig?.LogConfig?.Type).toBe("fluentd");
+
+    // The engine's own echo order, from the container it just created.
+    const echoed = await effective();
+    expect(echoed?.Config).toEqual(
+      supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer").Config,
+    );
+    expect(Object.keys(echoed?.Config ?? {})).not.toEqual(
+      Object.keys(supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer").Config),
+    );
+
+    // The next ensure, and the one after that: the same computer, never rebuilt.
+    for (let round = 0; round < 2; round++) {
+      await withDocker().supervisor.ensure(names, {
+        image: IMAGE,
+        environment: [],
+        // Scrambled order, deliberately: the map comparison must not care.
+        logConfig: scrambled("127.0.0.1:24001"),
+      });
+      const kept = await withDocker().docker.getContainer(names.container).inspect();
+      expect(kept.Id).toBe(after.Id);
+      expect(kept.State.Running).toBe(true);
+    }
+    const keptVolumes = await Promise.all(
+      [names.profileVolume, names.workspaceVolume].map((volume) =>
+        withDocker().docker.getVolume(volume).inspect(),
+      ),
+    );
+    expect(keptVolumes.map(createdAt)).toEqual(volumes.map(createdAt));
+  }, 180_000);
+
+  test("follows a moved collector address, replacing the computer exactly once", async () => {
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24001", "openbot.computer"),
+    });
+    const first = await withDocker().docker.getContainer(names.container).inspect();
+
+    const moved = await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      logConfig: supervisor.fluentdLogConfig("127.0.0.1:24002", "openbot.computer"),
+    });
+    const second = await withDocker().docker.getContainer(names.container).inspect();
+    expect(second.Id).not.toBe(first.Id);
+    expect(second.HostConfig?.LogConfig?.Config?.["fluentd-address"]).toBe("127.0.0.1:24002");
+    // `ComputerState.container` is the name; the run it names is the new one.
+    expect((await withDocker().docker.getContainer(moved.container).inspect()).Id).toBe(second.Id);
+
+    // Settled: the moved address is not another cutover waiting to happen.
+    await withDocker().supervisor.ensure(names, {
+      image: IMAGE,
+      environment: [],
+      logConfig: scrambled("127.0.0.1:24002"),
+    });
+    const settled = await withDocker().docker.getContainer(names.container).inspect();
+    expect(settled.Id).toBe(second.Id);
+  }, 180_000);
+});

@@ -475,10 +475,31 @@ function logIsCurrent(
 ): boolean {
   if (!wanted) return true;
   if (!existing) return false;
-  return (
-    existing.Type === wanted.Type &&
-    JSON.stringify(existing.Config ?? {}) === JSON.stringify(wanted.Config)
-  );
+  return existing.Type === wanted.Type && sameEntries(existing.Config, wanted.Config);
+}
+
+/**
+ * Whether two log-driver option sets say the same thing, regardless of key order.
+ *
+ * `JSON.stringify` was tried here and was wrong in a way that only showed up across processes: the
+ * supervisor builds the options in one order, while the daemon echoes them back in its own — on
+ * Docker 29.x `fluentd-request-ack` comes back sitting between `max-retries` and `buffer-limit`,
+ * wherever the caller put it. Two maps with identical entries serialized differently, so every
+ * `ensure` after the cutover saw the running computer as stale and rebuilt it — destroying the
+ * browser session the cutover was supposed to preserve, on every call, forever.
+ *
+ * A log config is a map, not a document, so it is compared the way maps are: same keys, same
+ * values, order nowhere in it.
+ */
+function sameEntries(
+  existing: Record<string, string> | undefined,
+  wanted: Record<string, string> | undefined,
+): boolean {
+  const have = existing ?? {};
+  const want = wanted ?? {};
+  const keys = Object.keys(want);
+  if (Object.keys(have).length !== keys.length) return false;
+  return keys.every((key) => key in have && have[key] === want[key]);
 }
 
 /** Long enough for a cold start with a large image, short enough that a caller is not left hanging. */
