@@ -782,10 +782,27 @@ async function lagoPhase(
     // invoices array must be EXPLICITLY present and empty (a missing field or
     // a JSON error object is never silently read as "no invoices"), every
     // amount must be a present INTEGER zero (Number("") is 0 — stringified
-    // emptiness is not a zero receivable), the live period aggregates 2000
-    // units in CNY -- Lago aggregates without a second deduction (ADR 0003).
-    // Lago's aggregation is asynchronous: poll until the two events show up
-    // in the live window (bounded deadline, never a blind sleep-pass).
+    // emptiness is not a zero receivable), the live period aggregates EXACTLY
+    // the units of the events THIS runner verified as ingested (each 1000
+    // tokens, nonzero), in CNY -- Lago aggregates without a second deduction
+    // (ADR 0003).
+    //
+    // EVENTUAL CONSISTENCY, HANDLED EXPLICITLY: Lago v1.57 caches per-charge
+    // usage fragments until the END of the billing period and invalidates
+    // them lazily "when a new event is ingested for the charge" — the
+    // invalidation input is the event INGESTION timestamp. A usage query
+    // that lands BEFORE an event's ingestion caches a 0.0 fragment that
+    // later polls cannot refresh (the events' occurrence timestamps are in
+    // the past relative to the fragment's compute time). So when the poll
+    // keeps reading less than the verified aggregate, this runner sends a
+    // NEW measured event — a fresh transaction id whose ingestion is newer
+    // than any cached fragment, which is exactly Lago's documented
+    // invalidation trigger — and raises the expected aggregate accordingly.
+    // The assertion is always `units === the exact sum of the tokens this
+    // runner sent and Lago confirmed as accepted` — never a relaxed
+    // "nonzero enough".
+    let expectedUnits = 2000; // the two measured events
+    let topups = 0;
     let zeroReceivable = false;
     let receivableDetail = "";
     let lastHttpStatus = 0;
@@ -798,8 +815,37 @@ async function lagoPhase(
     // by minutes. The warm-up event above absorbs that cold pass; the loop
     // still exits on the FIRST passing poll -- the deadline only bounds
     // failure, it never delays success.
+    // Grace before the FIRST usage query: it is the only query that can
+    // cache a per-charge fragment computed BEFORE the measured events are
+    // ingested (later queries self-heal through the top-up mechanism below).
+    // A bounded 30s lets an unloaded stack finish ingestion first; a loaded
+    // one falls back to the top-ups.
+    await new Promise((r) => setTimeout(r, 30_000));
     for (let attempt = 0; attempt < 100 && !zeroReceivable; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 5000));
+      // Self-healing top-up (bounded): a fresh measured event re-dates the
+      // charge's ingestion timestamp — exactly the cache-invalidation
+      // trigger Lago documents — and is itself verified nonzero usage that
+      // the assertion below must account for.
+      if (attempt > 0 && attempt % 3 === 0 && topups < 6) {
+        topups += 1;
+        expectedUnits += 1000;
+        const t = BigInt(Math.floor(Date.now() / 1000));
+        const e = api("/api/v1/events", {
+          event: {
+            transaction_id: `evt_${runId}_topup${topups}`,
+            external_customer_id: customer,
+            external_subscription_id: `sub_${runId.slice(-8)}`,
+            code: "model_input_tokens",
+            timestamp: `${t}`,
+            properties: { tokens: 1000, occurrence_us: `${t}000000` },
+          },
+        });
+        if (e.code !== 200) {
+          topups -= 1;
+          expectedUnits -= 1000;
+        }
+      }
       const inv = api(`/api/v1/invoices?external_customer_id=${customer}`);
       const usage = api(
         `/api/v1/customers/${customer}/current_usage?external_subscription_id=sub_${runId.slice(-8)}`,
@@ -842,8 +888,8 @@ async function lagoPhase(
           u?.currency === "CNY" &&
           amountsZero &&
           Number.isFinite(units) &&
-          units === 2000; // two nonzero events, aggregated WITHOUT deduction
-        receivableDetail = `units=${charge?.units} currency=${u?.currency} amount_cents=${JSON.stringify(u?.amount_cents)} total=${JSON.stringify(u?.total_amount_cents)} invoices=${Array.isArray(invParsed.invoices) ? invParsed.invoices.length : "MISSING"} (attempt ${attempt + 1})`;
+          units === expectedUnits; // exactly the verified nonzero usage, no deduction
+        receivableDetail = `units=${charge?.units}/${expectedUnits} currency=${u?.currency} amount_cents=${JSON.stringify(u?.amount_cents)} total=${JSON.stringify(u?.total_amount_cents)} invoices=${Array.isArray(invParsed.invoices) ? invParsed.invoices.length : "MISSING"} topups=${topups} (attempt ${attempt + 1})`;
       } catch (err) {
         receivableDetail = `unparseable invoices/usage answer: ${err instanceof Error ? err.message : String(err)}`;
       }
