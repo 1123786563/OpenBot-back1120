@@ -35,6 +35,7 @@ import {
 } from "./casdoor";
 import { DOMAIN_REFUSAL_MESSAGE, emailDomainAllowed } from "./email-domain";
 import { encryptSsoConfig } from "./encrypt-sso-config";
+import { initializationFault } from "./initialization-faults";
 import { SIGN_OUT_UNFINISHED } from "./organization";
 import { applyConfiguredAdmin, isConfiguredAdmin, seedRole } from "./roles";
 import { recordProvisioned, scimOptions } from "./scim";
@@ -437,8 +438,26 @@ export function createAuth(
           scimGroups,
           scimGroupMembers,
         },
-        // The SCIM plugin needs interactive transactions; nothing else here asked for them.
-        transaction: Boolean(scimPluginOptions),
+        /*
+         * A first Casdoor sign-in writes the user and their external identity together, or not at all.
+         *
+         * Better Auth already wraps `createOAuthUser` in a transaction — user row, then account row,
+         * one commit. But with the adapter's `transaction` off, that wrapper is a pass-through: the
+         * two inserts go out on their own, and a second client racing the same identity on its first
+         * sign-in can lose the account insert to the unique index while the user row stays behind —
+         * a person with no identity attached, blocking every later attempt with an email conflict.
+         * Turning the option on makes the wrapper a real transaction, so the race loser rolls back
+         * whole and retries into the winner's account. Concurrent sign-in converges on one user and
+         * one workspace from the database's own constraints, with no in-process lock and nothing for
+         * an operator to clean up.
+         *
+         * The hooks keep working across this: `create.before` runs inside the transaction and only
+         * refuses (a refusal rolls back cleanly), while `create.after` hooks are queued until after
+         * the commit, so role seeding, auditing and `lastSignedInAt` never hold the write open nor
+         * wait on a second connection for a row that is not visible yet.
+         */
+        transaction:
+          Boolean(scimPluginOptions) || Boolean(authConfig.casdoor),
       }),
       config.keyEncryptionKey,
     ),
@@ -497,6 +516,11 @@ export function createAuth(
            */
           before: async (user) => {
             /*
+             * T03 fault point: fail before the user row is written. Inside the identity transaction,
+             * so the refusal rolls back whatever the flow had already written and a retry starts clean.
+             */
+            await initializationFault("before-user-insert");
+            /*
              * Asked before the deny list because it needs no query, and before the account exists
              * because an address this deployment does not admit must not leave a user row behind.
              */
@@ -533,6 +557,13 @@ export function createAuth(
             return { data: user };
           },
           after: async (user, context) => {
+            /*
+             * T03 fault point: the identity transaction has committed (these hooks run after the
+             * commit), so a failure here must leave the user, the account and any later workspace
+             * exactly as they are — the next authorization completes initialization without
+             * re-creating anything. That is the "identity survives the interruption" guarantee.
+             */
+            await initializationFault("user-committed");
             /*
              * Who is an administrator is decided by email, not by which provider signed them in. A
              * deployment mid-migration has the same person arriving through Entra one week and
@@ -586,6 +617,12 @@ export function createAuth(
                 throw new APIError("FORBIDDEN", {
                   message: "AUTH_SOURCE_REQUIRED",
                 });
+              /*
+               * T03 fault point: the identity exists but no workspace has been made yet. A failure
+               * here leaves a session-less client with a valid identity and no space; the next
+               * authorization reaches the same branch and completes the workspace.
+               */
+              await initializationFault("before-workspace-ensure");
               const verified = identity.email_verified === true;
               await database
                 .update(users)
@@ -594,6 +631,12 @@ export function createAuth(
               const workspace = verified
                 ? await createWorkspaceStore(database).ensure(session.userId)
                 : null;
+              /*
+               * T03 fault point: the workspace exists (its own committed transaction, the owner
+               * row and its name with it) but the session was never handed out. A retry finds the
+               * same workspace through the owner unique key and binds a new session to it.
+               */
+              await initializationFault("workspace-ensured");
               return {
                 data: {
                   ...session,
@@ -648,6 +691,13 @@ export function createAuth(
             return { data: session };
           },
           after: async (session) => {
+            /*
+             * T03 fault point: the session row is committed (these hooks run after the commit) but
+             * the response never reached the client. The session in the database authorizes nothing
+             * the client does not already hold the cookie for; a new authorization binds a new
+             * session to the same workspace without touching this row.
+             */
+            await initializationFault("session-committed");
             await stampSignIn(database, session.userId, session.createdAt);
 
             /*
