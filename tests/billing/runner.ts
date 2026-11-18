@@ -544,7 +544,7 @@ async function runFull(): Promise<number> {
     const pgIdentity = composeArgs(project, [
       "exec", "-T", "postgres",
       "psql", "-U", pgUser, "-d", `billing62_${runId}`, "-tAc",
-      "select version()",
+      "'select version()'",
     ]);
     console.log(`    postgres: ${pgIdentity.out.trim().slice(0, 100)}`);
     if (pgIdentity.code !== 0 || !pgIdentity.out.includes("PostgreSQL 17")) {
