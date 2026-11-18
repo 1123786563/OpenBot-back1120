@@ -2,41 +2,17 @@
   "status": "passed",
   "boundary_utc": "2024-02-28T16:00:00.000000Z",
   "pagination": {
-    "first_pass_ids": [
-      "page_40",
-      "page_30",
-      "page_30",
-      "page_20",
-      "page_10"
-    ],
+    "first_pass_ids": ["page_40", "page_30", "page_30", "page_20", "page_10"],
     "missed_insert": "inserted_35",
     "repeated_id": "page_30",
-    "rescan_ids": [
-      "page_40",
-      "inserted_35",
-      "page_30",
-      "page_20",
-      "page_10"
-    ],
+    "rescan_ids": ["page_40", "inserted_35", "page_30", "page_20", "page_10"],
     "deduplicated_total_units": 5
   },
   "concurrent_duplicate_statuses": {
-    "0": [
-      200,
-      422
-    ],
-    "1": [
-      200,
-      422
-    ],
-    "2": [
-      200,
-      422
-    ],
-    "3": [
-      200,
-      422
-    ]
+    "0": [200, 422],
+    "1": [200, 422],
+    "2": [200, 422],
+    "3": [200, 422]
   },
   "unique_event_count_after_races": 9,
   "precision_get_responses": {
@@ -61,18 +37,10 @@
       "occurrence_us": 1709136000001000
     }
   },
-  "inclusive_one_microsecond_query_ids": [
-    "plus_us",
-    "at_boundary"
-  ],
-  "inclusive_previous_microsecond_query_ids": [
-    "at_boundary",
-    "minus_us"
-  ],
+  "inclusive_one_microsecond_query_ids": ["plus_us", "at_boundary"],
+  "inclusive_previous_microsecond_query_ids": ["at_boundary", "minus_us"],
   "serializer_collapses_microsecond_distinction": true,
-  "padded_query_integer_property_half_open_ids": [
-    "at_boundary"
-  ],
+  "padded_query_integer_property_half_open_ids": ["at_boundary"],
   "limits": [
     "PostgreSQL community deployment only; no ClickHouse verification.",
     "One controlled page insertion and eight concurrent sends; not a sustained-load benchmark.",

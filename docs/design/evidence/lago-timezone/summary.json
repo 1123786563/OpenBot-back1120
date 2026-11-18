@@ -4,25 +4,12 @@
   "premium": false,
   "method": "REST historical events and subscription; normal BillSubscriptionJob with explicit historical timestamp; no global clock change",
   "beijing_periods_utc": [
-    [
-      "2024-01-30T16:00:00Z",
-      "2024-02-28T16:00:00Z"
-    ],
-    [
-      "2024-02-28T16:00:00Z",
-      "2024-03-30T16:00:00Z"
-    ]
+    ["2024-01-30T16:00:00Z", "2024-02-28T16:00:00Z"],
+    ["2024-02-28T16:00:00Z", "2024-03-30T16:00:00Z"]
   ],
   "first_before": {
-    "raw_ids": [
-      "at_start",
-      "step_at_boundary",
-      "step_before_boundary"
-    ],
-    "half_open_ids": [
-      "at_start",
-      "step_before_boundary"
-    ],
+    "raw_ids": ["at_start", "step_at_boundary", "step_before_boundary"],
+    "half_open_ids": ["at_start", "step_before_boundary"],
     "sum_microcredits": "5",
     "pages": [
       {
@@ -48,11 +35,7 @@
       "leap_day",
       "step_at_boundary"
     ],
-    "half_open_ids": [
-      "before_march_end",
-      "leap_day",
-      "step_at_boundary"
-    ],
+    "half_open_ids": ["before_march_end", "leap_day", "step_at_boundary"],
     "sum_microcredits": "23",
     "pages": [
       {
@@ -78,11 +61,7 @@
       "step_at_boundary",
       "step_before_boundary"
     ],
-    "half_open_ids": [
-      "at_start",
-      "late_february",
-      "step_before_boundary"
-    ],
+    "half_open_ids": ["at_start", "late_february", "step_before_boundary"],
     "sum_microcredits": "22",
     "pages": [
       {
@@ -108,11 +87,7 @@
       "leap_day",
       "step_at_boundary"
     ],
-    "half_open_ids": [
-      "before_march_end",
-      "leap_day",
-      "step_at_boundary"
-    ],
+    "half_open_ids": ["before_march_end", "leap_day", "step_at_boundary"],
     "sum_microcredits": "23",
     "pages": [
       {

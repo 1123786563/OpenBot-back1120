@@ -9,154 +9,112 @@
   {
     "id": 2,
     "title": "持久化一段 Conversation 并恢复历史",
-    "blocked_by": [
-      1
-    ],
+    "blocked_by": [1],
     "delivers": "用户在测试客户端完成对话，重启 OpenBot 后仍能读取消息、Bot 归属和历史。",
     "file": "issues/02.md"
   },
   {
     "id": 3,
     "title": "Run 实时恢复、审批与取消",
-    "blocked_by": [
-      2
-    ],
+    "blocked_by": [2],
     "delivers": "用户跨连接恢复执行进度，审批或取消工作，崩溃后不会重复结果不明的动作。",
     "file": "issues/03.md"
   },
   {
     "id": 4,
     "title": "辅助模型调用的授权与积分闭环",
-    "blocked_by": [
-      1
-    ],
+    "blocked_by": [1],
     "delivers": "一次用户触发的辅助模型操作通过 Bifrost 完成授权、积分预留、执行和结算，并可查看结果。",
     "file": "issues/04.md"
   },
   {
     "id": 5,
     "title": "个人 Memory 审核与本地召回",
-    "blocked_by": [
-      2
-    ],
+    "blocked_by": [2],
     "delivers": "用户管理 Memory，Bot 仅能使用已接受且获准的记忆，并可在本地基础检索。",
     "file": "issues/05.md"
   },
   {
     "id": 6,
     "title": "Hindsight 获准记忆检索与推理",
-    "blocked_by": [
-      4,
-      5
-    ],
+    "blocked_by": [4, 5],
     "delivers": "用户接受的记忆可通过 Hindsight 检索与推理使用，权限仍由 OpenBot 控制。",
     "file": "issues/06.md"
   },
   {
     "id": 7,
     "title": "Memory 故障同步、撤销与重建",
-    "blocked_by": [
-      6
-    ],
+    "blocked_by": [6],
     "delivers": "Hindsight 停机期间的记忆修改安全生效，恢复后补同步且可从权威记录重建。",
     "file": "issues/07.md"
   },
   {
     "id": 8,
     "title": "Recorder 完整上传与断点续传",
-    "blocked_by": [
-      2
-    ],
+    "blocked_by": [2],
     "delivers": "用户主动录制并上传到 OpenBot，能够区分停止、上传完成和不完整片段。",
     "file": "issues/08.md"
   },
   {
     "id": 9,
     "title": "手动学习形成可审核提案",
-    "blocked_by": [
-      4,
-      8
-    ],
+    "blocked_by": [4, 8],
     "delivers": "用户选择已完成对话或已提交录制，运行 Learn now 并查看有证据的 Insight 与 Learning Proposal。",
     "file": "issues/09.md"
   },
   {
     "id": 10,
     "title": "技能发布、版本选择与冲突保护",
-    "blocked_by": [
-      3,
-      9
-    ],
+    "blocked_by": [3, 9],
     "delivers": "获批提案发布后供后续 Run 使用，用户能固定版本、跟随更新和回退。",
     "file": "issues/10.md"
   },
   {
     "id": 11,
     "title": "定时学习、个人自动批准与暂停",
-    "blocked_by": [
-      10
-    ],
+    "blocked_by": [10],
     "delivers": "用户明确开启范围、频率和预算，按计划学习，并控制个人自动批准与暂停恢复。",
     "file": "issues/11.md"
   },
   {
     "id": 12,
     "title": "Opik 元数据追踪与有界补传",
-    "blocked_by": [
-      2
-    ],
+    "blocked_by": [2],
     "delivers": "平台查看一次真实 Run 的元数据追踪，Opik 故障不影响用户对话。",
     "file": "issues/12.md"
   },
   {
     "id": 13,
     "title": "选中样本评估与费用归属",
-    "blocked_by": [
-      4,
-      12
-    ],
+    "blocked_by": [4, 12],
     "delivers": "用户或平台明确选择脱敏样本后执行评估，结果可查看且费用归属正确。",
     "file": "issues/13.md"
   },
   {
     "id": 14,
     "title": "删除来源与关联学习成果清理",
-    "blocked_by": [
-      7,
-      11,
-      13
-    ],
+    "blocked_by": [7, 11, 13],
     "delivers": "用户删除对话或录制前查看关联成果，并选择保留或一起清理，所有副本遵循决定。",
     "file": "issues/14.md"
   },
   {
     "id": 15,
     "title": "材料保留、配额与备份恢复",
-    "blocked_by": [
-      14
-    ],
+    "blocked_by": [14],
     "delivers": "用户材料默认持续保存，空间不足可见，运维恢复备份后不会复活已删除内容。",
     "file": "issues/15.md"
   },
   {
     "id": 16,
     "title": "全部受支持客户端适配与契约验收",
-    "blocked_by": [
-      3,
-      7,
-      11,
-      13,
-      15
-    ],
+    "blocked_by": [3, 7, 11, 13, 15],
     "delivers": "Web、手机、桌面及录制端等已确认支持面均完成新链路，保留各自已有用户能力。",
     "file": "issues/16.md"
   },
   {
     "id": 17,
     "title": "移除旧依赖并完成无 Intelligence 验收",
-    "blocked_by": [
-      16
-    ],
+    "blocked_by": [16],
     "delivers": "新部署在没有 Intelligence 服务、凭据和许可证时通过全链路与故障验收，达到可切换状态。",
     "file": "issues/17.md"
   }

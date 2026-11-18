@@ -11,10 +11,7 @@
   "currency": "CNY",
   "token_units": "17.0",
   "microcredit_units": "1000123.0",
-  "input_microcredits": [
-    123,
-    1000000
-  ],
+  "input_microcredits": [123, 1000000],
   "duplicate_status": 422,
   "current_usage_amount_cents": 0,
   "current_usage_total_amount_cents": 0,

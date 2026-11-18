@@ -11,248 +11,152 @@
     "number": 42,
     "id": 6424249752,
     "url": "https://github.com/1123786563/OpenBot/issues/42",
-    "deps": [
-      1
-    ],
+    "deps": [1],
     "parent_linked": true,
-    "linked_deps": [
-      1
-    ]
+    "linked_deps": [1]
   },
   "3": {
     "number": 43,
     "id": 6424251661,
     "url": "https://github.com/1123786563/OpenBot/issues/43",
-    "deps": [
-      2
-    ],
+    "deps": [2],
     "parent_linked": true,
-    "linked_deps": [
-      2
-    ]
+    "linked_deps": [2]
   },
   "4": {
     "number": 44,
     "id": 6424253620,
     "url": "https://github.com/1123786563/OpenBot/issues/44",
-    "deps": [
-      3
-    ],
+    "deps": [3],
     "parent_linked": true,
-    "linked_deps": [
-      3
-    ]
+    "linked_deps": [3]
   },
   "5": {
     "number": 45,
     "id": 6424255606,
     "url": "https://github.com/1123786563/OpenBot/issues/45",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "6": {
     "number": 46,
     "id": 6424257444,
     "url": "https://github.com/1123786563/OpenBot/issues/46",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "7": {
     "number": 47,
     "id": 6424259301,
     "url": "https://github.com/1123786563/OpenBot/issues/47",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "8": {
     "number": 48,
     "id": 6424260908,
     "url": "https://github.com/1123786563/OpenBot/issues/48",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "9": {
     "number": 49,
     "id": 6424262567,
     "url": "https://github.com/1123786563/OpenBot/issues/49",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "10": {
     "number": 50,
     "id": 6424264120,
     "url": "https://github.com/1123786563/OpenBot/issues/50",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "11": {
     "number": 51,
     "id": 6424265581,
     "url": "https://github.com/1123786563/OpenBot/issues/51",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "12": {
     "number": 52,
     "id": 6424267226,
     "url": "https://github.com/1123786563/OpenBot/issues/52",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "13": {
     "number": 53,
     "id": 6424268773,
     "url": "https://github.com/1123786563/OpenBot/issues/53",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "14": {
     "number": 54,
     "id": 6424270374,
     "url": "https://github.com/1123786563/OpenBot/issues/54",
-    "deps": [
-      4
-    ],
+    "deps": [4],
     "parent_linked": true,
-    "linked_deps": [
-      4
-    ]
+    "linked_deps": [4]
   },
   "15": {
     "number": 55,
     "id": 6424271886,
     "url": "https://github.com/1123786563/OpenBot/issues/55",
-    "deps": [
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14
-    ],
+    "deps": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     "parent_linked": true,
-    "linked_deps": [
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14
-    ]
+    "linked_deps": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
   },
   "16": {
     "number": 56,
     "id": 6424273624,
     "url": "https://github.com/1123786563/OpenBot/issues/56",
-    "deps": [
-      15
-    ],
+    "deps": [15],
     "parent_linked": true,
-    "linked_deps": [
-      15
-    ]
+    "linked_deps": [15]
   },
   "17": {
     "number": 57,
     "id": 6424275489,
     "url": "https://github.com/1123786563/OpenBot/issues/57",
-    "deps": [
-      16
-    ],
+    "deps": [16],
     "parent_linked": true,
-    "linked_deps": [
-      16
-    ]
+    "linked_deps": [16]
   },
   "18": {
     "number": 58,
     "id": 6424277159,
     "url": "https://github.com/1123786563/OpenBot/issues/58",
-    "deps": [
-      16
-    ],
+    "deps": [16],
     "parent_linked": true,
-    "linked_deps": [
-      16
-    ]
+    "linked_deps": [16]
   },
   "19": {
     "number": 59,
     "id": 6424279097,
     "url": "https://github.com/1123786563/OpenBot/issues/59",
-    "deps": [
-      17,
-      18
-    ],
+    "deps": [17, 18],
     "parent_linked": true,
-    "linked_deps": [
-      17,
-      18
-    ]
+    "linked_deps": [17, 18]
   },
   "20": {
     "number": 60,
     "id": 6424280913,
     "url": "https://github.com/1123786563/OpenBot/issues/60",
-    "deps": [
-      19
-    ],
+    "deps": [19],
     "parent_linked": true,
-    "linked_deps": [
-      19
-    ]
+    "linked_deps": [19]
   }
 }

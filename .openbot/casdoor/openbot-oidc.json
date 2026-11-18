@@ -5,10 +5,6 @@
   "clientSecret": "5PdJFVRlA3MgpxlcKXXkElncml01f2pGbdeqDSqMTgM",
   "providerId": "casdoor",
   "redirectUri": "http://localhost:3001/api/auth/sso/callback/casdoor",
-  "scopes": [
-    "openid",
-    "profile",
-    "email"
-  ],
+  "scopes": ["openid", "profile", "email"],
   "status": "Casdoor ready; OpenBot provider registration and callback verification pending"
 }

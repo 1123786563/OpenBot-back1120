@@ -15,9 +15,7 @@
       "title": "持久化一段 Conversation 并恢复历史",
       "url": "https://github.com/1123786563/OpenBot/issues/90",
       "criteria": 7,
-      "blockers": [
-        89
-      ]
+      "blockers": [89]
     },
     {
       "ticket": 3,
@@ -25,9 +23,7 @@
       "title": "Run 实时恢复、审批与取消",
       "url": "https://github.com/1123786563/OpenBot/issues/91",
       "criteria": 7,
-      "blockers": [
-        90
-      ]
+      "blockers": [90]
     },
     {
       "ticket": 4,
@@ -35,9 +31,7 @@
       "title": "辅助模型调用的授权与积分闭环",
       "url": "https://github.com/1123786563/OpenBot/issues/92",
       "criteria": 8,
-      "blockers": [
-        89
-      ]
+      "blockers": [89]
     },
     {
       "ticket": 5,
@@ -45,9 +39,7 @@
       "title": "个人 Memory 审核与本地召回",
       "url": "https://github.com/1123786563/OpenBot/issues/93",
       "criteria": 7,
-      "blockers": [
-        90
-      ]
+      "blockers": [90]
     },
     {
       "ticket": 6,
@@ -55,10 +47,7 @@
       "title": "Hindsight 获准记忆检索与推理",
       "url": "https://github.com/1123786563/OpenBot/issues/94",
       "criteria": 7,
-      "blockers": [
-        92,
-        93
-      ]
+      "blockers": [92, 93]
     },
     {
       "ticket": 7,
@@ -66,9 +55,7 @@
       "title": "Memory 故障同步、撤销与重建",
       "url": "https://github.com/1123786563/OpenBot/issues/95",
       "criteria": 7,
-      "blockers": [
-        94
-      ]
+      "blockers": [94]
     },
     {
       "ticket": 8,
@@ -76,9 +63,7 @@
       "title": "Recorder 完整上传与断点续传",
       "url": "https://github.com/1123786563/OpenBot/issues/96",
       "criteria": 7,
-      "blockers": [
-        90
-      ]
+      "blockers": [90]
     },
     {
       "ticket": 9,
@@ -86,10 +71,7 @@
       "title": "手动学习形成可审核提案",
       "url": "https://github.com/1123786563/OpenBot/issues/97",
       "criteria": 7,
-      "blockers": [
-        92,
-        96
-      ]
+      "blockers": [92, 96]
     },
     {
       "ticket": 10,
@@ -97,10 +79,7 @@
       "title": "技能发布、版本选择与冲突保护",
       "url": "https://github.com/1123786563/OpenBot/issues/98",
       "criteria": 7,
-      "blockers": [
-        91,
-        97
-      ]
+      "blockers": [91, 97]
     },
     {
       "ticket": 11,
@@ -108,9 +87,7 @@
       "title": "定时学习、个人自动批准与暂停",
       "url": "https://github.com/1123786563/OpenBot/issues/99",
       "criteria": 7,
-      "blockers": [
-        98
-      ]
+      "blockers": [98]
     },
     {
       "ticket": 12,
@@ -118,9 +95,7 @@
       "title": "Opik 元数据追踪与有界补传",
       "url": "https://github.com/1123786563/OpenBot/issues/100",
       "criteria": 7,
-      "blockers": [
-        90
-      ]
+      "blockers": [90]
     },
     {
       "ticket": 13,
@@ -128,10 +103,7 @@
       "title": "选中样本评估与费用归属",
       "url": "https://github.com/1123786563/OpenBot/issues/101",
       "criteria": 7,
-      "blockers": [
-        92,
-        100
-      ]
+      "blockers": [92, 100]
     },
     {
       "ticket": 14,
@@ -139,11 +111,7 @@
       "title": "删除来源与关联学习成果清理",
       "url": "https://github.com/1123786563/OpenBot/issues/102",
       "criteria": 7,
-      "blockers": [
-        95,
-        99,
-        101
-      ]
+      "blockers": [95, 99, 101]
     },
     {
       "ticket": 15,
@@ -151,9 +119,7 @@
       "title": "材料保留、配额与备份恢复",
       "url": "https://github.com/1123786563/OpenBot/issues/103",
       "criteria": 7,
-      "blockers": [
-        102
-      ]
+      "blockers": [102]
     },
     {
       "ticket": 16,
@@ -161,13 +127,7 @@
       "title": "全部受支持客户端适配与契约验收",
       "url": "https://github.com/1123786563/OpenBot/issues/104",
       "criteria": 7,
-      "blockers": [
-        91,
-        95,
-        99,
-        101,
-        103
-      ]
+      "blockers": [91, 95, 99, 101, 103]
     },
     {
       "ticket": 17,
@@ -175,9 +135,7 @@
       "title": "移除旧依赖并完成无 Intelligence 验收",
       "url": "https://github.com/1123786563/OpenBot/issues/105",
       "criteria": 8,
-      "blockers": [
-        104
-      ]
+      "blockers": [104]
     }
   ],
   "total_criteria": 121,
