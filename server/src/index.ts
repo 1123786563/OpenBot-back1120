@@ -107,6 +107,7 @@ import {
   markAttachmentsSent,
 } from "./channels/attachments";
 import {
+  announceSessionRevoked,
   createChannelEventHub,
   startChannelActivityListener,
 } from "./channels/events";
@@ -3393,6 +3394,13 @@ const app = createApp(
   identityStore,
   identityGithubCallback,
   profileStore,
+  // Sign-out ends the identity's live subscriptions, not only the session row: this instance's
+  // sockets close at once, and the same fact rides the activity topic to every other replica.
+  // Last, matching `createApp`'s own last positional parameter.
+  async (userId) => {
+    channelEvents.revokeUser(userId);
+    await announceSessionRevoked(database, [userId]);
+  },
 );
 
 startHttpServer({

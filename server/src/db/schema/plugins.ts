@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { agents, credentials, users } from "./core";
 import { jsonb } from "./json";
+import { personalOrganizations } from "./workspaces";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -534,6 +535,19 @@ export const brokeredConnections = pgTable(
     userId: text("user_id"),
     vendorUserId: text("vendor_user_id").notNull(),
     connectedBy: text("connected_by"),
+    /**
+     * The workspace the deployment-held account belongs to.
+     *
+     * A Shared account is a fact about ONE workspace, not about the deployment: an administrator
+     * connects it from their own personal space, and a person in any other space may neither use
+     * it nor read its state. Null on rows written before this column existed, and on person-held
+     * rows, which are already scoped by `user_id`. A workspace actor meets a null here — a row
+     * written by a version that recorded no workspace — and the answer is refusal, never
+     * inheritance: an unscoped team account must not become every space's fallback.
+     */
+    organizationId: uuid("organization_id").references(
+      () => personalOrganizations.id,
+    ),
     connectedAt: timestamp("connected_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -558,6 +572,7 @@ export const brokeredConnections = pgTable(
       .on(table.provider, table.app)
       .where(sql`${table.holder} = 'deployment'`),
     index("brokered_connections_user_idx").on(table.userId),
+    index("brokered_connections_organization_idx").on(table.organizationId),
   ],
 );
 

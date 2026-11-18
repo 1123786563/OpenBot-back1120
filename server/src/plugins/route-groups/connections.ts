@@ -117,7 +117,10 @@ export function mountConnectionRoutes({
     const [held, brokered, shared] = await Promise.all([
       store.connectionsFor(context.var.actor.id),
       store.brokeredConnectionsFor(context.var.actor.id),
-      store.sharedConnections(),
+      // The viewer's workspace rides along, so another space's shared account reads here as
+      // "not connected" rather than as somebody else's connection state. See
+      // `sharedConnections`, which hides rather than refuses, and why.
+      store.sharedConnections({ workspaceId: context.var.actor.workspaceId }),
     ]);
     const connections = [
       ...held.map((row) => ({ ...row, holder: "person" as const })),
@@ -1088,7 +1091,7 @@ export function mountConnectionRoutes({
         toolkit?: undefined;
         account?: undefined;
         title?: undefined;
-        refusal: { error: string; status: 400 | 403 | 503 };
+        refusal: { error: string; status: 400 | 403 | 404 | 503 };
       }
   > => {
     const row = await store.serverAddress(serverId);
@@ -1112,6 +1115,32 @@ export function mountConnectionRoutes({
     const resolved = await store.accountRefFor(serverId, context.var.actor.id);
     if ("refusal" in resolved) {
       return { refusal: { error: resolved.refusal, status: 400 } };
+    }
+    /*
+     * ANOTHER WORKSPACE'S SHARED ACCOUNT ANSWERS NOTHING, NOT EVEN ITS STATE.
+     *
+     * Every question this resolver backs — read or act — is refused for a workspace actor whose
+     * personal space the deployment account does not belong to, and the refusal is the same 404
+     * an unknown app earns: the account's existence, its state, and the name of whoever connected
+     * it are all facts of a space the caller is not in. A 403 would concede that the account is
+     * there; a missing workspace on the row (written before binding existed) is refused the same
+     * way rather than inherited, because an unscoped team account is nobody's fallback. An actor
+     * with no workspace — single-user, legacy — is the one caller this check does not apply to.
+     */
+    if (
+      resolved.ref.holder === "deployment" &&
+      context.var.actor.workspaceId &&
+      !(await store.sharedAccountInScope(
+        toolkit,
+        context.var.actor.workspaceId,
+      ))
+    ) {
+      return {
+        refusal: {
+          error: "There is no such connection.",
+          status: 404,
+        },
+      };
     }
     if (
       !options.readOnly &&

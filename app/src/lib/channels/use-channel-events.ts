@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { identityGeneration, identityFrozen } from "@/lib/auth/identity";
 import { noticeChannelEvent } from "@/lib/notifications/reply-notice";
 import { socketUrl as buildSocketUrl } from "@/lib/socket-url";
 import {
@@ -325,6 +326,11 @@ export function useChannelEvents() {
 
     const connect = () => {
       if (stopped) return;
+      // The generation this socket was opened under. The server authenticates the upgrade by
+      // cookie, so a socket that outlives a sign-out speaks for whoever the cookie names NOW; a
+      // message that arrives under a stale generation is the old identity's event, and is dropped
+      // with the socket rather than patched into the new identity's cache.
+      const openedAtGeneration = identityGeneration();
       socket = new WebSocket(socketUrl());
 
       socket.onopen = () => {
@@ -335,6 +341,13 @@ export function useChannelEvents() {
       };
 
       socket.onmessage = (message) => {
+        // A message from before the current identity is not this identity's event: the server
+        // ends the socket on sign-out and the client emptied the cache, but a frame already in
+        // the air when both happened must not land either.
+        if (identityFrozen() || identityGeneration() !== openedAtGeneration) {
+          socket?.close();
+          return;
+        }
         const parsed = parseChannelSocketMessage(message.data);
         if (!parsed) return;
 

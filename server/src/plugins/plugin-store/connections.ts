@@ -32,6 +32,7 @@ import {
   sharedAccountOnlySentence,
 } from "../deployment-clients";
 import { type AccountRef, filedUnderPerson } from "../shared-accounts";
+import { personalOrgOf, sharedAccountInScope } from "./shared-scope";
 import type { StoreContext } from "./context";
 import {
   attemptNamed,
@@ -693,7 +694,9 @@ export function connectionMethods(context: StoreContext) {
      * key app the answer is {@link probeActionFor}'s, asked of the app, for the reason
      * {@link brokeredConnectionsFor} gives for keeping `checkable` apart from `probe`.
      */
-    async sharedConnections(): Promise<
+    async sharedConnections(viewer?: {
+      workspaceId?: string;
+    }): Promise<
       {
         serverId: string;
         scope: "";
@@ -734,23 +737,65 @@ export function connectionMethods(context: StoreContext) {
             this.deploymentConnectionFor(server.id),
             toolkit ? brokeredAppKind(toolkit) : null,
           ]);
+          /*
+           * ANOTHER WORKSPACE'S SHARED ACCOUNT IS NOT THIS VIEWER'S FACT.
+           *
+           * A deployment account belongs to the space of the administrator who connected it. A
+           * viewer from another space reads the app here too — the catalogue is deployment-wide —
+           * but what they read is "not connected": no state, no timestamps, and above all no
+           * `connectedBy` naming somebody else's administrator. Hidden rather than refused, so the
+           * card keeps its ordinary Request-access sentence; refused would leak only that the
+           * account exists, which is already more than another space's viewer is owed. A viewer
+           * with no workspace (single-user, legacy) sees what it always saw.
+           */
+          const visible =
+            connection && viewer?.workspaceId
+              ? toolkit &&
+                (await sharedAccountInScope(
+                  database,
+                  brokerProvider,
+                  toolkit,
+                  viewer.workspaceId,
+                ))
+                ? connection
+                : null
+              : connection;
           return {
             serverId: server.id,
             scope: "" as const,
             holder: "deployment" as const,
-            connected: connection !== null,
-            connectedAt: connection?.connectedAt ?? null,
-            connectedBy: connection?.connectedBy ?? null,
-            verified: connection?.verified ?? false,
-            verifiedAt: connection?.verifiedAt ?? null,
-            probe: connection?.probe ?? null,
+            connected: visible !== null,
+            connectedAt: visible?.connectedAt ?? null,
+            connectedBy: visible?.connectedBy ?? null,
+            verified: visible?.verified ?? false,
+            verifiedAt: visible?.verifiedAt ?? null,
+            probe: visible?.probe ?? null,
             checkable:
-              connection !== null &&
+              visible !== null &&
               kind === "key" &&
               (await this.probeActionFor(server.id)) !== null,
-            displayName: connection?.displayName ?? null,
+            displayName: visible?.displayName ?? null,
           };
         }),
+      );
+    },
+
+    /**
+     * Whether the deployment-held account behind this app belongs to the named workspace.
+     *
+     * The one org question the connection routes ask, answered by the same helper the call path
+     * asks, so a route and a call can never disagree about whose account a Shared app is. See
+     * {@link sharedAccountInScope} for the nulls.
+     */
+    async sharedAccountInScope(
+      toolkit: string,
+      workspaceId: string,
+    ): Promise<boolean> {
+      return await sharedAccountInScope(
+        database,
+        brokerProvider,
+        toolkit,
+        workspaceId,
       );
     },
 
@@ -1020,6 +1065,20 @@ export function connectionMethods(context: StoreContext) {
        * in the account the evidence was not about. The insert always set it; the arms did not.
        */
       const connectedAs = input.account.vendorUserId;
+      /*
+       * THE WORKSPACE A DEPLOYMENT ACCOUNT IS BOUND TO, TAKEN FROM THE ADMINISTRATOR CONNECTING IT.
+       *
+       * A Shared account belongs to the space its connecting administrator speaks for, not to the
+       * deployment: every later use and every later read is refused to any other space. Derived
+       * here rather than passed in, so no caller can forget it and none can choose it — the same
+       * reason `connectedBy` is the session subject and never a body field. Null when the
+       * connector holds no personal organization (single-user, legacy): the row stands but a
+       * workspace actor will be refused it, which is the fail-closed reading of "no scope".
+       */
+      const boundOrg =
+        input.account.holder === "deployment" && input.connectedBy
+          ? await personalOrgOf(database, input.connectedBy)
+          : null;
       await database
         .insert(brokeredConnections)
         .values({
@@ -1047,6 +1106,8 @@ export function connectionMethods(context: StoreContext) {
             input.account.holder === "deployment"
               ? (input.connectedBy ?? null)
               : null,
+          organizationId:
+            input.account.holder === "deployment" ? boundOrg : null,
           verified: input.verified,
           verifiedAt,
           probeAction: input.probeAction,
@@ -1072,11 +1133,17 @@ export function connectionMethods(context: StoreContext) {
                 // `connectedBy` at all, so a re-check or a confirm that passes none does not
                 // blank out the administrator an earlier connect already recorded. That
                 // condition is the point: do NOT make this unconditional.
+                //
+                // THE WORKSPACE FOLLOWS THE SAME RULE, for the same reason: the account now
+                // belongs to the space of the administrator who most recently consented to
+                // it, so a re-consent from another space's administrator rebinds the row —
+                // and a check that names nobody rebinds nothing.
                 set: input.connectedBy
                   ? {
                       ...set,
                       vendorUserId: connectedAs,
                       connectedBy: input.connectedBy,
+                      ...(boundOrg ? { organizationId: boundOrg } : {}),
                     }
                   : { ...set, vendorUserId: connectedAs },
               },
@@ -1439,6 +1506,13 @@ export function connectionMethods(context: StoreContext) {
          */
         const connectedBy =
           input.account.holder === "deployment" ? input.actorId : null;
+        // The workspace the deployment account is bound to, read off the actor completing the
+        // consent — the same derivation `recordBrokeredConnection` makes from `connectedBy`, so
+        // the two writers cannot bind two different spaces for one account.
+        const boundOrg =
+          input.account.holder === "deployment"
+            ? await personalOrgOf(database, input.actorId)
+            : null;
         await transaction
           .insert(brokeredConnections)
           .values({
@@ -1451,6 +1525,8 @@ export function connectionMethods(context: StoreContext) {
               input.account.holder === "person" ? input.account.userId : null,
             vendorUserId: recorded.vendorUserId,
             connectedBy,
+            organizationId:
+              input.account.holder === "deployment" ? boundOrg : null,
             ...set,
           })
           .onConflictDoUpdate(
@@ -1489,6 +1565,9 @@ export function connectionMethods(context: StoreContext) {
                     ...set,
                     vendorUserId: input.account.vendorUserId,
                     connectedBy,
+                    // The latest consent rebinds the account to its completer's space, exactly
+                    // as it rebases `connectedBy` — a consent is a reconnection here too.
+                    ...(boundOrg ? { organizationId: boundOrg } : {}),
                     connectedAt: verifiedAt,
                   },
                 },

@@ -574,6 +574,18 @@ export function createApp(
   /** The GitHub sign-in callback, built by the caller; mounted behind requireUser ahead of /api/identity. */
   identityGithubCallback?: Hono<{ Variables: AppVariables }>,
   profileStore?: ProfileStore,
+  /**
+   * Run when a person's sign-out succeeds, before the response is written: end the identity's
+   * live subscriptions here, both this instance's sockets and — through the activity topic — the
+   * other replicas'. Absent leaves a signed-out socket living until its own close, which is a
+   * receiving qualification no valid session backs.
+   *
+   * LAST IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
+   * already counted its way to `profileStore` must not have its tail arguments shift when a
+   * deployment starts revoking sessions — which is exactly what inserting this earlier did to
+   * every caller and test in the tree.
+   */
+  onSessionEnded?: (userId: string) => Promise<void> | void,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -750,7 +762,47 @@ export function createApp(
             .catch(() => null)) as { providerId?: unknown } | null)
         : null;
 
+    /*
+     * A sign-out ends more than the session row. Subscriptions upgraded while the session lived —
+     * the channel event socket — keep receiving until their socket closes, and nothing about a
+     * successful sign-out closes them. So before the handler runs, the person is read off the
+     * still-valid session; after it answers ok, the deployment is told the identity's receiving
+     * qualification has ended. `onSessionEnded` closes this instance's sockets and announces the
+     * revocation on the same topic every instance listens to, so a socket upgraded on another
+     * replica ends too. Absent — single-user mode has no sign-out at all — nothing to end.
+     */
+    const signOutPath = "/api/auth/sign-out";
+    const signingOut =
+      context.req.method === "POST" &&
+      new URL(context.req.url).pathname === signOutPath;
+    const endingUserId = signingOut
+      ? (
+          await auth.api
+            .getSession({
+              headers: context.req.raw.headers,
+              query: { disableCookieCache: true },
+            })
+            .catch(() => null)
+        )?.user.id
+      : undefined;
+
     const answer = await auth.handler(context.req.raw);
+
+    if (signingOut && answer.ok && endingUserId) {
+      try {
+        await onSessionEnded?.(endingUserId);
+      } catch (error) {
+        // A failed revocation must not fail the sign-out the person asked for, and must not name
+        // internals to them. The session is already gone; the socket's own close still detaches.
+        console.error(
+          JSON.stringify({
+            type: "sign-out-revocation-failed",
+            note: "Could not end live subscriptions for the signed-out identity.",
+            error: String(error),
+          }),
+        );
+      }
+    }
 
     if (auditStore && eventType && answer.ok) {
       const session = await auth.api.getSession({

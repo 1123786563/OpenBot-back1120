@@ -43,6 +43,7 @@ import {
   personAccount,
 } from "../shared-accounts";
 import { filedUnder } from "../single-user-identity";
+import { personalOrgOf, sharedAccountInScope } from "./shared-scope";
 import {
   type BrokeredDisconnectReason,
   CatalogueEntryUnknownError,
@@ -710,6 +711,33 @@ export function createStoreContext(options: PluginStoreOptions) {
           `${row.title} changed how it is shared while this call was being checked, so it was not called. Ask again.`,
           null,
         );
+      /*
+       * A SHARED ACCOUNT ANSWERS TO ITS OWN WORKSPACE, AND TO NO OTHER, BEFORE ANY CALL.
+       *
+       * The deployment-held account belongs to the workspace of the administrator who connected
+       * it. A person whose session names a different personal space is refused here — before the
+       * connection row is read for its vendor identity, before the transport dials, before the
+       * vendor hears anything — so the refusal cannot be confused with the app being unconnected.
+       * A workspace actor also refuses a row with no workspace: written before binding existed,
+       * it names no space and is nobody's fallback. An actor with no personal organization is a
+       * single-user or legacy identity, the one shape the workspace dimension does not apply to.
+       */
+      if (resolved.ref.holder === "deployment") {
+        const workspace = await personalOrgOf(database, actorId);
+        if (workspace) {
+          const inScope = await sharedAccountInScope(
+            database,
+            brokerProvider,
+            access.toolkit,
+            workspace,
+          );
+          if (!inScope)
+            throw new PluginRefusedError(
+              `${row.title} uses a shared account that belongs to another workspace, so it was not called.`,
+              null,
+            );
+        }
+      }
       /*
        * A ROW IS ONLY REQUIRED WHERE THIS DEPLOYMENT IS THE ONE HOLDING THE GRANT.
        *
