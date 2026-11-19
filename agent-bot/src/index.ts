@@ -114,6 +114,22 @@ const openai = new OpenAI({
   baseURL: BASE_URL,
 });
 
+/**
+ * The enum a failed turn's diagnostic line carries, and nothing else about the failure.
+ *
+ * The model's own words, a stack, or anything the conversation carried must not reach the log
+ * pipeline, so the refusal is named by class alone: the provider refused the request, the
+ * provider could not be reached, or the turn failed some other way.
+ */
+function errorCodeOf(
+  error: unknown,
+): "model-refused" | "model-unavailable" | "turn-failed" {
+  if (!(error instanceof OpenAI.APIError)) return "turn-failed";
+  return typeof error.status === "number" && error.status >= 500
+    ? "model-unavailable"
+    : "model-refused";
+}
+
 /** Every tool comes from the caller. This service publishes none of its own, on purpose. */
 function toProviderTools(input: RunAgentInput) {
   if (!input.tools?.length) return undefined;
@@ -217,6 +233,18 @@ async function runAgent(input: RunAgentInput): Promise<Response> {
           runId: input.runId,
         } as BaseEvent);
       } catch (error) {
+        // One line on stderr for the platform administrator's log view, before the run error
+        // reaches the surface: the fixed event name, the run it belongs to and an enum code. The
+        // model's refusal text, anything the conversation carried and the error message itself
+        // stay out — the collector forwards only what the registry names (see
+        // scripts/observability/log-registry.py and docs/observability-openobserve.md).
+        console.error(
+          JSON.stringify({
+            type: "agent-turn-failed",
+            runId: input.runId,
+            errorCode: errorCodeOf(error),
+          }),
+        );
         // Reported as a run error rather than a dropped connection, so the transcript can say what
         // went wrong. A stream that simply ends leaves the surface waiting forever with no reason.
         send({
