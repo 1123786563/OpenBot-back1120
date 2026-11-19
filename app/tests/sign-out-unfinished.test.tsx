@@ -19,6 +19,7 @@ import {
 import { cleanup, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSignOut } from "@/components/app-sidebar/use-sign-out";
+import { resumeIdentity } from "@/lib/auth/identity";
 import { Toaster } from "@/components/ui/toast";
 import { queryClient } from "@/query-client";
 import { settleReactWork } from "./settle-react-work";
@@ -121,5 +122,11 @@ for (const [who, body] of [
     await userEvent.click(button);
     await waitFor(() => expect(router.state.location.pathname).toBe("/sign"));
     await waitFor(() => expect(toasts()).toEqual([]));
+
+    // The successful sign-out ended the identity and shut the write door, exactly as in the app.
+    // The next person proves themselves on arrival and it opens for them; this process carries
+    // on with other test files, so prove one here instead of leaving every later file writing
+    // into a frozen cache.
+    resumeIdentity();
   });
 }

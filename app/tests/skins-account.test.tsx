@@ -20,6 +20,7 @@ import {
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { signOutMutationOptions } from "@/lib/auth/mutations";
+import { resumeIdentity } from "@/lib/auth/identity";
 import { authKeys } from "@/lib/auth/queries";
 import { appConfig } from "@/lib/generated/application-config";
 import { userPreferencesQueryOptions } from "@/lib/settings/message-list";
@@ -269,6 +270,12 @@ test("signing out forgets the cached skin, so the next person starts from the de
   expect(document.documentElement.dataset.skin).toBeUndefined();
   expect(getSkinId()).toBe("openbot");
   expect(queryClient.getQueryData(authKeys.currentUser())).toBeUndefined();
+
+  // The switch left the write door shut for the identity that just ended, exactly as in the app:
+  // the next person proves themselves on arrival, and the door opens for them. This process
+  // keeps running other files after this one, so prove one here rather than leave every later
+  // test writing into a frozen cache.
+  resumeIdentity();
 });
 
 test("a sign-out the server refused keeps the skin", async () => {

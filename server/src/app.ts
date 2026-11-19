@@ -58,6 +58,7 @@ import {
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import { desktopAuthPage } from "./auth/native-browser";
+import { gateStreamingResponse, type SessionGate } from "./auth/session-gate";
 import {
   type BotBrowserRouteDeps,
   createBotBrowser,
@@ -577,9 +578,11 @@ export function createApp(
   identityGithubCallback?: Hono<{ Variables: AppVariables }>,
   profileStore?: ProfileStore,
   /**
-   * Run when a person's sign-out succeeds, before the response is written: end the identity's
-   * live subscriptions here, both this instance's sockets and — through the activity topic — the
-   * other replicas'. Absent leaves a signed-out socket living until its own close, which is a
+   * Run when a person's sign-out succeeds, before the response is written: end the SESSION's
+   * live subscriptions here, both this instance's sockets and — through the activity topic —
+   * the other replicas'. The session id comes with the person, because that is what the sign-out
+   * ended: one sign-out must close its own session's sockets and leave the same person's other
+   * devices alone. Absent leaves a signed-out socket living until its own close, which is a
    * receiving qualification no valid session backs.
    *
    * LATE IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
@@ -587,7 +590,10 @@ export function createApp(
    * deployment starts revoking sessions — which is exactly what inserting this earlier did to
    * every caller and test in the tree.
    */
-  onSessionEnded?: (userId: string) => Promise<void> | void,
+  onSessionEnded?: (
+    userId: string,
+    sessionId: string | undefined,
+  ) => Promise<void> | void,
   /**
    * The payment channels' durable notification inbox (payments/alipay/inbox.ts).
    *
@@ -607,6 +613,17 @@ export function createApp(
   // biome-ignore lint/suspicious/noExplicitAny: the sub-app carries its own
   // trusted-context Variables; the host app only routes it verbatim.
   billingCatalogApp?: HonoApp<any>,
+  /**
+   * Whether a still-open stream may still be written to, asked BEFORE EVERY CHUNK.
+   *
+   * A streaming response — a CopilotKit turn above all — is authorized once, at its beginning,
+   * and then trickles for as long as the model keeps talking. The route guards check the session
+   * at the request; they cannot check it at the twentieth chunk, which may be minutes after the
+   * session signed out. The gate reads the same `sessions` table the sign-out deletes from, so
+   * every replica asks the same shared state and no announcement delay can leave a window.
+   * Absent — single-user mode has no sign-out to revoke against — streams run ungated.
+   */
+  sessionGate?: SessionGate,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -796,22 +813,28 @@ export function createApp(
     const signingOut =
       context.req.method === "POST" &&
       new URL(context.req.url).pathname === signOutPath;
-    const endingUserId = signingOut
-      ? (
-          await auth.api
-            .getSession({
-              headers: context.req.raw.headers,
-              query: { disableCookieCache: true },
-            })
-            .catch(() => null)
-        )?.user.id
-      : undefined;
+    const endingSession = signingOut
+      ? await auth.api
+          .getSession({
+            headers: context.req.raw.headers,
+            query: { disableCookieCache: true },
+          })
+          .then((session) =>
+            session
+              ? {
+                  userId: session.user.id,
+                  sessionId: session.session?.id,
+                }
+              : null,
+          )
+          .catch(() => null)
+      : null;
 
     const answer = await auth.handler(context.req.raw);
 
-    if (signingOut && answer.ok && endingUserId) {
+    if (signingOut && answer.ok && endingSession) {
       try {
-        await onSessionEnded?.(endingUserId);
+        await onSessionEnded?.(endingSession.userId, endingSession.sessionId);
       } catch (error) {
         // A failed revocation must not fail the sign-out the person asked for, and must not name
         // internals to them. The session is already gone; the socket's own close still detaches.
@@ -1723,7 +1746,48 @@ export function createApp(
             isTrajectoryConnectPath(path))
         )
           return next();
-        return requireUser(context, next);
+        const answer = await requireUser(context, next);
+        /*
+         * THE GUARD'S OWN REFUSALS PASS THROUGH UNTOUCHED — a 401 or 403 is a complete response,
+         * answered inside the request that asked, and the actor is not even set under it.
+         */
+        if (answer) return answer;
+        /*
+         * A BODY ANSWERS TO ITS SESSION FOR AS LONG AS IT IS BEING WRITTEN — including the one
+         * `next()` just finished producing.
+         *
+         * The guard above proved the session once, at the request; the gate proves it again before
+         * every chunk leaves the server, so a turn still streaming when its session signs out
+         * stops mid-stream — on this replica or any other, because the gate reads the sessions
+         * table they all share. The response the guard authorized is read back off `context.res`:
+         * a successful authentication makes `requireUser` return `undefined` AFTER `next()` has
+         * run, so the response it authorized is HERE and nowhere in this middleware's return
+         * value — keyed on that return alone, every authenticated body skipped the gate, and the
+         * only requests a stream ever gated were its own refusals.
+         *
+         * AND THE WRAPPER IS ASSIGNED, NOT RETURNED. A downstream handler answers first and sets
+         * `context.res` itself; Hono's compose then keeps only `context.res` — a middleware's own
+         * return value is discarded once the context has finalized under it. Returning the wrapper
+         * would not only gate nothing: the wrapper pipes the very body `context.res` still holds,
+         * which would hand the caller a response whose body this server had already locked. The
+         * setter is the one write Hono honours after `next()`, and it is what swaps the gated body
+         * in.
+         *
+         * A body that answers in one write is wrapped too, and deliberately: whether a body will
+         * trickle is a property of the code BEHIND this middleware, which can change without this
+         * line hearing about it, while the cost of wrapping a one-write body is a single indexed
+         * primary-key read — the same price every gated frame already pays. A refusal the other
+         * way (ending a body that outlived its session) is the failure mode being closed, so the
+         * wrapper is the default and exempting a body shape is a decision someone has to make,
+         * not a silence that keeps it.
+         */
+        if (sessionGate) {
+          context.res = gateStreamingResponse(
+            context.res,
+            sessionGate,
+            context.var.actor?.sessionId,
+          );
+        }
       });
     app.use("/api/copilotkit/*", createCapturePassOrigin(config));
     // Mounted at the ROOT with the handler carrying its own basePath. Mounting it at

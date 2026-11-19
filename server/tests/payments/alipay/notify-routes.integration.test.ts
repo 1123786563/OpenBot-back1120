@@ -77,8 +77,7 @@ afterAll(async () => {
 });
 
 function buildApp(inbox: ReturnType<typeof createAlipayNotifyInbox> | null) {
-  // `alipayNotifyInbox` is createApp's last positional parameter (#41); the
-  // undefineds ahead of it are the optional services this suite does not use.
+  // The undefineds ahead of the Alipay inbox are the optional services this suite does not use.
   const unused = Array.apply(null, Array(39)) as undefined[];
   return createApp(
     loadConfig(testEnvironment({ ...ALIPAY_ENV })),

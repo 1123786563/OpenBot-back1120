@@ -40,10 +40,11 @@ import {
   type AccountMode,
   type AccountRef,
   accountFor,
+  deploymentOrgVendorUserId,
   personAccount,
 } from "../shared-accounts";
 import { filedUnder } from "../single-user-identity";
-import { personalOrgOf, sharedAccountInScope } from "./shared-scope";
+import { personalOrgOf } from "./shared-scope";
 import {
   type BrokeredDisconnectReason,
   CatalogueEntryUnknownError,
@@ -393,8 +394,61 @@ export function createStoreContext(options: PluginStoreOptions) {
         `${appId} is Shared and holds no deployment identity; switch it to Personal and back.`,
       );
     }
+    /*
+     * THE SHARED REF NAMES THE ACTOR'S OWN WORKSPACE, BECAUSE THE ROW IT RESOLVES IS CHOSEN BY IT.
+     *
+     * One app can hold one Shared account per workspace, and every row read keyed on this ref
+     * carries the workspace in its WHERE, so a call resolves the calling actor's row or none. Read
+     * off the actor here, at the same place the ref is minted, so no caller can hold a ref that
+     * names somebody else's space: a single-user or legacy identity holds none, and keeps the
+     * unscoped lookup it always ran.
+     *
+     * AND THE IDENTITY IS THE WORKSPACE'S OWN, NOT THE APP'S. The app's `shared_vendor_user_id` is
+     * the unbound deployment account's identity; keyed on it, two workspaces' rows would name one
+     * vendor identity and the vendor could not tell one space's actions or revocations from the
+     * other's. A workspace actor's ref derives {@link deploymentOrgVendorUserId} — deterministic in
+     * deployment, workspace and app — so the consent this ref mints at the vendor and the row the
+     * completion writes PERSIST that space's own identity, and another space's consent spells a
+     * different one. A workspace-bound row left from before the derivation (carrying the app-level
+     * identity) matches nothing this ref looks up and is refused until re-connected — fail closed,
+     * never inherited.
+     */
+    const workspace = actorId
+      ? await personalOrgOf(database, actorId)
+      : null;
+    if (workspace) {
+      if (!options.deploymentId?.trim()) {
+        throw new PluginInvariantError(
+          `${appId} is Shared for a workspace, but the deployment has no id to derive that workspace's vendor identity from; set DEPLOYMENT_ID.`,
+        );
+      }
+      return {
+        ref: {
+          holder: "deployment",
+          vendorUserId: deploymentOrgVendorUserId(
+            options.deploymentId,
+            workspace,
+            appId,
+          ),
+          organizationId: workspace,
+        },
+        title: row.title,
+        mode: "shared",
+        appId,
+      };
+    }
+    if (!row.sharedVendorUserId) {
+      throw new PluginInvariantError(
+        `${appId} is Shared and holds no deployment identity; switch it to Personal and back.`,
+      );
+    }
     return {
-      ref: { holder: "deployment", vendorUserId: row.sharedVendorUserId },
+      // As in {@link asAccountRef}: the workspace key exists only when there is one, so a
+      // single-user or legacy actor's ref stays the shape every unscoped reader has always read.
+      ref: {
+        holder: "deployment",
+        vendorUserId: row.sharedVendorUserId,
+      },
       title: row.title,
       mode: "shared",
       appId,
@@ -413,6 +467,12 @@ export function createStoreContext(options: PluginStoreOptions) {
    * such clause: they have one vendor id, their user id or the one name
    * `brokered_identities` holds for them, and it never changes while they hold a row
    * ({@link personAccountOf}).
+   *
+   * AND THE DEPLOYMENT HALF MATCHES THE WORKSPACE, WHEN THE REF CARRIES ONE. An app can hold one
+   * Shared account per workspace, and those rows can name the same vendor identity — so a lookup
+   * keyed on the identity alone resolves whichever of them sorts first, and one space's call reads
+   * or ends another's row. The org rides on the ref the actor's own resolution built
+   * ({@link accountRefFor}), so the row this clause finds is always the calling actor's own.
    */
   const accountRow = (toolkit: string, account: AccountRef) =>
     account.holder === "person"
@@ -427,6 +487,14 @@ export function createStoreContext(options: PluginStoreOptions) {
           eq(brokeredConnections.app, toolkit),
           eq(brokeredConnections.holder, "deployment"),
           eq(brokeredConnections.vendorUserId, account.vendorUserId),
+          ...(account.organizationId
+            ? [
+                eq(
+                  brokeredConnections.organizationId,
+                  account.organizationId,
+                ),
+              ]
+            : []),
         );
 
   /**
@@ -712,31 +780,41 @@ export function createStoreContext(options: PluginStoreOptions) {
           null,
         );
       /*
-       * A SHARED ACCOUNT ANSWERS TO ITS OWN WORKSPACE, AND TO NO OTHER, BEFORE ANY CALL.
+       * A SHARED ACCOUNT IS READ FOR THE CALLING ACTOR'S OWN WORKSPACE, IN ONE STATEMENT.
        *
-       * The deployment-held account belongs to the workspace of the administrator who connected
-       * it. A person whose session names a different personal space is refused here — before the
-       * connection row is read for its vendor identity, before the transport dials, before the
-       * vendor hears anything — so the refusal cannot be confused with the app being unconnected.
-       * A workspace actor also refuses a row with no workspace: written before binding existed,
-       * it names no space and is nobody's fallback. An actor with no personal organization is a
-       * single-user or legacy identity, the one shape the workspace dimension does not apply to.
+       * The deployment-held account is one row PER WORKSPACE now, and the workspace rides on the
+       * ref {@link accountRefFor} built from this actor — so this one read carries the workspace
+       * in its WHERE, and the row it finds is this actor's own or none. One statement rather than
+       * a scope check followed by a separate credential read, because two reads could disagree:
+       * an administrator of another space re-consenting between them re-bound the row, and the
+       * second read still returned the identity the first had just forbidden. Now the check and
+       * the read cannot come apart, because they are the same read.
+       *
+       * "No row" answers the same either way for a workspace actor — nobody has connected it for
+       * their space, or another space holds one — and says which it was to neither. A workspace
+       * actor is never lent a row with no workspace either: it matches nothing here, which is the
+       * fail-closed reading of an unbound row. An actor with no personal organization is a
+       * single-user or legacy identity, the one shape the workspace dimension does not apply to;
+       * their ref carries no workspace and reads the unbound row as before.
        */
+      let shared: { vendorUserId: string } | undefined;
       if (resolved.ref.holder === "deployment") {
-        const workspace = await personalOrgOf(database, actorId);
-        if (workspace) {
-          const inScope = await sharedAccountInScope(
-            database,
-            brokerProvider,
-            access.toolkit,
-            workspace,
+        const [found] = await database
+          .select({ vendorUserId: brokeredConnections.vendorUserId })
+          .from(brokeredConnections)
+          .where(accountRow(access.toolkit, resolved.ref))
+          .limit(1);
+        shared = found;
+        if (!shared && resolved.ref.organizationId)
+          throw new PluginRefusedError(
+            connectAppRefusal({
+              serverId: row.id,
+              title: row.title,
+              message: `${row.title} uses a shared account that is not connected for your workspace. Ask an admin to connect it.`,
+              reason: "shared",
+            }),
+            null,
           );
-          if (!inScope)
-            throw new PluginRefusedError(
-              `${row.title} uses a shared account that belongs to another workspace, so it was not called.`,
-              null,
-            );
-        }
       }
       /*
        * A ROW IS ONLY REQUIRED WHERE THIS DEPLOYMENT IS THE ONE HOLDING THE GRANT.
@@ -793,11 +871,21 @@ export function createStoreContext(options: PluginStoreOptions) {
        */
       if (broker && !broker.grantIsLocal && access.transport === brokerProvider)
         return { vendorUserId: resolved.ref.vendorUserId };
-      const [connected] = await database
-        .select({ vendorUserId: brokeredConnections.vendorUserId })
-        .from(brokeredConnections)
-        .where(accountRow(access.toolkit, resolved.ref))
-        .limit(1);
+      /*
+       * A SHARED CALL USES THE ROW READ ABOVE, not a second read: the scoped fetch answered for
+       * this actor's workspace in one statement, and re-reading here would reopen the gap between
+       * "allowed" and "used" that the single read exists to close. A person's row is read here as
+       * it always was — it carries no workspace dimension to scope.
+       */
+      const connected = resolved.ref.holder === "deployment"
+        ? shared
+        : (
+            await database
+              .select({ vendorUserId: brokeredConnections.vendorUserId })
+              .from(brokeredConnections)
+              .where(accountRow(access.toolkit, resolved.ref))
+              .limit(1)
+          )[0];
       if (!connected) {
         /*
          * BOTH HALVES CARRY A PROMPT, AND ONLY ONE OF THEM OFFERS A CONNECT BUTTON. A Shared app's

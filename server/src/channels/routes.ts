@@ -1452,15 +1452,18 @@ export function createChannelRoutes(
       requireUser,
       upgradeWebSocket((context) => {
         // Resolved at upgrade, not per message: the connection belongs to whoever authenticated it,
-        // and nothing it later sends can change that.
-        const { id: userId } = context.var.actor;
+        // and nothing it later sends can change that. The SESSION is carried beside the person,
+        // because that is what sign-out ends: one sign-out must close this socket and leave the
+        // same person's other devices alone.
+        const { id: userId, sessionId } = context.var.actor;
         let detach = () => {};
         return {
           onOpen: (_event, ws) => {
-            // The hub holds the close as well as the send: ending a signed-out identity's
+            // The hub holds the close as well as the send: ending a signed-out session's
             // connection means closing it, not only refusing to write to a socket that stays open.
             detach = events.register(
               userId,
+              sessionId,
               (payload) => ws.send(payload),
               () => ws.close(),
             );

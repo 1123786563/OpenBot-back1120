@@ -308,7 +308,7 @@ describe("a new conversation in the sidebar", () => {
       const hub = createChannelEventHub();
       const listener = await startChannelActivityListener(databaseUrl, hub);
       const delivered: ChannelActivityEvent[] = [];
-      const detach = hub.register(person.id, (payload) => {
+      const detach = hub.register(person.id, undefined, (payload) => {
         const event = JSON.parse(payload) as ChannelActivityEvent;
         if (event.channelId === channel.id) delivered.push(event);
       });

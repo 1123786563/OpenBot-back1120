@@ -1,0 +1,1 @@
+DELETE /api/v3.1/connected_accounts/ca_9e843faf787c478d874d?revoke_on_delete=true

@@ -28,6 +28,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { MiddlewareHandler } from "hono";
+import type { SessionGate } from "./auth/session-gate";
 import type { DeploymentConfig } from "./config";
 import { isTrajectoryConnectPath } from "./recorder/trajectory-gate";
 import { callerOf, ownOriginOnThisMachine } from "./request-trust";
@@ -119,7 +120,105 @@ export type GatewaySocketData = {
   inward?: WebSocket;
   /** Frames the browser sent before the gateway's side was open, in order. */
   pending: (string | Uint8Array)[];
+  /**
+   * Who this socket was upgraded for, read from the session the upgrade itself authenticated. The
+   * socket outlives the request that opened it, so the identity travels ON the socket: every frame
+   * it would carry is asked against the session as it is now, not as it was at upgrade time. A
+   * sign-out mid-conversation therefore ends the socket, here and on every replica, instead of
+   * leaving a signed-out browser subscribed to a conversation it may no longer hear.
+   */
+  sessionId?: string;
+  userId?: string;
+  /** Undoes the revocation registration; set when one was made. */
+  detachFromRevocation?: () => void;
+  /**
+   * The outward frame pipeline (gateway → browser), serialized so the per-frame session check can
+   * never reorder what it carries.
+   */
+  forward?: Promise<void>;
+  /**
+   * The same chain for the inward direction (browser → gateway), independent of the outward one:
+   * a browser's join must never wait behind a gateway tick.
+   */
+  inwardBound?: Promise<void>;
+  /** Set once the session was revoked or the socket ended: nothing forwards after it. */
+  ended?: boolean;
 };
+
+/**
+ * Where the proxied sockets live, so a revocation announced anywhere closes them everywhere.
+ *
+ * The gate read before each frame is the authority; this registry is the prompt part, exactly as
+ * the channel hub is for its own sockets. The sign-out that ends a session closes that session's
+ * proxied sockets on the replica that handled the POST directly, and the announcement that rides
+ * the activity topic calls {@link GatewaySocketRegistry.revokeSession} on every other replica — so
+ * a conversation socket upgraded on a replica that never saw the sign-out still closes within the
+ * announcement, not at its next frame.
+ */
+export type GatewaySocketRegistry = {
+  /** Remember a socket for a session of a person. Returns the detach. */
+  track(
+    userId: string,
+    sessionId: string | undefined,
+    close: () => void,
+  ): () => void;
+  /** End one session's sockets; an unnamed session ends every socket of the person. */
+  revokeSession(userId: string, sessionId: string | undefined): void;
+};
+
+export function createGatewaySocketRegistry(): GatewaySocketRegistry {
+  const tracked = new Set<{
+    userId: string;
+    sessionId: string | undefined;
+    close: () => void;
+  }>();
+  return {
+    track(userId, sessionId, close) {
+      const entry = { userId, sessionId, close };
+      tracked.add(entry);
+      return () => {
+        tracked.delete(entry);
+      };
+    },
+    revokeSession(userId, sessionId) {
+      for (const entry of [...tracked]) {
+        if (entry.userId !== userId) continue;
+        if (sessionId !== undefined && entry.sessionId !== sessionId) continue;
+        tracked.delete(entry);
+        try {
+          entry.close();
+        } catch {
+          // A close that fails is a socket already going; its own close path detaches the rest.
+        }
+      }
+    },
+  };
+}
+
+/** What the frame paths need to keep a proxied socket behind its session. */
+export type GatewayRevocation = {
+  gate: SessionGate;
+  registry?: GatewaySocketRegistry;
+};
+
+/**
+ * End a proxied socket for good, from both sides: its session can receive nothing further, so it
+ * sends nothing further and is closed rather than muted — there is nothing it may resume with.
+ */
+function endSocket(ws: Outward, code: number, reason: string): void {
+  ws.data.ended = true;
+  ws.data.pending.length = 0;
+  ws.data.detachFromRevocation?.();
+  ws.data.detachFromRevocation = undefined;
+  closeWith(ws, code, reason);
+  const inward = ws.data.inward;
+  if (
+    inward &&
+    inward.readyState !== WebSocket.CLOSING &&
+    inward.readyState !== WebSocket.CLOSED
+  )
+    closeWith(inward, 1000, "");
+}
 
 /** The outward socket, as much of Bun's ServerWebSocket as this uses. */
 type Outward = {
@@ -166,42 +265,139 @@ function closeWith(
  * sends is its channel join, the moment its own socket opens, which is before this one is, and a
  * dropped join is a conversation that waits ten seconds for a retry with nothing on the screen.
  */
-export function openGatewaySocket(ws: Outward): void {
+export function openGatewaySocket(
+  ws: Outward,
+  revocation?: GatewayRevocation,
+): void {
+  const { sessionId, userId } = ws.data;
+  if (revocation?.registry && userId) {
+    ws.data.detachFromRevocation = revocation.registry.track(
+      userId,
+      sessionId,
+      () => endSocket(ws, 1008, "Your session has ended."),
+    );
+  }
+  /*
+   * One frame, after its session has answered for it. The gate read is the authority — the sessions
+   * table is the shared state every replica reads, so the answer is about the session as it is NOW;
+   * the frames queue behind the read and go in order, which is why each direction is a serialized
+   * chain rather than one read per fire-and-forget callback: a conversation whose frames arrive
+   * reordered is a broken protocol, and a refused one is ended, not skipped. The directions are
+   * independent chains — a browser's join must never wait behind a gateway tick — but within one
+   * direction order is exactly arrival order.
+   */
+  const carryOutward = async (frame: string | Uint8Array): Promise<void> => {
+    if (revocation && !(await revocation.gate.maySend(sessionId))) {
+      endSocket(ws, 1008, "Your session has ended.");
+      return;
+    }
+    try {
+      ws.send(frame);
+    } catch {
+      // The browser's side is going; ending the gateway's side with it.
+      ws.data.inward?.close();
+    }
+  };
+  const carryInward = async (frame: string | Uint8Array): Promise<void> => {
+    if (revocation && !(await revocation.gate.maySend(sessionId))) {
+      endSocket(ws, 1008, "Your session has ended.");
+      return;
+    }
+    const inward = ws.data.inward;
+    if (inward?.readyState === WebSocket.OPEN) {
+      inward.send(frame);
+      return;
+    }
+    // Still connecting: held for the open, which will drain this queue through this same chain,
+    // so the held frame keeps its place behind the ones before it. A frame is pushed here only
+    // while the socket is CONNECTING — one synchronous check — so it is always drained by the
+    // open that follows it.
+    if (!inward || inward.readyState === WebSocket.CONNECTING)
+      ws.data.pending.push(frame);
+  };
+  const outward = (frame: string | Uint8Array): void => {
+    if (ws.data.ended) return;
+    ws.data.forward = (ws.data.forward ?? Promise.resolve())
+      .then(() => carryOutward(frame))
+      .catch(() => {
+        // One refused frame does not serialize the next: the chain survives, the socket above
+        // already saw the refusal that ended it.
+      });
+  };
+  const inwardBound = (frame: string | Uint8Array): void => {
+    if (ws.data.ended) return;
+    ws.data.inwardBound = (ws.data.inwardBound ?? Promise.resolve())
+      .then(() => carryInward(frame))
+      .catch(() => {});
+  };
+
   const inward = new WebSocket(ws.data.gatewayUpstream);
   inward.binaryType = "arraybuffer";
   ws.data.inward = inward;
   inward.onopen = () => {
-    for (const frame of ws.data.pending.splice(0)) inward.send(frame);
+    // Held frames are the BROWSER's own first words, queued while the gateway's side opened: they
+    // go INWARD now, asked of the gate in order like everything else this session speaks.
+    for (const frame of ws.data.pending.splice(0)) inwardBound(frame);
   };
   inward.onmessage = (event) => {
-    try {
-      ws.send(
-        typeof event.data === "string"
-          ? event.data
-          : new Uint8Array(event.data as ArrayBuffer),
-      );
-    } catch {
-      inward.close();
-    }
+    outward(
+      typeof event.data === "string"
+        ? event.data
+        : new Uint8Array(event.data as ArrayBuffer),
+    );
   };
-  inward.onclose = (event) => closeWith(ws, event.code, event.reason);
+  inward.onclose = (event) => {
+    ws.data.ended = true;
+    ws.data.detachFromRevocation?.();
+    closeWith(ws, event.code, event.reason);
+  };
   inward.onerror = () =>
     closeWith(ws, 1011, "The backend could not be reached.");
 }
 
-/** A frame from the browser: on to the gateway, or held until the gateway's side is open. */
+/**
+ * A frame from the browser: on to the gateway, or held until the gateway's side is open.
+ *
+ * The same session rule as the inward direction, because a signed-out session has lost more than
+ * its right to HEAR: it has lost its standing to speak into the conversation too. Its frames are
+ * asked of the gate in order on the same serialized pipeline, and a refused one ends the socket.
+ */
 export function gatewaySocketMessage(
   ws: Outward,
   message: string | Uint8Array,
+  revocation?: GatewayRevocation,
 ): void {
-  const inward = ws.data.inward;
-  if (inward?.readyState === WebSocket.OPEN) {
-    inward.send(message);
+  /*
+   * The same session rule as the outward direction, because a signed-out session has lost more
+   * than its right to HEAR: it has lost its standing to speak into the conversation too. The frame
+   * is asked of the gate on the inward chain, in order, and a refused one ends the socket. Without
+   * a revocation to answer to — single-user mode — the frame goes as it came.
+   */
+  if (!revocation) {
+    const inward = ws.data.inward;
+    if (inward?.readyState === WebSocket.OPEN) {
+      inward.send(message);
+      return;
+    }
+    if (!inward || inward.readyState === WebSocket.CONNECTING) {
+      ws.data.pending.push(message);
+    }
     return;
   }
-  if (!inward || inward.readyState === WebSocket.CONNECTING) {
-    ws.data.pending.push(message);
-  }
+  if (ws.data.ended) return;
+  const { sessionId } = ws.data;
+  ws.data.inwardBound = (ws.data.inwardBound ?? Promise.resolve())
+    .then(async () => {
+      if (!(await revocation.gate.maySend(sessionId))) {
+        endSocket(ws, 1008, "Your session has ended.");
+        return;
+      }
+      const inward = ws.data.inward;
+      if (inward?.readyState === WebSocket.OPEN) inward.send(message);
+      else if (!inward || inward.readyState === WebSocket.CONNECTING)
+        ws.data.pending.push(message);
+    })
+    .catch(() => {});
 }
 
 /** The browser went away: so does the gateway's side, with the same code where it is one to send. */
@@ -210,7 +406,10 @@ export function closeGatewaySocket(
   code: number | undefined,
   reason: string | undefined,
 ): void {
+  ws.data.ended = true;
   ws.data.pending.length = 0;
+  ws.data.detachFromRevocation?.();
+  ws.data.detachFromRevocation = undefined;
   const inward = ws.data.inward;
   if (!inward) return;
   if (
