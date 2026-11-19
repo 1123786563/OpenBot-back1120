@@ -28,6 +28,11 @@ services:
     environment:
       OO_ENVIRONMENT_LABEL: ${OO_ENVIRONMENT_LABEL:-production}
       OO_INGEST_BASIC: ${OO_INGEST_BASIC:-}
+      # Where the collector sends the filtered, whitelist-only records. The default is the
+      # OpenObserve of this stack; the acceptance harness points this at its capture-forwarder
+      # instead, which records and re-forwards every request body, so the verification reads what
+      # was actually sent rather than a snapshot taken beside it.
+      OO_INGEST_ENDPOINT: ${OO_INGEST_ENDPOINT:-http://openobserve:5080/api/default}
     volumes:
       - ./otel-collector.yaml:/etc/otelcol/openbot.yaml:ro
       - collector-state:/var/lib/otelcol

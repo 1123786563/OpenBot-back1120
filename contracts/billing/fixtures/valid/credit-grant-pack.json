@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "schema": "CreateCreditGrantRequest",
+  "instance": {
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "source_event_id": "evt_pack_900001",
+    "source_type": "pack",
+    "source_period_id": null,
+    "granted_microcredits": "9007199254740993",
+    "valid_from_us": "1700000000000000",
+    "expires_at_us": null,
+    "original_event_id": null,
+    "actor_subject_id": "subj_entitlement_svc"
+  },
+  "note": "pack grant: long-lived (expires null), period-less, amount above 2^53 stays an exact string"
+}

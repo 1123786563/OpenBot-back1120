@@ -151,8 +151,10 @@ function appWith(gate: SessionGate): { app: Hono } {
     streamingCopilotHandler(),
     // computerGateway .. profileStore — everything between the runtime and the tail.
     ...(Array.from({ length: 32 }) as never[]),
-    // onSessionEnded, then the session gate — the app's last two parameters.
-    undefined as never,
+    // onSessionEnded, Alipay inbox, and billing catalog are unused in this fixture.
+    undefined,
+    undefined,
+    undefined,
     gate,
   );
   return { app };

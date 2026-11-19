@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "schema": "CreateCreditGrantRequest",
+  "instance": {
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "source_event_id": "evt_comp_grant_2026_0001",
+    "source_type": "compensation",
+    "source_period_id": null,
+    "granted_microcredits": "5000",
+    "valid_from_us": "1700000400000000",
+    "expires_at_us": null,
+    "original_event_id": "evt_settle_call_9f8e7d6c",
+    "actor_subject_id": "subj_compensation_svc"
+  },
+  "note": "compensation grant: links the original deduction event; still-valid source shares restore in place, expired shares become a 30d lot whose server-computed expiry the caller may echo or leave null"
+}

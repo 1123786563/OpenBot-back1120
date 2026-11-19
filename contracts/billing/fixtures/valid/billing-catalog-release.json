@@ -1,0 +1,24 @@
+{
+  "expect": "accept",
+  "schema": "BillingCatalogRelease",
+  "instance": {
+    "id": "aa000000-0000-4000-8000-000000000004",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": null,
+    "environment": "production",
+    "effective_from_us": "1700000000000000",
+    "effective_to_us": null,
+    "content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+    "status": "active",
+    "items": [
+      {
+        "product_version_id": "aa000000-0000-4000-8000-000000000001",
+        "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "quota_version_id": null,
+        "run_cap_version_id": "aa000000-0000-4000-8000-000000000003"
+      }
+    ],
+    "basic_quota_version_id": "aa000000-0000-4000-8000-000000000005"
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "id": "4d9dd74b-feee-41cb-852c-54fd696979d8",
+  "id": "0f6e570f-6bc3-4403-a7c6-ad108e1a6152",
   "prevId": "67297402-3d61-4e27-83cd-8ffba6fd9754",
   "version": "7",
   "dialect": "postgresql",
@@ -3162,36 +3162,8 @@
           "method": "btree",
           "with": {}
         },
-        "brokered_connections_deployment_org_idx": {
-          "name": "brokered_connections_deployment_org_idx",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "app",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"brokered_connections\".\"holder\" = 'deployment' AND \"brokered_connections\".\"organization_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "brokered_connections_deployment_unbound_idx": {
-          "name": "brokered_connections_deployment_unbound_idx",
+        "brokered_connections_deployment_idx": {
+          "name": "brokered_connections_deployment_idx",
           "columns": [
             {
               "expression": "provider",
@@ -3207,7 +3179,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"brokered_connections\".\"holder\" = 'deployment' AND \"brokered_connections\".\"organization_id\" IS NULL",
+          "where": "\"brokered_connections\".\"holder\" = 'deployment'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10830,6 +10802,129 @@
           "value": "\"sign_in_requests\".\"method\" IS NULL OR \"sign_in_requests\".\"method\" IN ('typed', 'saved', 'takeover')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.payment_channel_notification": {
+      "name": "payment_channel_notification",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "app_id": {
+          "name": "app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_digest": {
+          "name": "payload_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_payload_b64": {
+          "name": "raw_payload_b64",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trade_no": {
+          "name": "trade_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "out_trade_no": {
+          "name": "out_trade_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trade_status": {
+          "name": "trade_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at_us": {
+          "name": "paid_at_us",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_at_us": {
+          "name": "received_at_us",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_channel_notification_state_idx": {
+          "name": "payment_channel_notification_state_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at_us",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "payment_channel_notification_identity": {
+          "name": "payment_channel_notification_identity",
+          "nullsNotDistinct": false,
+          "columns": [
+            "channel",
+            "app_id",
+            "dedupe_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.team_bot_assignments": {

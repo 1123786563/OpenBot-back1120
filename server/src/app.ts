@@ -136,6 +136,8 @@ import {
 import { parsePageLimit } from "./paging";
 import { createPasswordRoutes, createSignInRoutes } from "./passwords/routes";
 import type { SignInService } from "./passwords/service";
+import type { AlipayNotifyInbox } from "./payments/alipay/inbox";
+import { createAlipayNotifyRoutes } from "./payments/alipay/routes";
 import type { OnboardingStore } from "./people/onboarding";
 import { createProfileRoutes, type ProfileStore } from "./people/profile";
 import { MAX_PAGE, type PeopleStore } from "./people/store";
@@ -583,7 +585,7 @@ export function createApp(
    * devices alone. Absent leaves a signed-out socket living until its own close, which is a
    * receiving qualification no valid session backs.
    *
-   * LAST IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
+   * LATE IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
    * already counted its way to `profileStore` must not have its tail arguments shift when a
    * deployment starts revoking sessions — which is exactly what inserting this earlier did to
    * every caller and test in the tree.
@@ -593,6 +595,25 @@ export function createApp(
     sessionId: string | undefined,
   ) => Promise<void> | void,
   /**
+   * The payment channels' durable notification inbox (payments/alipay/inbox.ts).
+   *
+   * Mounted ONLY when the alipay channel is configured AND an inbox was
+   * built: a notify entry that could answer "success" without a durable
+   * insert must not exist at all. Protocol-authenticated, no session — see
+   * payments/alipay/routes.ts. Absent, the path answers 404 like any other
+   * route the deployment has no door for.
+   */
+  alipayNotifyInbox?: AlipayNotifyInbox,
+  /**
+   * The billing catalog's internal read surface (#65), already built by the
+   * caller (service + trusted credential verifier injected). Absent leaves
+   * the app without any /internal/v1/billing route — deployments that do not
+   * run the billing catalog expose nothing.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: the sub-app carries its own
+  // trusted-context Variables; the host app only routes it verbatim.
+  billingCatalogApp?: HonoApp<any>,
+  /**
    * Whether a still-open stream may still be written to, asked BEFORE EVERY CHUNK.
    *
    * A streaming response — a CopilotKit turn above all — is authorized once, at its beginning,
@@ -601,8 +622,6 @@ export function createApp(
    * session signed out. The gate reads the same `sessions` table the sign-out deletes from, so
    * every replica asks the same shared state and no announcement delay can leave a window.
    * Absent — single-user mode has no sign-out to revoke against — streams run ungated.
-   *
-   * AFTER `onSessionEnded`, for the same positional reason.
    */
   sessionGate?: SessionGate,
 ) {
@@ -1038,6 +1057,12 @@ export function createApp(
   if (identityGithubCallback) {
     app.use("/api/identity/github/callback", requireUser);
     app.route("/api/identity/github/callback", identityGithubCallback);
+  }
+  // The billing catalog's trusted read surface (#65). Never browser-reachable:
+  // the sub-app itself rejects everything without a service credential, and
+  // nothing here adds a session path to /internal.
+  if (billingCatalogApp) {
+    app.route("/", billingCatalogApp);
   }
   /*
    * A person's own linked accounts at outside providers (Slack, GitHub). Theirs alone: there is no
@@ -2472,6 +2497,21 @@ export function createApp(
           createIntelligenceClient(config.runtime.intelligence),
         ),
       ),
+    );
+  }
+
+  /*
+   * The payment channel's notify entry (#70). No session auth: the gateway is
+   * the client, and its signature is the credential. Mounted only when both
+   * halves of the receiving boundary exist — see the parameter note above.
+   */
+  if (config.payments?.alipay && alipayNotifyInbox) {
+    app.route(
+      "/payment-callbacks/alipay",
+      createAlipayNotifyRoutes({
+        config: config.payments.alipay,
+        inbox: alipayNotifyInbox,
+      }),
     );
   }
 

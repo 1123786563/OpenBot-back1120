@@ -46,15 +46,15 @@ bash deploy/t01/up.sh         # 安装、迁移、构建、启动真实 server+w
 - 普通B请求管理员revoke-sessions和fleet stop应403且不改变A目标。
 - 用A管理员请求 `POST /api/admin/enterprise/people/<A-user-id>/revoke-sessions`。动作前保留**原始** A storageState为`.runtime/browser-a.json`；动作后该旧cookie的下一次`/api/me`401；B仍200。`bash deploy/t01/verify.sh revoked`作可重复断言。
 - 已登录B带Origin=http://untrusted.invalid请求 `/api/auth/sign-in/social`应403 INVALID_ORIGIN；跨站 `/api/me` 不提供 CORS allow-origin。无Cookie的发起登录请求可以返回授权URL，但不能因此建立会话（Better Auth的实际策略）。
-- 用户取消登录（本轮已实测）：匿名context点 Continue with Okta 到达 Casdoor 登录页后离开页面，OpenBot `/api/me` 必须401且停在 /sign。
-- 错误回调（本轮已实测）：手工构造 authorize URL，`redirect_uri=http://localhost:13001/api/auth/callback/evil`；Casdoor 在登录页前直接拒绝（"doesn't exist in the allowed Redirect URI list"），无 code、浏览器不落在回调，`/api/me` 401。
-- 错误 issuer（本轮已实测）：以 `OKTA_OAUTH_ISSUER=http://localhost:18001` 覆盖重启 server 后，`POST /api/auth/sign-in/social` 返回 400 `INVALID_OAUTH_CONFIGURATION`、不产出授权 URL、`/api/me` 401；恢复正确 issuer 重启后 200 且授权 URL 指向 18000（含 state 与 PKCE challenge）。注意 Bun 中显式 shell 环境变量优先于 `--env-file`。
+- 用户取消登录（历史轮次曾实测，本部署须复测）：匿名context点 Continue with Okta 到达 Casdoor 登录页后离开页面，OpenBot `/api/me` 必须401且停在 /sign。
+- 错误回调（历史轮次曾实测，本部署须复测）：手工构造 authorize URL，`redirect_uri=http://localhost:13001/api/auth/callback/evil`；Casdoor 在登录页前直接拒绝（"doesn't exist in the allowed Redirect URI list"），无 code、浏览器不落在回调，`/api/me` 401。
+- 错误 issuer（本轮已实测）：Bun 中 `--env-file` 的值**优先于**显式 shell 环境变量，因此 `OKTA_OAUTH_ISSUER=…18001 bun … launch.ts up` 这类 shell 覆盖不生效（服务仍用 `.env.t01` 里的 18000）。复现步骤：复制 `deploy/t01/.env.t01` 为临时副本，把副本中的 `OKTA_OAUTH_ISSUER` 改为 `http://localhost:18001`，用 `--env-file=deploy/t01/.env.t01.wrong-issuer` 重启 server；此时 `POST /api/auth/sign-in/social` 返回 400 `INVALID_OAUTH_CONFIGURATION`、不产出授权 URL、`/api/me` 401。复测后删除临时副本、恢复用原 `.env.t01` 重启，并确认 `/health` 200 且授权 URL 指向 18000（含 state 与 PKCE challenge）。
 - 平台浏览器执行 `browser_run_code_unsafe`，filename=`OpenBot/deploy/t01/verify/oidc-failures.js`（从工作区根解析）：真实 state+无效 code 得到 invalid_code，客户端畸形/无签名 idToken 得到401 INVALID_TOKEN，各自 /api/me401。sign-in/social 存在客户端 idToken 注入面；单独合法签名 token 的 expiry/audience 子分支未逐项端到端注入，见根 implementation.md 的实际库契约与边界，不以其他拒绝替代。
 
 ## 后台执行与计算机
 
 真实routine通过 `/api/channels` 建立本次channel、`POST /api/routines`创建、`POST /api/routines/:id/run`启动。**有可用模型凭据**且真实执行已开始后，才能测 `POST /api/routines/:id/runs/:runId/cancel`（owner作用域），返回202只表示发出中止，不是“已结束”。查询run终态并观察真实副作用≤30s结束、随后60s不再产生且无worker重派；无本地执行归属返回503，不伪写cancelled。此实现仅支持一个API进程，横向部署需持久取消信号。
-本轮实测（证据 `.runtime/routine-cancel-result.json`）：真实模型 turn 在环运行 10s 后取消，202→2.8s 内终态 `cancelled`（error="cancelled by an authorized request"），60s/12采样无翻转、无新run、routine保持禁用；探针脚本 `.runtime/probe-cancel-routine.ts`（含10s在环dwell与重试，不留启用状态）。凭据缺失或403阶段的失败run（`failed`）不得记为取消成功。
+本轮实测（探针 `deploy/t01/verify/cancel-sideeffect.ts`，证据 `.runtime/sideeffect-cancel-result.json`）：真实模型 turn 使 B 容器内副作用文件增长（3 行、循环进程活跃）后 owner cancel，202→3.4s 内文件停止增长、容器内循环进程消失，run 终态 `cancelled`（error="cancelled by an authorized request"），60s+/33 采样无再增长、无 worker 重派（`totalRuns=1`）、routine 保持禁用。凭据缺失或403阶段的失败run（`failed`）不得记为取消成功。
 
 计算机可不经模型，用A/B各自真实会话请求 `POST /api/computers/general-assistant/exec`：
 `{"command":"while true; do date +%s >> t01-computer-proof; sleep 1; done","timeoutMs":180000}`。
@@ -65,6 +65,8 @@ A管理员请求 `POST /api/computers/fleet`，body=`{"action":"stop","computer"
 ```sh
 python3 -I deploy/t01/verify/computer.py --a openbot-t01-computer-person-<A-id> --b openbot-t01-computer-person-<B-id>
 ```
+
+进程身份（ps 被拒的主机上 `launch.ts` 的实际回退路径）可用可执行探针复验：`"$T01_BUN" deploy/t01/verify/process-identity.ts`。它会以与 server 相同的可执行文件和相同工作目录启动一个无关 Bun 进程（同 executable/cwd、独立 stdout 文件），断言停止逻辑不会接受该 PID，并只 SIGKILL 自己启动的探针进程；任何一方不可观测时停止逻辑一律拒绝发信号。
 
 该脚本观察31次、至少60秒的真实Docker状态；还需保留动作前实际进程/计数证据及旧连接终止证据。不把仅run行或仅停止viewer算成功。
 

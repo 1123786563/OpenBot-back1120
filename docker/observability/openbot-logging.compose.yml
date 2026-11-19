@@ -48,6 +48,22 @@ services:
       <<: *logging
       options: { <<: *forward, tag: openbot.agent-harness }
   supervisor:
+    # Computers and carry-over helpers the supervisor creates get the same driver from this
+    # server-side setting, with fixed tags, instead of copying it into any container's Env.
+    environment:
+      COMPUTER_LOG_FORWARD_ADDRESS: "127.0.0.1:${OO_FORWARD_PORT:-24224}"
     logging:
       <<: *logging
       options: { <<: *forward, tag: openbot.supervisor }
+  spire-init:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.spire-init }
+  spire-server:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.spire-server }
+  spire-agent:
+    logging:
+      <<: *logging
+      options: { <<: *forward, tag: openbot.spire-agent }
