@@ -135,6 +135,8 @@ import {
 import { parsePageLimit } from "./paging";
 import { createPasswordRoutes, createSignInRoutes } from "./passwords/routes";
 import type { SignInService } from "./passwords/service";
+import type { AlipayNotifyInbox } from "./payments/alipay/inbox";
+import { createAlipayNotifyRoutes } from "./payments/alipay/routes";
 import type { OnboardingStore } from "./people/onboarding";
 import { createProfileRoutes, type ProfileStore } from "./people/profile";
 import { MAX_PAGE, type PeopleStore } from "./people/store";
@@ -586,6 +588,16 @@ export function createApp(
    * every caller and test in the tree.
    */
   onSessionEnded?: (userId: string) => Promise<void> | void,
+  /**
+   * The payment channels' durable notification inbox (payments/alipay/inbox.ts).
+   *
+   * Mounted ONLY when the alipay channel is configured AND an inbox was
+   * built: a notify entry that could answer "success" without a durable
+   * insert must not exist at all. Protocol-authenticated, no session — see
+   * payments/alipay/routes.ts. Absent, the path answers 404 like any other
+   * route the deployment has no door for.
+   */
+  alipayNotifyInbox?: AlipayNotifyInbox,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -2406,6 +2418,21 @@ export function createApp(
           createIntelligenceClient(config.runtime.intelligence),
         ),
       ),
+    );
+  }
+
+  /*
+   * The payment channel's notify entry (#70). No session auth: the gateway is
+   * the client, and its signature is the credential. Mounted only when both
+   * halves of the receiving boundary exist — see the parameter note above.
+   */
+  if (config.payments?.alipay && alipayNotifyInbox) {
+    app.route(
+      "/payment-callbacks/alipay",
+      createAlipayNotifyRoutes({
+        config: config.payments.alipay,
+        inbox: alipayNotifyInbox,
+      }),
     );
   }
 
