@@ -182,6 +182,20 @@ if (process.env.OPENBOT_E2E_SUITE !== "personal") {
       [owner.id, helper.id],
       "Group receipts",
     );
+    // The badge aggregates every Bot; other tests' unread conversations are not this scenario.
+    await browser.route(/\/api\/bots\/attention$/, async (route) => {
+      const response = await route.fetch();
+      const data = await response.json<{ bots: { agentId: string }[] }>();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...data,
+          bots: data.bots.filter((bot) =>
+            [owner.id, helper.id].includes(bot.agentId),
+          ),
+        }),
+      });
+    });
     const answer = "The receipts are ready.";
     const postReply = (reply: string) =>
       browser.evaluate(

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
  * Everything a person sees while they talk is OpenBot's.
  *
  * Every part of the composer is found by the `data-slot` hooks OpenBot gives skins, never by its
- * classes or its words; `tests/skins-openduet-orb.test.tsx` renders the real composer and holds
+ * classes or its words; `tests/e2e/skins-openduet.e2e.ts` renders the real composer and holds
  * every one of these to it.
  */
 

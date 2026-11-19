@@ -736,7 +736,9 @@ test("pressing the orb starts and stops the composer's own dictation", async (fi
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
   await serveTranscription(browser, true);
+  await configureChatStream(browser);
   await browser.addInitScript(() => {
+    if (!navigator.mediaDevices) return;
     Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
       value: async () =>
         new AudioContext().createMediaStreamDestination().stream,
@@ -775,7 +777,8 @@ test("pressing the orb starts and stops the composer's own dictation", async (fi
   await app.open(`/channel/${channel}`);
   // The composer's own control is what the orb presses; the orb itself carries no other.
   await expect(browser.locator('[data-slot="composer-dictate"]')).toBeVisible();
-  const orb = screen.getByRole("button", `Talk to ${product}`, { exact: true });
+  const header = browser.locator("[data-openduet-frame] header");
+  const orb = header.getByRole("button", `Talk to ${product}`, { exact: true });
   await browser
     .locator('[data-slot="composer-input"] [role="textbox"]')
     .fill("Book the kiln repair");
@@ -787,7 +790,10 @@ test("pressing the orb starts and stops the composer's own dictation", async (fi
   await expect(
     screen.getByRole("img", "Live audio waveform", { exact: true }),
   ).toBeVisible();
-  await stop.click();
+  await header
+    .getByRole("button", "Stop and add to your message", { exact: true })
+    .click();
+  await expect(stop).toHaveCount(0);
   await expect(orb).toHaveAttribute("aria-pressed", "false");
   await expect(
     browser.locator('[data-slot="composer-input"] [role="textbox"]'),
@@ -818,6 +824,22 @@ test("the orb thinks for exactly as long as the composer offers to stop the Bot"
     ],
     ({ runId, threadId }) => [{ type: "RUN_FINISHED", runId, threadId }],
   );
+  await browser.addInitScript(() => {
+    const recordThinking = () => {
+      const pill = document.querySelector(
+        '[data-openduet-frame] [aria-live="polite"] p[data-shown="true"]',
+      );
+      if (pill?.textContent === "Thinking") {
+        document.documentElement.dataset.e2eOrbThought = "true";
+      }
+    };
+    new MutationObserver(recordThinking).observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-shown"],
+    });
+  });
   await app.open(`/channel/${channel}`);
   await expect(browser.locator("html")).toHaveAttribute(
     "data-skin",
@@ -825,6 +847,14 @@ test("the orb thinks for exactly as long as the composer offers to stop the Bot"
   );
   const pill = browser.locator('[data-openduet-frame] [aria-live="polite"] p');
   await expect(pill).toHaveAttribute("data-shown", "false");
+  await expect(
+    screen.getByRole("button", "Send message", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await browser.evaluate(
+      () => document.documentElement.dataset.e2eOrbThought ?? null,
+    ),
+  ).toBeNull();
   await browser
     .locator('[data-slot="composer-input"] [role="textbox"]')
     .fill("Book the kiln repair");

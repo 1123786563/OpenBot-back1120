@@ -17,7 +17,7 @@ const desktopCalls = (browser: Browser) =>
     return calls
       .filter(({ command }) => command.includes("|speech_"))
       .map(({ command, args }) => ({
-        command: command.split("|").at(-1),
+        command: command.split("|").at(-1) ?? null,
         language: args?.language ?? null,
       }));
   });
@@ -179,6 +179,7 @@ async function submitForm(browser: Browser) {
     );
     if (!form) throw new Error("Missing composer form");
     form.requestSubmit();
+    return null;
   });
 }
 

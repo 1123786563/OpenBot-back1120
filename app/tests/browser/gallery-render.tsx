@@ -1,3 +1,4 @@
+import { ToolCallStatus } from "@copilotkit/react-core/v2";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { z } from "zod";
@@ -6,6 +7,7 @@ import { galleryComponent } from "@/lib/copilot/gallery-registry";
 import {
   makeDecisionRender,
   makeGalleryRender,
+  useDecisionTool,
 } from "@/lib/copilot/gallery-tools";
 import { createGrantStore } from "@/lib/copilot/grant-store";
 import "@/styles.css";
@@ -172,9 +174,79 @@ function ArgumentStates() {
   );
 }
 
+const parallelCalls = [
+  { id: "refund", title: "Refund the first order?" },
+  { id: "cancel", title: "Cancel the second order?" },
+];
+
+function ParallelDecisions() {
+  const [executing, setExecuting] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  let registered:
+    | Parameters<NonNullable<Parameters<typeof useDecisionTool>[3]>>[0]
+    | undefined;
+  useDecisionTool(approval, store, grants.held, (tool) => {
+    registered = tool;
+  });
+  const tool = registered;
+  if (!tool?.render || !tool.handler)
+    throw new Error("Approval tool did not register");
+  const { handler, render: Decision } = tool;
+  return (
+    <main>
+      {!executing && (
+        <button
+          type="button"
+          onClick={() => {
+            for (const call of parallelCalls) {
+              void Promise.resolve(
+                handler(
+                  {},
+                  {
+                    toolCall: {
+                      id: call.id,
+                      type: "function",
+                      function: { name: approval.name, arguments: "{}" },
+                    },
+                  },
+                ),
+              ).then((answer) => {
+                setAnswers((previous) => ({ ...previous, [call.id]: answer }));
+              });
+            }
+            setExecuting(true);
+          }}
+        >
+          Finish both requests
+        </button>
+      )}
+      {parallelCalls.map((call) => (
+        <section aria-label={call.title} key={call.id}>
+          <Decision
+            args={{ title: call.title, summary: approvalArgs.summary }}
+            name={approval.name}
+            result={undefined}
+            status={
+              executing ? ToolCallStatus.Executing : ToolCallStatus.InProgress
+            }
+            toolCallId={call.id}
+          />
+        </section>
+      ))}
+      <output aria-label="Decision results">{JSON.stringify(answers)}</output>
+    </main>
+  );
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing browser test root");
-if (scenario === "arguments") store.set({ grants });
+if (scenario === "arguments" || scenario === "parallel") store.set({ grants });
 createRoot(root).render(
-  scenario === "arguments" ? <ArgumentStates /> : <GrantChanges />,
+  scenario === "parallel" ? (
+    <ParallelDecisions />
+  ) : scenario === "arguments" ? (
+    <ArgumentStates />
+  ) : (
+    <GrantChanges />
+  ),
 );

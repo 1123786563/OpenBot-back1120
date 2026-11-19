@@ -97,8 +97,8 @@ test("an answer without a thread ID sends no view event", async ({
   await expect(screen.getByText(reply, { exact: true })).toBeVisible();
   await browser.evaluate(
     () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      new Promise<null>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
       ),
   );
   expect(requests).toEqual([]);
@@ -151,6 +151,7 @@ for (const refused of [false, true]) {
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
+      return null;
     });
     if (refused) expect(copies()).toEqual([]);
     else await expect.poll(copies).toEqual([event("result_copied")]);
@@ -183,6 +184,7 @@ for (const scrollAway of [false, true]) {
         value: "visible",
       });
       document.dispatchEvent(new Event("visibilitychange"));
+      return null;
     });
     if (scrollAway) {
       expect(requests).toEqual([]);
@@ -202,13 +204,14 @@ test("a clipped result with no visible area records only after it is revealed", 
   await expect(screen.getByText(reply, { exact: true })).toHaveCount(1);
   const height = await browser.evaluate(
     () =>
-      document.querySelector("main > section")?.getBoundingClientRect().height,
+      document.querySelector("main > section")?.getBoundingClientRect()
+        .height ?? null,
   );
   expect(height).toBe(0);
   await browser.evaluate(
     () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      new Promise<null>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
       ),
   );
   expect(requests).toEqual([]);

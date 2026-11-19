@@ -26,6 +26,7 @@ test("Gallery grants and arguments can arrive without remounting a card or decis
     Object.defineProperty(window, "initialGalleryNodes", {
       value: [value, options],
     });
+    return null;
   });
   await screen
     .getByRole("button", "Load grants and finish arguments", { exact: true })
@@ -123,4 +124,40 @@ test("an empty chart waits only while its arguments can still arrive", async ({
     await expect(chart.getByText(empty, { exact: true })).toBeVisible();
     await expect(chart.getByRole("status")).toHaveCount(0);
   }
+});
+
+test("each approval answers only its own executing call", async ({
+  app,
+  screen,
+}) => {
+  await app.open(`${fixture}?scenario=parallel`);
+  const refund = screen.getByRole("region", "Refund the first order?", {
+    exact: true,
+  });
+  const cancel = screen.getByRole("region", "Cancel the second order?", {
+    exact: true,
+  });
+  const results = screen.getByRole("status", "Decision results", {
+    exact: true,
+  });
+  await expect(
+    refund.getByText("Preparing the request…", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    refund.getByRole("button", "Approve", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    cancel.getByRole("button", "Decline", { exact: true }),
+  ).toHaveCount(0);
+  await expect(results).toHaveText("{}");
+  await screen
+    .getByRole("button", "Finish both requests", { exact: true })
+    .tap();
+  await refund.getByRole("button", "Approve", { exact: true }).tap();
+  await expect(results).toHaveText('{"refund":{"decision":"approved"}}');
+  await cancel.getByRole("radio", "Decline", { exact: true }).tap();
+  await cancel.getByRole("button", "Decline", { exact: true }).tap();
+  await expect(results).toHaveText(
+    '{"refund":{"decision":"approved"},"cancel":{"decision":"declined"}}',
+  );
 });

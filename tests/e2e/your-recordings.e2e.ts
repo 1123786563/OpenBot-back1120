@@ -1,9 +1,6 @@
 import { type Browser, test } from "@e2e-dev/web";
-import type {
-  RecordingRow,
-  RecordingsPage,
-} from "@openbot/shared/recorder-api";
 import { expect } from "e2e";
+import type { RecordingRow, RecordingsPage } from "../../shared/recorder-api";
 
 const fixture = "/tests/browser/your-recordings.html";
 const empty = "No recordings yet. Each task you record shows up here.";

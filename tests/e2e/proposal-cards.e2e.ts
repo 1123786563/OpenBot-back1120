@@ -1,5 +1,10 @@
 import { test } from "@e2e-dev/web";
 import { expect } from "e2e";
+import { configureChatStream } from "./chat-stream";
+import { createConversation } from "./conversations";
+import { createBot } from "./signed-in";
+import { grantSkill, installSkill } from "./skills";
+import { stageChatRun } from "./staged-chat-stream";
 
 const fixture = (kind: "bot" | "skill", scenario?: string) =>
   `/tests/browser/proposal-cards.html?kind=${kind}${scenario ? `&scenario=${scenario}` : ""}`;
@@ -239,3 +244,74 @@ test("an existing Skill is offered as a replacement", async ({
     cases[1].success,
   );
 });
+
+for (const kind of ["bot", "skill"] as const) {
+  test(`a streamed ${kind} proposal identifies an existing item`, async (fixtures) => {
+    const { app, browser, screen } = fixtures;
+    const existing = await createBot(fixtures);
+    const slug = `weekly-${crypto.randomUUID().slice(0, 8)}`;
+    if (kind === "skill") {
+      await installSkill(browser, {
+        slug,
+        title: "Weekly summary",
+        summary: "Summarize this week.",
+        instructions: "List what moved this week.",
+      });
+    }
+    await grantSkill(browser, existing.id, `${kind}-creator`);
+    const channel = await createConversation(browser, existing.id);
+    await configureChatStream(browser);
+    const catalogue = Promise.withResolvers<void>();
+    await browser.route(
+      kind === "bot" ? /\/api\/agents$/ : /\/api\/plugins$/,
+      async (route) => {
+        await catalogue.promise;
+        await route.continue();
+      },
+    );
+    const toolCallId = "duplicate-proposal";
+    const args = kind === "bot" ? { name: existing.name } : { slug };
+    using stream = await stageChatRun(
+      browser,
+      ({ runId, threadId }) => [
+        { type: "RUN_STARTED", runId, threadId },
+        {
+          type: "TOOL_CALL_START",
+          toolCallId,
+          toolCallName: `save_${kind}`,
+          parentMessageId: "proposal-message",
+        },
+        { type: "TOOL_CALL_ARGS", toolCallId, delta: JSON.stringify(args) },
+      ],
+      ({ runId, threadId }) => [
+        { type: "TOOL_CALL_END", toolCallId },
+        { type: "RUN_FINISHED", runId, threadId },
+      ],
+    );
+    try {
+      await app.open(`/channel/${channel}`);
+      await screen
+        .getByRole("textbox", "Message", { exact: true })
+        .fill("Draft an update with the same name.");
+      await screen.getByRole("button", "Send message", { exact: true }).tap();
+      await expect(
+        screen.getByText(
+          kind === "bot" ? "Writing the Bot…" : "Writing the skill…",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      catalogue.resolve();
+      await expect(
+        screen.getByText(
+          kind === "bot"
+            ? `Create ${existing.name}, again`
+            : `Replace /${slug}`,
+          { exact: true },
+        ),
+      ).toBeVisible();
+    } finally {
+      catalogue.resolve();
+      stream.finish();
+    }
+  });
+}

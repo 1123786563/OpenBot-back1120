@@ -384,7 +384,7 @@ test("a Bot added back to the roster takes precedence over its cached detail err
   expect(detailRequests).toBe(1);
 
   listGeneralAssistant = true;
-  await screen.getByRole("link", "Bots", { exact: true }).tap();
+  await screen.getByRole("link", /^Bots(?: Unread messages)?$/).tap();
   await expect(
     browser.locator('a[href="/bots/general-assistant"]'),
   ).toBeVisible();
@@ -428,7 +428,7 @@ test("a hidden recipient with cached details stays available after a failed refr
   await app.open(`/channel/new?agent=${encodeURIComponent(id)}`);
   const recipient = screen.getByRole("button", `Remove ${name}`);
   await expect(recipient).toBeVisible();
-  await screen.getByRole("link", "Bots", { exact: true }).tap();
+  await screen.getByRole("link", /^Bots(?: Unread messages)?$/).tap();
   await expect(
     screen.getByRole("heading", "Bots", { exact: true }),
   ).toBeVisible();
@@ -497,7 +497,10 @@ for (const scenario of [
       screen.getByRole("button", `Remove ${name}`, { exact: true });
     await expect(remove(first.name)).toBeVisible();
     if (scenario !== "single Bot") {
-      const recipient = screen.getByRole("combobox", "Add another Bot for a group…");
+      const recipient = screen.getByRole(
+        "combobox",
+        "Add another Bot for a group…",
+      );
       await recipient.pressSequentially(second.name);
       const option = screen.getByRole("option", /^Knowledge/);
       await option.click();

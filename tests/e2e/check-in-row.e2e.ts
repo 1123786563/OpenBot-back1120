@@ -144,9 +144,10 @@ for (const scenario of [
       ].find((node) => node.textContent?.includes(value));
       return line
         ? {
-            schedule: line.parentElement?.querySelector(
-              '[data-slot="item-description"]',
-            )?.textContent,
+            schedule:
+              line.parentElement?.querySelector(
+                '[data-slot="item-description"]',
+              )?.textContent ?? null,
             clamp:
               getComputedStyle(line).getPropertyValue("-webkit-line-clamp"),
           }

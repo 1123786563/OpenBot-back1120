@@ -58,7 +58,13 @@ async function serveTour(
           json: {
             checklist: {
               audience: "admin",
-              rows: [{ id: "computer", status: checklist, ready: false }],
+              rows: [
+                {
+                  id: "computer",
+                  status: checklist ?? "missing",
+                  ready: false,
+                },
+              ],
             },
           },
         }),
@@ -159,6 +165,7 @@ test("busy Starter Tour tasks ignore repeated presses during a send", async ({
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent === "Chart Hacker News")
       ?.click();
+    return null;
   });
   await expect(sent).toHaveText(JSON.stringify([prompts[0].message]));
   await screen.getByRole("button", "Finish sending", { exact: true }).click();

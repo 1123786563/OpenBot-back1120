@@ -1368,6 +1368,7 @@ test("computer preview visibility uses the latest entry of each observer batch",
     await browser.evaluate(
       (entries) => {
         Reflect.get(window, "deliverPreviewVisibility")(entries);
+        return null;
       },
       [...batch],
     );

@@ -146,7 +146,7 @@ for (const mode of ["reply", "silent", "leave"] as const) {
       await expect(dialog).toHaveCount(0);
 
       if (mode === "leave") {
-        await screen.getByRole("link", "Bots", { exact: true }).click();
+        await screen.getByRole("link", /^Bots(?: Unread messages)?$/).click();
         await expect(browser).toHaveURL(/\/bots(?:[/?#]|$)/);
         await expect(card).toHaveCount(0);
         await browser.back();

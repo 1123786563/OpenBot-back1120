@@ -1750,7 +1750,7 @@ for (const { action, count, name } of [
       const chips = browser.locator(
         '[data-slot="composer"] button[aria-label^="Remove "]',
       );
-      const bots = screen.getByRole("link", "Bots", { exact: true });
+      const bots = screen.getByRole("link", /^Bots(?: Unread messages)?$/);
 
       if (action !== "empty" && action !== "disable") {
         await screen.getByRole("textbox", "Message").fill("Get started");

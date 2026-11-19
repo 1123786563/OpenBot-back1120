@@ -1,6 +1,11 @@
 import { type Browser, test } from "@e2e-dev/web";
 import { expect } from "e2e";
-import { chatRunPath, configureChatStream, readChatRun } from "./chat-stream";
+import {
+  chatEventStream,
+  chatRunPath,
+  configureChatStream,
+  readChatRun,
+} from "./chat-stream";
 import { createConversation } from "./conversations";
 import { createBot } from "./signed-in";
 import { stageChatRun } from "./staged-chat-stream";
@@ -487,6 +492,213 @@ test("Bot activity retries stale history and then replaces failed-read notices w
   }
 });
 
+for (const unreadableOnly of [false, true]) {
+  test(`later unavailable retries preserve messages and the archive notice (unreadable-only=${unreadableOnly})`, async (fixtures) => {
+    const { app, browser, screen } = fixtures;
+    const bot = await createBot(fixtures);
+    const channelId = await createConversation(browser, bot.id);
+    await configureChatStream(browser, [initial, local]);
+    let reads = 0;
+    const lastRetry = Promise.withResolvers<void>();
+    await browser.route(historyPath, async (route) => {
+      reads++;
+      if (reads === 4) await lastRetry.promise;
+      if (reads > 2)
+        return route.fulfill({ status: 500, json: { messages: [] } });
+      return route.fulfill({
+        json: {
+          messages:
+            reads === 1
+              ? [initial]
+              : unreadableOnly
+                ? [broken]
+                : [initial, broken],
+        },
+      });
+    });
+    await app.open(`/channel/${channelId}`);
+    const transcript = screen.getByRole("region", "Messages", { exact: true });
+    await expect(
+      transcript.getByText(local.content, { exact: true }),
+    ).toBeVisible();
+    expect(reads).toBe(1);
+    try {
+      await announceActivity(browser, {
+        channelId,
+        agentId: bot.id,
+        at: new Date().toISOString(),
+        text: "The Bot updated the conversation.",
+      });
+      await expect(screen.getByText(oneHole, { exact: true })).toBeVisible();
+      await expect.poll(() => reads).toBe(4);
+      const response = browser.waitForResponse(historyPath);
+      lastRetry.resolve();
+      expect(await (await response).json()).toEqual({ messages: [] });
+    } finally {
+      lastRetry.resolve();
+    }
+    await screen
+      .getByRole("textbox", "Message", { exact: true })
+      .fill("The retries have finished.");
+    await expect(screen.getByText(unavailable, { exact: true })).toHaveCount(0);
+    await expect(screen.getByText(oneHole, { exact: true })).toBeVisible();
+    for (const message of [initial, local]) {
+      await expect(
+        transcript.getByText(message.content, { exact: true }),
+      ).toHaveCount(1);
+    }
+  });
+}
+
+for (const prefixPresent of [false, true]) {
+  test(`archive recovery restores order after sending (known prefix=${prefixPresent})`, async (fixtures) => {
+    const { app, browser, screen } = fixtures;
+    const bot = await createBot(fixtures);
+    const channelId = await createConversation(browser, bot.id);
+    await configureChatStream(browser, []);
+    const runs: ReturnType<typeof readChatRun>[] = [];
+    let recovered: unknown[] | undefined;
+    await browser.route(historyPath, (route) =>
+      route.fulfill(
+        recovered || prefixPresent
+          ? {
+              contentType: "application/json",
+              body: JSON.stringify({ messages: recovered ?? [initial] }),
+            }
+          : { status: 500, json: { messages: [] } },
+      ),
+    );
+    await browser.route(chatRunPath, (route) => {
+      const run = readChatRun(route.request.postData);
+      runs.push(run);
+      const { threadId, runId } = run;
+      return route.fulfill(
+        chatEventStream([
+          { type: "RUN_STARTED", threadId, runId },
+          { type: "RUN_FINISHED", threadId, runId },
+        ]),
+      );
+    });
+    await app.open(`/channel/${channelId}`);
+    const transcript = screen.getByRole("region", "Messages", { exact: true });
+    await expect(
+      screen.getByText(prefixPresent ? initial.content : unavailable, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    const prompt = "Local turn after opening the conversation.";
+    const editor = screen.getByRole("textbox", "Message", { exact: true });
+    const send = screen.getByRole("button", "Send message", { exact: true });
+    await editor.fill(prompt);
+    await send.click();
+    await expect.poll(() => runs.length).toBe(1);
+    const sent = runs[0].messages.at(-1);
+    expect(sent).toMatchObject({ role: "user", content: prompt });
+    recovered = [initial, sent, storedReply];
+    await announceActivity(browser, {
+      channelId,
+      agentId: bot.id,
+      at: new Date().toISOString(),
+      text: storedReply.content,
+    });
+    for (const content of [initial.content, prompt, storedReply.content]) {
+      await expect(transcript.getByText(content, { exact: true })).toHaveCount(
+        1,
+      );
+    }
+    const text = await transcript.textContent();
+    expect(text?.indexOf(initial.content)).toBeLessThan(
+      text?.indexOf(prompt) ?? -1,
+    );
+    expect(text?.indexOf(prompt)).toBeLessThan(
+      text?.indexOf(storedReply.content) ?? -1,
+    );
+    await expect(screen.getByText(unavailable, { exact: true })).toHaveCount(0);
+    await editor.fill("Capture restored ordering.");
+    await send.click();
+    await expect.poll(() => runs.length).toBe(2);
+    expect(runs[1].threadId).toBe(runs[0].threadId);
+    expect(runs[1].messages.slice(0, 3)).toEqual(recovered);
+  });
+}
+
+for (const phase of ["opening", "refresh"]) {
+  for (const anchored of [true, false]) {
+    test(`archive ${phase} preserves local messages with shared IDs=${anchored}`, async (fixtures) => {
+      const { app, browser, screen } = fixtures;
+      const bot = await createBot(fixtures);
+      const channelId = await createConversation(browser, bot.id);
+      const localReply = { ...storedReply, content: "Current local reply." };
+      const prefix = {
+        id: "missing-prefix",
+        role: "assistant",
+        content: "Recovered archive prefix.",
+      };
+      const tail = {
+        id: "missing-tail",
+        role: "assistant",
+        content: "Recovered archive tail.",
+      };
+      const local = [initial, localReply];
+      const stored = anchored
+        ? [
+            prefix,
+            { ...initial, content: "Stale opening text." },
+            { ...storedReply, content: "Stale answer text." },
+            tail,
+            tail,
+          ]
+        : [tail, tail];
+      const expected = anchored ? [prefix, ...local, tail] : [...local, tail];
+      let archive = phase === "opening" ? stored : [];
+      await configureChatStream(browser, local, async () => archive);
+      const runs: ReturnType<typeof readChatRun>[] = [];
+      await browser.route(chatRunPath, (route) => {
+        const run = readChatRun(route.request.postData);
+        runs.push(run);
+        const { threadId, runId } = run;
+        return route.fulfill(
+          chatEventStream([
+            { type: "RUN_STARTED", threadId, runId },
+            { type: "RUN_FINISHED", threadId, runId },
+          ]),
+        );
+      });
+      await app.open(`/channel/${channelId}`);
+      const transcript = screen.getByRole("region", "Messages", {
+        exact: true,
+      });
+      await expect(
+        transcript.getByText(localReply.content, { exact: true }),
+      ).toBeVisible();
+      if (phase === "refresh") {
+        archive = stored;
+        await announceActivity(browser, {
+          channelId,
+          agentId: bot.id,
+          text: tail.content,
+          at: new Date().toISOString(),
+        });
+      }
+      await expect(
+        transcript.getByText(tail.content, { exact: true }),
+      ).toBeVisible();
+      for (const { content } of expected) {
+        await expect(
+          transcript.getByText(content, { exact: true }),
+        ).toHaveCount(1);
+      }
+      await expect(transcript.getByText(/^Stale /)).toHaveCount(0);
+      await screen
+        .getByRole("textbox", "Message", { exact: true })
+        .fill("Continue with the restored messages.");
+      await screen.getByRole("button", "Send message", { exact: true }).tap();
+      await expect.poll(() => runs.length).toBe(1);
+      expect(runs[0].messages.slice(0, -1)).toEqual(expected);
+    });
+  }
+}
+
 test("an older in-flight history response cannot overwrite a newer notification", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   const bot = await createBot(fixtures);
@@ -553,6 +765,108 @@ test("an older in-flight history response cannot overwrite a newer notification"
     releaseOld.resolve();
   }
 });
+
+for (const outcome of ["unavailable", "unreadable", "readable"]) {
+  test(`a delayed ${outcome} opening archive cannot replace a newer refresh`, async (fixtures) => {
+    const { app, browser, screen } = fixtures;
+    const bot = await createBot(fixtures);
+    const channelId = await createConversation(browser, bot.id);
+    await configureChatStream(browser, [initial]);
+    const obsolete = {
+      ...storedReply,
+      id: "obsolete-opening",
+      content: "Obsolete opening reply.",
+    };
+    const stale = {
+      status: outcome === "unavailable" ? 500 : 200,
+      json: {
+        messages:
+          outcome === "unreadable"
+            ? [broken, { ...broken, id: "second-hole" }]
+            : outcome === "readable"
+              ? [initial, obsolete]
+              : [],
+      },
+    };
+    await browser.addInitScript(({ status, json }) => {
+      const fetchLive = window.fetch.bind(window);
+      const schedule = window.setTimeout.bind(window);
+      let opening = true;
+      let extendDeadline = false;
+      Object.defineProperty(window, "fetch", {
+        configurable: true,
+        value: (input: RequestInfo | URL, init?: RequestInit) => {
+          if (!opening || !String(input).includes("/messages?agentId=")) {
+            return fetchLive(input, init);
+          }
+          opening = false;
+          extendDeadline = true;
+          return new Promise<Response>((resolve) => {
+            document.documentElement.dataset.openingArchive = "pending";
+            window.addEventListener(
+              "release-opening-archive",
+              () => {
+                resolve(Response.json(json, { status }));
+              },
+              { once: true },
+            );
+          });
+        },
+      });
+      Object.defineProperty(window, "setTimeout", {
+        configurable: true,
+        value: (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+          if (extendDeadline && delay === 1500) {
+            extendDeadline = false;
+            return schedule(handler, 60_000, ...args);
+          }
+          return schedule(handler, delay, ...args);
+        },
+      });
+    }, stale);
+    await browser.route(historyPath, (route) =>
+      route.fulfill({
+        json: { messages: [initial, storedReply, broken] },
+      }),
+    );
+    await app.open(`/channel/${channelId}`);
+    await expect(browser.locator("html")).toHaveAttribute(
+      "data-opening-archive",
+      "pending",
+    );
+    await announceActivity(browser, {
+      channelId,
+      agentId: bot.id,
+      at: new Date().toISOString(),
+      text: storedReply.content,
+    });
+    const transcript = screen.getByRole("region", "Messages", {
+      exact: true,
+    });
+    const notice = screen.getByText(oneHole, { exact: true });
+    const latest = transcript.getByText(storedReply.content, { exact: true });
+    await expect(latest).toBeVisible();
+    await expect(notice).toBeVisible();
+    await browser.evaluate(
+      () =>
+        new Promise<null>((resolve) => {
+          window.dispatchEvent(new Event("release-opening-archive"));
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => resolve(null)),
+          );
+        }),
+    );
+    await screen
+      .getByRole("textbox", "Message", { exact: true })
+      .fill("The opening read has returned.");
+    await expect(notice).toBeVisible();
+    await expect(latest).toHaveCount(1);
+    await expect(
+      transcript.getByText(obsolete.content, { exact: true }),
+    ).toHaveCount(0);
+    await expect(screen.getByText(unavailable, { exact: true })).toHaveCount(0);
+  });
+}
 
 test("switching conversations keeps a late archive response out of the new transcript", async (fixtures) => {
   const { app, browser, screen } = fixtures;
@@ -745,6 +1059,129 @@ test("a live answer is announced once and an empty follow-up does not report it 
   expect(reportedAnswers).toHaveLength(1);
   expect(reads).toBe(1);
 });
+
+for (const variant of ["timestamp", "text", "bot", "bot and text"]) {
+  test(`an activity with different ${variant} refreshes history after a live reply`, async (fixtures) => {
+    const { app, browser, screen } = fixtures;
+    const bot = await createBot(fixtures);
+    const channelId = await createConversation(browser, bot.id);
+    const reply = "The Bot answered live.";
+    let reads = 0;
+    let archive = [initial];
+    await browser.addInitScript(() => {
+      const NativeSocket = window.WebSocket;
+      window.WebSocket = class extends NativeSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          if (new URL(this.url).pathname !== "/api/channels/events") return;
+          window.addEventListener("openbot-e2e-roster-activity", (event) => {
+            if (
+              event instanceof CustomEvent &&
+              this.readyState === NativeSocket.OPEN
+            ) {
+              this.dispatchEvent(
+                new MessageEvent("message", {
+                  data: JSON.stringify(event.detail),
+                }),
+              );
+            }
+          });
+        }
+      };
+    });
+    await configureChatStream(browser, [initial], async () => {
+      reads++;
+      return archive;
+    });
+    const reported = Promise.withResolvers<{
+      agentId: string;
+      text: string;
+      at: string;
+    }>();
+    await browser.route(
+      new RegExp(`/api/channels/${RegExp.escape(channelId)}/activity$`),
+      async (route) => {
+        const response = await route.fetch();
+        const payload: unknown = JSON.parse(route.request.postData ?? "null");
+        if (
+          payload &&
+          typeof payload === "object" &&
+          "agentId" in payload &&
+          payload.agentId === bot.id &&
+          "text" in payload &&
+          payload.text === reply &&
+          "at" in payload &&
+          typeof payload.at === "string"
+        ) {
+          expect(response.status).toBe(204);
+          reported.resolve({ agentId: bot.id, text: reply, at: payload.at });
+        }
+        await route.fulfill({ status: response.status });
+      },
+    );
+    await browser.route(chatRunPath, (route) => {
+      const { runId, threadId } = readChatRun(route.request.postData);
+      return route.fulfill(
+        chatEventStream([
+          { type: "RUN_STARTED", threadId, runId },
+          {
+            type: "TEXT_MESSAGE_START",
+            messageId: "relay-live",
+            role: "assistant",
+          },
+          {
+            type: "TEXT_MESSAGE_CONTENT",
+            messageId: "relay-live",
+            delta: reply,
+          },
+          { type: "TEXT_MESSAGE_END", messageId: "relay-live" },
+          { type: "RUN_FINISHED", threadId, runId },
+        ]),
+      );
+    });
+
+    await app.open(`/channel/${channelId}`);
+    const transcript = screen.getByRole("region", "Messages", { exact: true });
+    await expect(
+      transcript.getByText(initial.content, { exact: true }),
+    ).toBeVisible();
+    await screen
+      .getByRole("textbox", "Message", { exact: true })
+      .fill("Ask before the relay.");
+    await screen.getByRole("button", "Send message", { exact: true }).tap();
+    await expect(transcript.getByText(reply, { exact: true })).toBeVisible();
+    const self = await reported.promise;
+    expect(reads).toBe(1);
+
+    archive = [initial, storedReply];
+    await browser.evaluate(
+      (detail) => {
+        window.dispatchEvent(
+          new CustomEvent("openbot-e2e-roster-activity", { detail }),
+        );
+        return null;
+      },
+      {
+        channelId,
+        lastMessageAgentId: variant.includes("bot")
+          ? "relay-bot"
+          : self.agentId,
+        lastMessage: variant.includes("text")
+          ? "A different activity."
+          : self.text,
+        lastMessageAt:
+          variant === "timestamp"
+            ? new Date(Date.parse(self.at) + 1_000).toISOString()
+            : self.at,
+      },
+    );
+    await expect(
+      transcript.getByText(storedReply.content, { exact: true }),
+    ).toBeVisible();
+    await expect(transcript.getByText(reply, { exact: true })).toHaveCount(1);
+    expect(reads).toBe(2);
+  });
+}
 
 test("the sidebar replaces the conversation time with Working until the Bot finishes", async (fixtures) => {
   const { app, browser, screen } = fixtures;

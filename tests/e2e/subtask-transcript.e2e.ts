@@ -26,10 +26,11 @@ for (const state of [
       (route) => {
         requests.push(route.request.method);
         return route.fulfill({
-          json: {
+          contentType: "application/json",
+          body: JSON.stringify({
             messages:
               state === "working" ? task.subagent.slice(0, 2) : task.subagent,
-          },
+          }),
         });
       },
     );

@@ -15,6 +15,8 @@ const suites = {
     "tests/e2e/composer.e2e.ts",
     "tests/e2e/composer-starter-drawer.e2e.ts",
     "tests/e2e/starter-tasks.e2e.ts",
+    "tests/e2e/starter-routing.e2e.ts",
+    "tests/e2e/step-rules-conversation.e2e.ts",
     "tests/e2e/composer-dictation.e2e.ts",
     "tests/e2e/collapse.e2e.ts",
     "tests/e2e/desktop-web-layout.e2e.ts",
@@ -122,6 +124,7 @@ const suites = {
 
     "tests/e2e/chat-skills.e2e.ts",
     "tests/e2e/tool-search.e2e.ts",
+    "tests/e2e/step-rules-conversation.e2e.ts",
     "tests/e2e/tool-activity.e2e.ts",
     "tests/e2e/research-steps.e2e.ts",
     "tests/e2e/tool-boundary.e2e.ts",
@@ -165,6 +168,8 @@ const suites = {
   personal: [
     "tests/e2e/composer-starter-drawer.e2e.ts",
     "tests/e2e/starter-tasks.e2e.ts",
+    "tests/e2e/starter-routing.e2e.ts",
+    "tests/e2e/step-rules-conversation.e2e.ts",
     "tests/e2e/composer-dictation.e2e.ts",
     "tests/e2e/activity-report.e2e.ts",
     "tests/e2e/a2ui-budget.e2e.ts",
@@ -191,6 +196,7 @@ const suites = {
     "tests/e2e/computer-input.e2e.ts",
     "tests/e2e/computer-handoff.e2e.ts",
     "tests/e2e/computer-navigation.e2e.ts",
+    "tests/e2e/step-rules-conversation.e2e.ts",
     "tests/e2e/tool-activity.e2e.ts",
     "tests/e2e/research-steps.e2e.ts",
     "tests/e2e/tool-boundary.e2e.ts",

@@ -1,6 +1,5 @@
-import type { Message } from "@ag-ui/core";
 import { type Browser, test } from "@e2e-dev/web";
-import { expect } from "e2e";
+import { expect, type JsonValue } from "e2e";
 import {
   constructed,
   documented,
@@ -14,7 +13,7 @@ const cardSelector =
 type Call = { name: string; arguments: string };
 
 async function serve(browser: Browser) {
-  let replay: { messages: Message[]; busy: boolean };
+  let replay: { messages: JsonValue[]; busy: boolean };
   await browser.route(/\/fixture\/coding-transcript$/, (route) =>
     route.fulfill({ json: replay }),
   );
@@ -30,7 +29,7 @@ async function serve(browser: Browser) {
     }),
   );
   return (calls: Call[], results: (string | undefined)[], busy = false) => {
-    const messages: Message[] = [
+    const messages: JsonValue[] = [
       { id: "u1", role: "user", content: "Build greet.py and run it." },
     ];
     for (const [index, call] of calls.entries()) {

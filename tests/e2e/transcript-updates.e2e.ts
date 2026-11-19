@@ -69,6 +69,7 @@ test("recovering and removing history above the opening page keeps its first row
     Object.defineProperty(window, "openingRow", {
       value: document.querySelector('[aria-label="Opening rows"] li'),
     });
+    return null;
   });
   await screen
     .getByRole("button", "Recover rows above", { exact: true })
@@ -178,6 +179,7 @@ test("finished tool details stay open and mounted while the reply streams", asyn
     );
     if (!original) throw new Error("Completed search details are missing");
     original.setAttribute("data-original-search-details", "");
+    return null;
   }, lookup);
   const append = screen.getByRole("button", "Stream another event", {
     exact: true,

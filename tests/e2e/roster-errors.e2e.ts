@@ -8,7 +8,7 @@ const sharedFailure = "Couldn't load the Bots shared with you.";
 const composerFailure =
   "Couldn't load your Bots, so there's no one to send this to. Reload the page.";
 const noShared = "Nobody has shared a Bot with you yet.";
-const rosterFailure = "Couldn't load your Bots. Reload the page.";
+const rosterFailure = "Could not load Bots.";
 
 if (!personal) {
   test("first-load roster failures are visible on Home and the Bots page", async ({
@@ -29,7 +29,7 @@ if (!personal) {
       screen.getByRole("textbox", "Message", { exact: true }),
     ).toHaveAttribute("aria-disabled", "true");
 
-    await screen.getByRole("link", "Bots", { exact: true }).tap();
+    await screen.getByRole("link", /^Bots(?: Unread messages)?$/).tap();
     await expect(
       screen.getByText(rosterFailure, { exact: true }),
     ).toBeVisible();
@@ -102,7 +102,7 @@ for (const shared of personal ? [false] : [true, false]) {
       await expect(screen.getByText(noShared, { exact: true })).toBeVisible();
     }
 
-    await screen.getByRole("link", "Bots", { exact: true }).tap();
+    await screen.getByRole("link", /^Bots(?: Unread messages)?$/).tap();
     await expect.poll(() => failures).toBeGreaterThanOrEqual(4);
     await expect(
       screen.getByRole("link", new RegExp(RegExp.escape(bot.name))),

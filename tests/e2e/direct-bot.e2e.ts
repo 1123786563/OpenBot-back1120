@@ -1,12 +1,11 @@
 import { test } from "@e2e-dev/web";
 import { expect } from "e2e";
-import type { AgentProfile } from "../../app/src/lib/agents/queries";
 import { configureChatStream } from "./chat-stream";
 
 const general = { id: "general-assistant", name: "General Assistant" };
 const picked = { id: "picked-harness", name: "LangGraph" };
 const hidden = { id: "hidden-bot", name: "Hidden Bot" };
-function profile(agent: Pick<AgentProfile, "id" | "name">): AgentProfile {
+function profile(agent: { id: string; name: string }) {
   return {
     ...agent,
     avatarSeed: agent.id,

@@ -209,7 +209,11 @@ export const routeBuildRollupOutputOptions = {
   manualChunks: selectOpenBotManualChunk,
 };
 
+const e2e = Boolean(process.env.OPENBOT_E2E_SUITE);
+
 export default defineConfig({
+  // Other dev servers must not rewrite this test server's dependency cache or mounted providers.
+  cacheDir: e2e ? `node_modules/.vite-e2e-${appPort.port}` : undefined,
   plugins: [
     thisMachineOnly(loadEnv("", path.resolve(__dirname, ".."), "")),
     announceServerPort(apiPort.port),
@@ -232,10 +236,16 @@ export default defineConfig({
        * tests, and anything else with the engine feature — the real class resolves and the exact
        * binding runs.
        */
-      "node:async_hooks": path.resolve(__dirname, "./src/shims/node-async-hooks.ts"),
+      "node:async_hooks": path.resolve(
+        __dirname,
+        "./src/shims/node-async-hooks.ts",
+      ),
     },
   },
-  server: serving,
+  server: {
+    ...serving,
+    ...(e2e ? { watch: null, hmr: false as const } : {}),
+  },
   preview: serving,
   build: {
     rollupOptions: {

@@ -163,7 +163,7 @@ for (const mode of ["wait in Starting", "go back home", "write a new draft"]) {
 
       if (mode === "write a new draft") {
         await expect(editor).toHaveText("something new");
-        await screen.getByRole("link", "Bots", { exact: true }).tap();
+        await screen.getByRole("link", /^Bots(?: Unread messages)?$/).tap();
         await expect(browser).toHaveURL("/bots");
         await expect(
           screen.getByRole("heading", "Bots", { exact: true }),

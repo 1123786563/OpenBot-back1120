@@ -81,6 +81,41 @@ test(
 );
 
 test(
+  "the New Bot dialog keeps keyboard focus and restores its opener",
+  workspace,
+  async ({ app, browser, screen }) => {
+    await app.open("/bots");
+    const opener = screen
+      .getByRole("button", "New Bot", { exact: true })
+      .first();
+    await opener.press("Enter");
+    const dialog = screen.getByRole("dialog", "New Bot");
+    const name = dialog.getByLabel("Name", { exact: true });
+    await expect(name).toBeFocused();
+    await name.press("Shift+Tab");
+    await expect(
+      dialog.getByRole("button", /^Connect a custom agent/),
+    ).toBeFocused();
+    await dialog.getByRole("button", /^Connect a custom agent/).press("Tab");
+    await expect(name).toBeFocused();
+    await name.fill("   ");
+    await name.press("Enter");
+    await expect(dialog.getByRole("alert")).toHaveText("Name is required.");
+    await name.fill("Retained draft");
+    await name.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(opener).toBeFocused();
+    await expect(browser).toHaveURL(/\/bots\/?$/);
+    await opener.press("Enter");
+    await expect(name).toHaveValue("Retained draft");
+    await dialog.getByRole("button", "Cancel", { exact: true }).tap();
+    await expect(dialog).toBeHidden();
+    await opener.press("Enter");
+    await expect(name).toHaveValue("");
+  },
+);
+
+test(
   "custom hosting requires a name before choosing a Harness",
   workspace,
   async ({ app, screen }) => {

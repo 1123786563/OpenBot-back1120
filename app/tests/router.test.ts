@@ -7,6 +7,31 @@ import {
   selectOpenBotManualChunk,
 } from "../vite.config";
 
+for (const [suite, port] of [
+  ["", "3010"],
+  ["navigation", "13140"],
+  ["personal", "13142"],
+]) {
+  test(`Vite isolates E2E cache and hot updates without changing development (suite=${suite || "unset"})`, () => {
+    const probe = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        'import config from "./vite.config.ts"; console.log(JSON.stringify({ cacheDir: config.cacheDir ?? null, watchDisabled: config.server?.watch === null, hmrDisabled: config.server?.hmr === false }));',
+      ],
+      cwd: new URL("..", import.meta.url).pathname,
+      env: { ...process.env, OPENBOT_E2E_SUITE: suite, APP_PORT: port },
+    });
+    expect(probe.exitCode).toBe(0);
+    expect(JSON.parse(probe.stdout.toString().trim())).toEqual({
+      cacheDir: suite ? `node_modules/.vite-e2e-${port}` : null,
+      watchDisabled: Boolean(suite),
+      hmrDisabled: Boolean(suite),
+    });
+  });
+}
+
 test("provides the generated index route", () => {
   expect(router.routesByPath["/"]?.fullPath).toBe("/");
 });
