@@ -33,11 +33,17 @@ const adapter = new AlipayPaymentAdapterImpl(
 
 afterAll(() => gateway.stop());
 
+const expiresAtMs = Date.now() + 60 * 60_000;
+const expectedTimeExpire = new Date(expiresAtMs + 8 * 60 * 60_000)
+  .toISOString()
+  .slice(0, 19)
+  .replace("T", " ");
 const SNAPSHOT = {
   merchant_reference: "order-2026-1119-0001",
   amount_fen: "1010",
   currency: "CNY" as const,
-  expires_at_us: "1775000000000000",
+  // Keep the order live regardless of when this protocol suite runs.
+  expires_at_us: String(expiresAtMs * 1000),
 };
 
 function lastRequest(): RecordedGatewayRequest {
@@ -64,6 +70,9 @@ describe("page pay entry (A1/A2): SDK pageExecute, PC and WAP", () => {
     expect(biz.product_code).toBe("FAST_INSTANT_TRADE_PAY");
     expect(biz.out_trade_no).toBe(SNAPSHOT.merchant_reference);
     expect(biz.total_amount).toBe("10.10");
+    // The cashier's life is bound to the order: the official absolute
+    // deadline field, in Beijing wall clock, is signed INTO the request.
+    expect(biz.time_expire).toBe(expectedTimeExpire);
     expect(params.return_url).toBe("https://app.example.invalid/return");
     expect(params.notify_url).toBe(config.notifyUrl);
     expect(params.app_id).toBe(config.appId);
@@ -71,7 +80,7 @@ describe("page pay entry (A1/A2): SDK pageExecute, PC and WAP", () => {
     expect(testVerifyRequest(params, material.merchantPublicKey)).toBe(true);
   });
 
-  test("WAP builds a signed redirect URL carrying QUICK_WAP_WAY", async () => {
+  test("WAP builds a signed redirect URL carrying QUICK_WAP_WAY and the same deadline", async () => {
     const link = await adapter.createWebPayment({
       snapshot: SNAPSHOT,
       mode: "wap",
@@ -79,8 +88,35 @@ describe("page pay entry (A1/A2): SDK pageExecute, PC and WAP", () => {
     });
     const params = Object.fromEntries(new URL(link.value).searchParams);
     expect(params.method).toBe("alipay.trade.wap.pay");
-    expect(JSON.parse(params.biz_content).product_code).toBe("QUICK_WAP_WAY");
+    const biz = JSON.parse(params.biz_content);
+    expect(biz.product_code).toBe("QUICK_WAP_WAY");
+    expect(biz.time_expire).toBe(expectedTimeExpire);
     expect(testVerifyRequest(params, material.merchantPublicKey)).toBe(true);
+  });
+
+  test("an expired snapshot builds no cashier link at all", async () => {
+    await expect(
+      adapter.createWebPayment({
+        snapshot: {
+          ...SNAPSHOT,
+          expires_at_us: String((Date.now() - 60_000) * 1000),
+        },
+        mode: "pc",
+        returnUrl: "https://app.example.invalid/return",
+      }),
+    ).rejects.toThrow(/expired/);
+    // The deadline boundary itself: one second into the future builds
+    // one (already floored to the second), one millisecond in the past does not.
+    const boundaryFuture = String((Date.now() + 1_000) * 1000);
+    const link = await adapter.createWebPayment({
+      snapshot: { ...SNAPSHOT, expires_at_us: boundaryFuture },
+      mode: "pc",
+      returnUrl: "https://app.example.invalid/return",
+    });
+    const biz = JSON.parse(
+      Object.fromEntries(new URL(link.value).searchParams).biz_content,
+    );
+    expect(typeof biz.time_expire).toBe("string");
   });
 
   test("a return_url off the whitelist never becomes a cashier link", async () => {
@@ -152,6 +188,7 @@ describe("query (A1/A4): statuses, identity, payment time", () => {
         code: "10000",
         msg: "Success",
         out_trade_no: SNAPSHOT.merchant_reference,
+        trade_no: "2026111922001400001",
         trade_status: raw,
         total_amount: "10.10",
       });
@@ -232,6 +269,82 @@ describe("query (A1/A4): statuses, identity, payment time", () => {
     expect(observation.evidence).toBe("none");
   });
 
+  test("a query answer with NO amount cannot confirm any trade", async () => {
+    gateway.enqueueSigned("alipay_trade_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_no: "2026111922001400001",
+      trade_status: "TRADE_SUCCESS",
+      // no total_amount
+    });
+    await expect(
+      adapter.query({
+        merchant_reference: SNAPSHOT.merchant_reference,
+        provider_transaction_id: null,
+        expected_amount_fen: SNAPSHOT.amount_fen,
+      }),
+    ).rejects.toThrow(AlipayProtocolError);
+  });
+
+  test("a success status without a transaction id degrades to unknown", async () => {
+    gateway.enqueueSigned("alipay_trade_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_status: "TRADE_SUCCESS",
+      total_amount: "10.10",
+      // no trade_no: the success cannot be bound to a channel transaction
+    });
+    const observation = await adapter.query({
+      merchant_reference: SNAPSHOT.merchant_reference,
+      provider_transaction_id: null,
+      expected_amount_fen: SNAPSHOT.amount_fen,
+    });
+    expect(observation.status).toBe("unknown");
+    expect(observation.raw_trade_status).toBe("TRADE_SUCCESS");
+    expect(observation.provider_transaction_id).toBe(null);
+    expect(observation.evidence).toBe("query");
+  });
+
+  test("an explicit non-CNY currency is a protocol error, never accepted", async () => {
+    gateway.enqueueSigned("alipay_trade_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_no: "2026111922001400001",
+      trade_status: "TRADE_SUCCESS",
+      total_amount: "10.10",
+      settle_currency: "USD",
+    });
+    await expect(
+      adapter.query({
+        merchant_reference: SNAPSHOT.merchant_reference,
+        provider_transaction_id: null,
+        expected_amount_fen: SNAPSHOT.amount_fen,
+      }),
+    ).rejects.toThrow(/not CNY/);
+  });
+
+  test("query currency stays unreported unless the response names it", async () => {
+    gateway.enqueueSigned("alipay_trade_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_no: "2026111922001400001",
+      trade_status: "TRADE_SUCCESS",
+      total_amount: "10.10",
+    });
+    const observation = await adapter.query({
+      merchant_reference: SNAPSHOT.merchant_reference,
+      provider_transaction_id: null,
+      expected_amount_fen: SNAPSHOT.amount_fen,
+    });
+    expect(observation.currency).toBe(null);
+    expect(observation.status).toBe("succeeded");
+    expect(observation.total_amount_fen).toBe("1010");
+  });
+
   test("a tampered response body never becomes an observation", async () => {
     // Sign the honest node, then swap the trade_status bytes in transit.
     const { testSignedGatewayResponse } = await import("./helpers");
@@ -273,6 +386,38 @@ describe("close (A4): success, payment race, timeout", () => {
     expect(observation.status).toBe("closed");
     expect(observation.provider_transaction_id).toBe("2026111922001400001");
     expect(observation.evidence).toBe("close");
+  });
+
+  test("a close success that names no trade is a protocol error", async () => {
+    gateway.enqueueSigned("alipay_trade_close_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      // no trade_no: the closed fact cannot be bound to a transaction
+    });
+    await expect(
+      adapter.close({
+        merchant_reference: SNAPSHOT.merchant_reference,
+        provider_transaction_id: null,
+        expected_amount_fen: SNAPSHOT.amount_fen,
+      }),
+    ).rejects.toThrow(/trade_no/);
+  });
+
+  test("a close success naming ANOTHER trade is refused", async () => {
+    gateway.enqueueSigned("alipay_trade_close_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_no: "2026111922009999999",
+    });
+    await expect(
+      adapter.close({
+        merchant_reference: SNAPSHOT.merchant_reference,
+        provider_transaction_id: "2026111922001400001",
+        expected_amount_fen: SNAPSHOT.amount_fen,
+      }),
+    ).rejects.toThrow(AlipayProtocolError);
   });
 
   test("close losing the payment race is unknown — query decides, never close", async () => {
@@ -375,6 +520,46 @@ describe("refund (A5): persisted out_request_no, evidence, unknowns", () => {
     expect(observation.refunded_fen).toBe("400");
   });
 
+  test("a refund whose amount evidence is missing stays pending", async () => {
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
+      out_request_no: refundRequest.out_request_no,
+      trade_no: refundRequest.provider_transaction_id,
+      fund_change: "Y",
+      // no refund_fee: the actual amount is unevidenced
+    });
+    const observation = await adapter.refund(refundRequest);
+    expect(observation.status).toBe("pending");
+    expect(observation.refunded_fen).toBe(null);
+  });
+
+  test("a refund echo naming ANOTHER order or trade is a protocol error", async () => {
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_trade_no: "someone-elses-order",
+      out_request_no: refundRequest.out_request_no,
+      fund_change: "Y",
+      refund_fee: "5.00",
+    });
+    await expect(adapter.refund(refundRequest)).rejects.toThrow(
+      AlipayProtocolError,
+    );
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      trade_no: "2026111922009999999",
+      fund_change: "Y",
+      refund_fee: "5.00",
+    });
+    await expect(adapter.refund(refundRequest)).rejects.toThrow(
+      AlipayProtocolError,
+    );
+  });
+
   test("a response naming another request number is a protocol error", async () => {
     gateway.enqueueSigned("alipay_trade_refund_response", {
       code: "10000",
@@ -432,6 +617,7 @@ describe("refund (A5): persisted out_request_no, evidence, unknowns", () => {
     gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
       code: "10000",
       msg: "Success",
+      out_trade_no: SNAPSHOT.merchant_reference,
       out_request_no: refundRequest.out_request_no,
       trade_no: refundRequest.provider_transaction_id,
       refund_status: "REFUND_SUCCESS",
@@ -440,6 +626,47 @@ describe("refund (A5): persisted out_request_no, evidence, unknowns", () => {
     const observation = await adapter.queryRefund(refundRequest);
     expect(observation.status).toBe("succeeded");
     expect(observation.refunded_fen).toBe("500");
+  });
+
+  test("REFUND_SUCCESS with NO amount evidence stays pending, never succeeded", async () => {
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      trade_no: refundRequest.provider_transaction_id,
+      refund_status: "REFUND_SUCCESS",
+      // no refund_fee: the channel said the word but evidenced no amount
+    });
+    const observation = await adapter.queryRefund(refundRequest);
+    expect(observation.status).toBe("pending");
+    expect(observation.refunded_fen).toBe(null);
+  });
+
+  test("REFUND_SUCCESS with an amount but no transaction binding stays pending", async () => {
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      refund_status: "REFUND_SUCCESS",
+      refund_fee: "5.00",
+      // no trade_no: the success cannot be bound to THIS trade
+    });
+    const observation = await adapter.queryRefund(refundRequest);
+    expect(observation.status).toBe("pending");
+  });
+
+  test("a refund query naming ANOTHER request number is a protocol error", async () => {
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: "refund-someone-else",
+      trade_no: refundRequest.provider_transaction_id,
+      refund_status: "REFUND_SUCCESS",
+      refund_fee: "5.00",
+    });
+    await expect(adapter.queryRefund(refundRequest)).rejects.toThrow(
+      AlipayProtocolError,
+    );
   });
 
   test("REFUND_SUCCESS over a different amount is unknown, never silently accepted", async () => {
@@ -465,6 +692,140 @@ describe("refund (A5): persisted out_request_no, evidence, unknowns", () => {
     const observation = await adapter.queryRefund(refundRequest);
     expect(observation.status).toBe("pending");
     expect(observation.evidence).toBe("refund_query");
+  });
+});
+
+describe("refund identity binding (A5 rework regressions)", () => {
+  const refundRequest = {
+    merchant_reference: SNAPSHOT.merchant_reference,
+    provider_transaction_id: "2026111922001400001",
+    out_request_no: "refund-2026-1119-0001",
+    refund_amount_fen: "500",
+  };
+
+  // The two controlled-gateway reproductions from the failed review round:
+  // a fully-evidenced refund/answer that names NO trade identity must never
+  // read as succeeded.
+  test("refund success with NO echoed trade identity stays pending", async () => {
+    // Request side knows trade-A and order-A; the response echoes only the
+    // request number, fund change and amount.
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      fund_change: "Y",
+      refund_fee: "5.00",
+      // no trade_no, no out_trade_no: nothing binds this to trade-A
+    });
+    const observation = await adapter.refund(refundRequest);
+    expect(observation.status).toBe("pending");
+    expect(observation.provider_transaction_id).toBe(null);
+    expect(observation.merchant_reference).toBe(null);
+    expect(observation.refunded_fen).toBe("500");
+  });
+
+  test("refund success without echoes also stays pending when keyed by order", async () => {
+    // Same shape, but the request itself is keyed by the merchant order (the
+    // transaction id is unknown); the orderless success is still unbound.
+    const orderKeyed = { ...refundRequest, provider_transaction_id: null };
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      fund_change: "Y",
+      refund_fee: "5.00",
+    });
+    const observation = await adapter.refund(orderKeyed);
+    expect(observation.status).toBe("pending");
+    expect(observation.provider_transaction_id).toBe(null);
+  });
+
+  test("refund success keyed by trade requires the EXACT trade echo", async () => {
+    // out_trade_no echo alone does not substitute for the known trade id.
+    const orderKeyed = { ...refundRequest, provider_transaction_id: null };
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      out_trade_no: SNAPSHOT.merchant_reference,
+      fund_change: "Y",
+      refund_fee: "5.00",
+      // no trade_no: the channel names the order but no transaction
+    });
+    const observation = await adapter.refund(orderKeyed);
+    expect(observation.status).toBe("pending");
+  });
+
+  test("queryRefund success over an UNBINDABLE trade id stays pending", async () => {
+    // Request known only by order-A; the response names foreign trade-B with
+    // no out_trade_no echo — trade-B cannot be tied to order-A, so the word
+    // REFUND_SUCCESS stays pending. The (unproven) trade id is still kept in
+    // the observation for the state machine to re-check under the SAME number.
+    const orderKeyed = { ...refundRequest, provider_transaction_id: null };
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      trade_no: "trade-B-unbound",
+      refund_status: "REFUND_SUCCESS",
+      refund_fee: "5.00",
+      // no out_trade_no: trade-B cannot be tied to order-A
+    });
+    const observation = await adapter.queryRefund(orderKeyed);
+    expect(observation.status).toBe("pending");
+    expect(observation.provider_transaction_id).toBe("trade-B-unbound");
+    expect(observation.merchant_reference).toBe(null);
+  });
+
+  test("queryRefund with a known trade id requires the exact trade echo", async () => {
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      out_trade_no: SNAPSHOT.merchant_reference,
+      refund_status: "REFUND_SUCCESS",
+      refund_fee: "5.00",
+      // trade_no omitted: known trade-A is not echoed back
+    });
+    const observation = await adapter.queryRefund(refundRequest);
+    expect(observation.status).toBe("pending");
+    expect(observation.provider_transaction_id).toBe(null);
+  });
+
+  test("queryRefund success with an order-corroborated discovered trade binds", async () => {
+    // Positive control of the unknown-id rule: trade id discovered AND the
+    // merchant order echo matches the requested order — fully bound.
+    const orderKeyed = { ...refundRequest, provider_transaction_id: null };
+    gateway.enqueueSigned("alipay_trade_fastpay_refund_query_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      out_trade_no: SNAPSHOT.merchant_reference,
+      trade_no: "trade-just-discovered",
+      refund_status: "REFUND_SUCCESS",
+      refund_fee: "5.00",
+    });
+    const observation = await adapter.queryRefund(orderKeyed);
+    expect(observation.status).toBe("succeeded");
+    expect(observation.provider_transaction_id).toBe("trade-just-discovered");
+    expect(observation.merchant_reference).toBe(SNAPSHOT.merchant_reference);
+  });
+
+  test("refund call success with the exact trade echo still binds", async () => {
+    // Positive control: the pre-existing succeeded path is unchanged.
+    gateway.enqueueSigned("alipay_trade_refund_response", {
+      code: "10000",
+      msg: "Success",
+      out_request_no: refundRequest.out_request_no,
+      trade_no: refundRequest.provider_transaction_id,
+      fund_change: "Y",
+      refund_fee: "5.00",
+    });
+    const observation = await adapter.refund(refundRequest);
+    expect(observation.status).toBe("succeeded");
+    expect(observation.provider_transaction_id).toBe(
+      refundRequest.provider_transaction_id,
+    );
   });
 });
 

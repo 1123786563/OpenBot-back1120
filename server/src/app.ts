@@ -136,7 +136,10 @@ import {
 import { parsePageLimit } from "./paging";
 import { createPasswordRoutes, createSignInRoutes } from "./passwords/routes";
 import type { SignInService } from "./passwords/service";
-import type { AlipayNotifyInbox } from "./payments/alipay/inbox";
+import {
+  type AlipayNotifyInbox,
+  createAlipayNotifyInbox,
+} from "./payments/alipay/inbox";
 import { createAlipayNotifyRoutes } from "./payments/alipay/routes";
 import {
   createWechatCallbackRoutes,
@@ -601,13 +604,18 @@ export function createApp(
   /**
    * The payment channels' durable notification inbox (payments/alipay/inbox.ts).
    *
-   * Mounted ONLY when the alipay channel is configured AND an inbox was
-   * built: a notify entry that could answer "success" without a durable
-   * insert must not exist at all. Protocol-authenticated, no session — see
-   * payments/alipay/routes.ts. Absent, the path answers 404 like any other
+   * Normally NOT passed at all: whenever the alipay channel is configured,
+   * the inbox is built HERE from `attachmentDatabase` — the shared database
+   * every deployment already hands createApp — so the production assembly
+   * mounts the real PostgreSQL receiving boundary without any caller change.
+   * The parameter survives only as an explicit override for tests that need
+   * a failing or recording inbox, because a notify entry that could answer
+   * "success" without a durable insert must never exist. Protocol-
+   * authenticated, no session — see payments/alipay/routes.ts. With neither
+   * a database nor an explicit inbox, the path answers 404 like any other
    * route the deployment has no door for.
    */
-  alipayNotifyInbox?: AlipayNotifyInbox,
+  alipayNotifyInboxParam?: AlipayNotifyInbox,
   /**
    * The billing catalog's internal read surface (#65), already built by the
    * caller (service + trusted credential verifier injected). Absent leaves
@@ -2527,9 +2535,19 @@ export function createApp(
 
   /*
    * The payment channel's notify entry (#70). No session auth: the gateway is
-   * the client, and its signature is the credential. Mounted only when both
-   * halves of the receiving boundary exist — see the parameter note above.
+   * the client, and its signature is the credential. The durable inbox is
+   * built HERE from the shared database whenever the channel is configured,
+   * so the production entry point — which passes the database and nothing
+   * else — mounts the receiving boundary too; the parameter is only an
+   * override. A notify entry that could answer "success" without a durable
+   * insert must not exist at all: with neither a database nor an explicit
+   * inbox the path stays a 404.
    */
+  const alipayNotifyInbox =
+    alipayNotifyInboxParam ??
+    (config.payments?.alipay && attachmentDatabase
+      ? createAlipayNotifyInbox(attachmentDatabase)
+      : undefined);
   if (config.payments?.alipay && alipayNotifyInbox) {
     app.route(
       "/payment-callbacks/alipay",

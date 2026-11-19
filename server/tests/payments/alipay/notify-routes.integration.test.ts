@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createSign } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { createApp } from "../../../src/app";
 import { loadConfig } from "../../../src/config";
 import { createDatabase, type Database } from "../../../src/db/client";
@@ -14,9 +15,15 @@ import { generateTestRsaMaterial, type TestRsaMaterial } from "./helpers";
  * A3/A4 at the REAL receiving boundary: the production notify route inside
  * createApp, with a real PostgreSQL inbox (no in-memory ack anywhere).
  * Signature material is generated per run; no production keys exist here.
+ *
+ * Every notify_id this suite uses is prefixed with a run-unique token, and
+ * the cleanup deletes ONLY rows under that prefix — a foreign suite sharing
+ * the database is untouched, and two runs of this suite cannot collide.
  */
 
 const material: TestRsaMaterial = generateTestRsaMaterial();
+
+const RUN = randomUUID().replaceAll("-", "").slice(0, 12);
 
 const ALIPAY_ENV = {
   ALIPAY_APP_ID: "2021000198765432",
@@ -43,12 +50,12 @@ function notifyBody(overrides: Record<string, string> = {}): string {
   const fields: Record<string, string> = {
     app_id: ALIPAY_ENV.ALIPAY_APP_ID,
     seller_id: ALIPAY_ENV.ALIPAY_SELLER_ID,
-    trade_no: "2026111922001400001",
-    out_trade_no: "order-2026-1119-0001",
+    trade_no: `${RUN}0000000000001`,
+    out_trade_no: `order-${RUN}-0001`,
     trade_status: "TRADE_SUCCESS",
     total_amount: "10.10",
     gmt_payment: "2026-11-19 21:00:05",
-    notify_id: "2026111922001400009",
+    notify_id: `${RUN}-base-1`,
     notify_type: "trade_status_sync",
     sign_type: "RSA2",
     ...overrides,
@@ -60,24 +67,25 @@ function notifyBody(overrides: Record<string, string> = {}): string {
 }
 
 let database: Database;
-const databaseUrlsToDelete: string[] = [];
 
 beforeAll(async () => {
   database = createDatabase(testDatabaseUrl(), TEST_POOL);
 });
 
 afterAll(async () => {
-  // Only rows this suite wrote; a foreign row (another suite sharing the
-  // database) is not ours to delete.
-  for (const url of databaseUrlsToDelete) void url;
-  await database
-    .delete(paymentChannelNotification)
-    .where(eq(paymentChannelNotification.channel, "alipay"));
+  // Only rows this run wrote: every dedupe_key begins with this run's
+  // prefix (isolated rows carry the same prefix before #conflict#), so a
+  // foreign suite sharing the database — and other runs of this suite —
+  // are left exactly as they were.
+  await database.execute(
+    sql`delete from payment_channel_notification where channel = 'alipay' and dedupe_key like ${`notify_id:${RUN}-%`}`,
+  );
   await database.$client.close();
 });
 
 function buildApp(inbox: ReturnType<typeof createAlipayNotifyInbox> | null) {
-  // The undefineds ahead of the Alipay inbox are the optional services this suite does not use.
+  // Keep the inbox override in its existing positional slot; default database
+  // assembly is covered by production-wiring.integration.test.ts.
   const unused = Array.apply(null, Array(39)) as undefined[];
   return createApp(
     loadConfig(testEnvironment({ ...ALIPAY_ENV })),
@@ -101,15 +109,12 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       .select()
       .from(paymentChannelNotification)
       .where(
-        eq(
-          paymentChannelNotification.dedupeKey,
-          "notify_id:2026111922001400009",
-        ),
+        eq(paymentChannelNotification.dedupeKey, `notify_id:${RUN}-base-1`),
       );
     expect(row).toBeDefined();
     expect(row!.state).toBe("inbox");
-    expect(row!.tradeNo).toBe("2026111922001400001");
-    expect(row!.outTradeNo).toBe("order-2026-1119-0001");
+    expect(row!.tradeNo).toBe(`${RUN}0000000000001`);
+    expect(row!.outTradeNo).toBe(`order-${RUN}-0001`);
     expect(row!.tradeStatus).toBe("TRADE_SUCCESS");
     expect(row!.paidAtUs).toBe(String(Date.UTC(2026, 10, 19, 13, 0, 5) * 1000));
     // The exact raw bytes are what was persisted, not a re-serialization.
@@ -120,7 +125,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
 
   test("a verified replay is answered success again and stored once", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
-    const body = notifyBody();
+    const body = notifyBody({ notify_id: `${RUN}-replay-1` });
     for (let i = 0; i < 2; i++) {
       const response = await app.request("/payment-callbacks/alipay", {
         method: "POST",
@@ -134,43 +139,44 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       .select()
       .from(paymentChannelNotification)
       .where(
-        eq(
-          paymentChannelNotification.dedupeKey,
-          "notify_id:2026111922001400009",
-        ),
+        eq(paymentChannelNotification.dedupeKey, `notify_id:${RUN}-replay-1`),
       );
     expect(rows.length).toBe(1);
   });
 
   test("the same notify_id with DIFFERENT content is stored isolated", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
+    const first = notifyBody({ notify_id: `${RUN}-conflict-1` });
     // Same notify_id, different amount — a mismatched-content alarm.
-    const body = notifyBody({ total_amount: "0.01" });
-    const response = await app.request("/payment-callbacks/alipay", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
+    const second = notifyBody({
+      notify_id: `${RUN}-conflict-1`,
+      total_amount: "0.01",
     });
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe("success"); // durably held — as an alarm
-    const rows = await database
+    for (const body of [first, second]) {
+      const response = await app.request("/payment-callbacks/alipay", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("success");
+    }
+    const inboxRows = await database
       .select()
       .from(paymentChannelNotification)
-      .where(eq(paymentChannelNotification.state, "isolated"));
-    expect(rows.length).toBe(1);
-    expect(rows[0]!.payloadDigest).not.toBe(
-      (
-        await database
-          .select()
-          .from(paymentChannelNotification)
-          .where(
-            eq(
-              paymentChannelNotification.dedupeKey,
-              "notify_id:2026111922001400009",
-            ),
-          )
-      )[0]!.payloadDigest,
+      .where(
+        eq(paymentChannelNotification.dedupeKey, `notify_id:${RUN}-conflict-1`),
+      );
+    expect(inboxRows.length).toBe(1);
+    const isolatedRows = await database
+      .select()
+      .from(paymentChannelNotification)
+      .where(sql`dedupe_key like ${`notify_id:${RUN}-conflict-1#conflict#%`}`);
+    expect(isolatedRows.length).toBe(1);
+    expect(isolatedRows[0]!.payloadDigest).not.toBe(
+      inboxRows[0]!.payloadDigest,
     );
+    expect(isolatedRows[0]!.state).toBe("isolated");
   });
 
   test("a forged signature (wrong key) is answered failure and stored nowhere", async () => {
@@ -181,7 +187,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       out_trade_no: "forged-order",
       trade_status: "TRADE_SUCCESS",
       total_amount: "9999.00",
-      notify_id: "forged-notify-1",
+      notify_id: `${RUN}-forged-1`,
       sign_type: "RSA2",
     };
     const params = new URLSearchParams();
@@ -210,14 +216,14 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       .select()
       .from(paymentChannelNotification)
       .where(
-        eq(paymentChannelNotification.dedupeKey, "notify_id:forged-notify-1"),
+        eq(paymentChannelNotification.dedupeKey, `notify_id:${RUN}-forged-1`),
       );
     expect(rows.length).toBe(0);
   });
 
   test("an amount flipped after signing is answered failure", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
-    const honest = notifyBody({ notify_id: "flip-notify-1" });
+    const honest = notifyBody({ notify_id: `${RUN}-flip-1` });
     const flipped = honest.replace("total_amount=10.10", "total_amount=0.01");
     const response = await app.request("/payment-callbacks/alipay", {
       method: "POST",
@@ -230,7 +236,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
   test("a foreign app_id is answered failure even under a valid signature", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
     const body = notifyBody({
-      notify_id: "other-app-1",
+      notify_id: `${RUN}-other-app-1`,
       app_id: "2021009999999999",
     });
     const response = await app.request("/payment-callbacks/alipay", {
@@ -243,7 +249,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
 
   test("duplicate form keys are answered failure", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
-    const body = notifyBody({ notify_id: "dupkeys-1" });
+    const body = notifyBody({ notify_id: `${RUN}-dupkeys-1` });
     const response = await app.request("/payment-callbacks/alipay", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -255,11 +261,11 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
   test("out-of-order statuses are two messages, never one swallowed state", async () => {
     const app = buildApp(createAlipayNotifyInbox(database));
     const pending = notifyBody({
-      notify_id: "ooo-notify-1",
+      notify_id: `${RUN}-ooo-1`,
       trade_status: "WAIT_BUYER_PAY",
     });
     const paid = notifyBody({
-      notify_id: "ooo-notify-2",
+      notify_id: `${RUN}-ooo-2`,
       trade_status: "TRADE_SUCCESS",
     });
     // Success FIRST (a lost/reordered notify), then the stale pending one.
@@ -275,10 +281,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       .select()
       .from(paymentChannelNotification)
       .where(
-        inArray(paymentChannelNotification.dedupeKey, [
-          "notify_id:ooo-notify-1",
-          "notify_id:ooo-notify-2",
-        ]),
+        sql`dedupe_key in (${`notify_id:${RUN}-ooo-1`}, ${`notify_id:${RUN}-ooo-2`})`,
       );
     const statuses = rows.map((r) => r.tradeStatus).sort();
     expect(statuses).toEqual(["TRADE_SUCCESS", "WAIT_BUYER_PAY"]);
@@ -292,7 +295,7 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
         throw new Error("disk on fire");
       },
     });
-    const body = notifyBody({ notify_id: "storage-fail-1" });
+    const body = notifyBody({ notify_id: `${RUN}-storage-fail-1` });
     const response = await app.request("/payment-callbacks/alipay", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -304,7 +307,10 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
       .select()
       .from(paymentChannelNotification)
       .where(
-        eq(paymentChannelNotification.dedupeKey, "notify_id:storage-fail-1"),
+        eq(
+          paymentChannelNotification.dedupeKey,
+          `notify_id:${RUN}-storage-fail-1`,
+        ),
       );
     expect(rows.length).toBe(0);
   });
@@ -324,18 +330,18 @@ describe("alipay notify HTTP entry over real PostgreSQL (A3/A4)", () => {
     const response = await app.request("/payment-callbacks/alipay", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: notifyBody({ notify_id: "nosession-1" }),
+      body: notifyBody({ notify_id: `${RUN}-nosession-1` }),
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBe(null);
   });
 
-  test("without an inbox no notify route is mounted at all", async () => {
+  test("with neither a database nor an override inbox no route is mounted", async () => {
     const app = buildApp(null);
     const response = await app.request("/payment-callbacks/alipay", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: notifyBody({ notify_id: "unmounted-1" }),
+      body: notifyBody({ notify_id: `${RUN}-unmounted-1` }),
     });
     expect(response.status).toBe(404);
   });

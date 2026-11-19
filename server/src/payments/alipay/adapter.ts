@@ -34,7 +34,7 @@ import {
   createAlipayGateway,
 } from "./gateway";
 import { fenToYuan, positiveFen, yuanToFen } from "./money";
-import { optionalAlipayBeijingTimeToUs } from "./time";
+import { optionalAlipayBeijingTimeToUs, usToAlipayBeijingTime } from "./time";
 
 /** The billing contract caps a redirect value at this length. */
 const MAX_REDIRECT_URL_LENGTH = 2048;
@@ -119,6 +119,53 @@ function requireExact(
   }
 }
 
+/**
+ * For fields a response MAY omit (the refund family's echoes): when the
+ * channel names it, it must be THE one; when it names nothing, the field
+ * simply cannot serve as binding evidence (the caller's evidence rules
+ * demand it before any success).
+ */
+function requireExactWhenPresent(
+  node: GatewayNode,
+  key: string,
+  expected: string,
+  what: string,
+): void {
+  const actual = str(node, key);
+  if (actual !== null && actual !== expected) {
+    throw new AlipayProtocolError(
+      `alipay ${what} mismatch: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+    );
+  }
+}
+
+/**
+ * Whether the refund response node is BOUND to the original trade. A refund
+ * may only be reported succeeded when the channel ties its answer to the
+ * trade we asked about:
+ * - when we already know the channel transaction id, it must be echoed
+ *   exactly (an omitted echo is missing evidence, a differing one was
+ *   already rejected as a protocol error above);
+ * - when the transaction id is unknown, the response must name a channel
+ *   transaction AND echo the merchant order it belongs to — a bare,
+ *   unattributable trade id cannot be credited to this order.
+ * Absent binding keeps the refund pending: the refund state machine keeps
+ * querying under the SAME out_request_no until the channel names the trade.
+ */
+function refundIdentityBound(
+  node: GatewayNode,
+  request: ChannelRefundRequest,
+): boolean {
+  const echoedTradeNo = str(node, "trade_no");
+  if (request.provider_transaction_id !== null) {
+    return echoedTradeNo === request.provider_transaction_id;
+  }
+  return (
+    echoedTradeNo !== null &&
+    str(node, "out_trade_no") === request.merchant_reference
+  );
+}
+
 function mapTradeStatus(raw: string | null): ChannelTradeObservation["status"] {
   switch (raw) {
     case "WAIT_BUYER_PAY":
@@ -133,7 +180,15 @@ function mapTradeStatus(raw: string | null): ChannelTradeObservation["status"] {
   }
 }
 
-/** Trade observation from a verified query response node. */
+/**
+ * Trade observation from a verified query response node. A success status is
+ * NEVER reported without its identity and amount evidence: a `succeeded`
+ * observation must carry the channel transaction id AND an exact, parseable
+ * amount, or the status drops to `unknown` with the raw word preserved —
+ * the caller then keeps querying instead of granting anything. The currency
+ * is only reported when the response names it; an explicit non-CNY currency
+ * is a protocol error, not a silent acceptance.
+ */
 function tradeObservationFromNode(
   node: GatewayNode,
   evidence: "query",
@@ -143,16 +198,34 @@ function tradeObservationFromNode(
   const totalAmountRaw = str(node, "total_amount");
   if (totalAmountRaw !== null) {
     const fen = tryYuanToFen(totalAmountRaw);
-    amountFen = fen === null ? null : fen.toString();
+    if (fen !== null) amountFen = fen.toString();
   }
+  const transactionId = str(node, "trade_no");
+  // The trade APIs are domestic-CNY; a response that names ANY other
+  // currency contradicts the bound product and is refused outright.
+  for (const currencyField of ["settle_currency", "currency"]) {
+    const named = str(node, currencyField);
+    if (named !== null && named.toUpperCase() !== "CNY") {
+      throw new AlipayProtocolError(
+        `alipay ${currencyField} is not CNY: ${JSON.stringify(named)}`,
+      );
+    }
+  }
+  const mapped = mapTradeStatus(rawStatus);
+  const currencyNamed = str(node, "settle_currency") ?? str(node, "currency");
   return {
-    status: mapTradeStatus(rawStatus),
+    status:
+      mapped === "succeeded" && (transactionId === null || amountFen === null)
+        ? // Success without its identity or exact amount is not a fact this
+          // adapter may hand out; the raw status stays for the caller.
+          "unknown"
+        : mapped,
     raw_trade_status: rawStatus,
-    provider_transaction_id: str(node, "trade_no"),
+    provider_transaction_id: transactionId,
     merchant_reference: str(node, "out_trade_no"),
     total_amount_fen: amountFen,
     paid_at_us: optionalAlipayBeijingTimeToUs(str(node, "send_pay_date")),
-    currency: totalAmountRaw === null ? null : "CNY",
+    currency: currencyNamed !== null ? "CNY" : null,
     evidence,
   };
 }
@@ -239,6 +312,16 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
     if (!returnUrlWhitelisted(this.config, input.returnUrl)) {
       throw new AlipayProtocolError("return_url is not on the whitelist");
     }
+    // The cashier's life is bounded by the order's: an already-expired
+    // snapshot builds no entrance, and the signed `time_expire` (the
+    // official absolute deadline field, Beijing wall clock) stops a link
+    // opened today from collecting money after the order lapsed.
+    const nowUs = (BigInt(Date.now()) * 1000n).toString();
+    if (BigInt(snapshot.expires_at_us) <= BigInt(nowUs)) {
+      throw new AlipayProtocolError(
+        "payment snapshot is already expired; no cashier link is built",
+      );
+    }
     const amountYuan = fenToYuan(positiveFen(snapshot.amount_fen).toString());
     const url = this.sdk.pageExecute(PAGE_PAY_METHODS[mode], "GET", {
       return_url: input.returnUrl,
@@ -248,6 +331,7 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
         product_code: PRODUCT_CODES[mode],
         total_amount: amountYuan,
         subject: "OpenBot order payment",
+        time_expire: usToAlipayBeijingTime(snapshot.expires_at_us),
       },
     });
     if (url.length > MAX_REDIRECT_URL_LENGTH) {
@@ -281,14 +365,16 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
             "trade_no",
           );
         }
-        if (str(node, "total_amount") !== null) {
-          requireExact(
-            node,
-            "total_amount",
-            fenToYuan(input.expected_amount_fen),
-            "total_amount",
-          );
-        }
+        // The amount is not optional evidence: a query answer that names no
+        // total cannot be checked against the order, so it is a protocol
+        // error, and an unparseable amount fails the same check (the value
+        // can never parse to the expected fen string).
+        requireExact(
+          node,
+          "total_amount",
+          fenToYuan(input.expected_amount_fen),
+          "total_amount",
+        );
         return tradeObservationFromNode(node, "query");
       },
     );
@@ -332,12 +418,28 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
         input.merchant_reference,
         "out_trade_no",
       );
-      // A successful close answers with the trade id; the channel has just
-      // moved the trade to closed.
+      if (input.provider_transaction_id !== null) {
+        requireExact(
+          node,
+          "trade_no",
+          input.provider_transaction_id,
+          "trade_no",
+        );
+      }
+      const tradeNo = str(node, "trade_no");
+      // A successful close answers with the trade id — the response names
+      // WHICH trade it just closed, and a close answer that names none
+      // cannot be bound to this order, so it is a protocol error rather
+      // than a closed fact.
+      if (tradeNo === null) {
+        throw new AlipayProtocolError(
+          "alipay close success carries no trade_no to bind",
+        );
+      }
       return {
         status: "closed",
         raw_trade_status: null,
-        provider_transaction_id: str(node, "trade_no"),
+        provider_transaction_id: tradeNo,
         merchant_reference: str(node, "out_trade_no"),
         total_amount_fen: null,
         paid_at_us: null,
@@ -392,6 +494,9 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
       return refundUnknown(request, evidence);
     }
     const node = result.value;
+    // Every identity the response echoes must be THE refund we asked about:
+    // a different request number, trade or order is a protocol error, and
+    // a missing echo simply cannot count as binding evidence.
     const echoedRequestNo = str(node, "out_request_no");
     if (
       echoedRequestNo !== null &&
@@ -399,6 +504,20 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
     ) {
       throw new AlipayProtocolError(
         "alipay refund response names a different out_request_no",
+      );
+    }
+    requireExactWhenPresent(
+      node,
+      "out_trade_no",
+      request.merchant_reference,
+      "out_trade_no",
+    );
+    if (request.provider_transaction_id !== null) {
+      requireExactWhenPresent(
+        node,
+        "trade_no",
+        request.provider_transaction_id,
+        "trade_no",
       );
     }
     const refundFee = str(node, "refund_fee");
@@ -411,14 +530,20 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
       merchant_reference: str(node, "out_trade_no"),
       evidence: "refund_call",
     };
-    // Refund-arrived evidence is the documented fund-change flag AND the
-    // actual refund fee matching the request. code=10000 alone is NOT
-    // evidence, and fund_change "N" (this call moved no funds) is resolved
-    // authoritatively by queryRefund with the SAME request number.
+    // Refund-arrived evidence is the documented fund-change flag AND a
+    // parseable actual refund fee equal to the request AND the echoed
+    // request number matching AND an identity that binds the answer to the
+    // original trade. code=10000 alone is NOT evidence, a missing or
+    // unreadable refund_fee leaves the amount unevidenced (pending, to be
+    // resolved by queryRefund with the SAME number), fund_change "N" (this
+    // call moved no funds) is likewise resolved by queryRefund, and a
+    // response that names no trade identity can never confirm THIS refund.
     if (
       str(node, "fund_change") === "Y" &&
       actualFen !== null &&
-      actualFen.toString() === request.refund_amount_fen
+      actualFen.toString() === request.refund_amount_fen &&
+      echoedRequestNo === request.out_request_no &&
+      refundIdentityBound(node, request)
     ) {
       return { ...base, status: "succeeded" };
     }
@@ -462,34 +587,73 @@ export class AlipayPaymentAdapterImpl implements AlipayPaymentAdapter {
       );
     }
     const node = result.value;
+    // Every identity the response echoes must name THIS refund. A present
+    // echo naming a different trade, order or request number is a protocol
+    // error; the echoes below must ALSO be present before "succeeded".
+    const echoedRequestNo = str(node, "out_request_no");
+    if (
+      echoedRequestNo !== null &&
+      echoedRequestNo !== request.out_request_no
+    ) {
+      throw new AlipayProtocolError(
+        "alipay refund query names a different out_request_no",
+      );
+    }
+    requireExactWhenPresent(
+      node,
+      "out_trade_no",
+      request.merchant_reference,
+      "out_trade_no",
+    );
+    if (request.provider_transaction_id !== null) {
+      requireExactWhenPresent(
+        node,
+        "trade_no",
+        request.provider_transaction_id,
+        "trade_no",
+      );
+    }
     const refundStatus = str(node, "refund_status");
     const refundFee = str(node, "refund_fee");
     const actualFen = refundFee !== null ? tryYuanToFen(refundFee) : null;
-    // A successful query is not a successful refund: only the channel's
-    // explicit refund-success status is evidence, and the refunded amount
-    // must equal the requested one when the channel names it.
-    if (refundStatus === "REFUND_SUCCESS") {
-      return {
-        out_request_no: str(node, "out_request_no") ?? request.out_request_no,
-        status:
-          actualFen === null ||
-          actualFen.toString() === request.refund_amount_fen
-            ? "succeeded"
-            : "unknown",
-        refunded_fen: actualFen !== null ? actualFen.toString() : null,
-        provider_transaction_id: str(node, "trade_no"),
-        merchant_reference: str(node, "out_trade_no"),
-        evidence: "refund_query",
-      };
-    }
-    return {
-      out_request_no: str(node, "out_request_no") ?? request.out_request_no,
+    const tradeNo = str(node, "trade_no");
+    const observation: ChannelRefundObservation = {
+      out_request_no: echoedRequestNo ?? request.out_request_no,
       status: "pending",
       refunded_fen: actualFen !== null ? actualFen.toString() : null,
-      provider_transaction_id: str(node, "trade_no"),
+      provider_transaction_id: tradeNo,
       merchant_reference: str(node, "out_trade_no"),
       evidence: "refund_query",
     };
+    if (refundStatus !== "REFUND_SUCCESS") {
+      // A successful QUERY is not a successful REFUND: without the channel's
+      // explicit refund-success word, nothing has arrived and the state
+      // machine keeps polling the SAME request number.
+      return observation;
+    }
+    // REFUND_SUCCESS is only actionable when the WHOLE evidence chain binds:
+    // the echoed request number, a channel trade id BOUND to the original
+    // trade, and a parseable actual amount equal to the requested one. A
+    // contradicting amount is `unknown` — possibly an attack or a channel
+    // bug, never a success; missing or unreadable evidence stays `pending` —
+    // unresolved, still polled by the state machine under the original
+    // request number. A trade id that cannot be tied to this order (no echo
+    // of the merchant order, no known transaction id to match) is NOT
+    // binding evidence, however valid the id itself looks.
+    if (
+      actualFen !== null &&
+      actualFen.toString() !== request.refund_amount_fen
+    ) {
+      return { ...observation, status: "unknown" };
+    }
+    if (
+      echoedRequestNo === request.out_request_no &&
+      actualFen !== null &&
+      refundIdentityBound(node, request)
+    ) {
+      return { ...observation, status: "succeeded" };
+    }
+    return observation;
   }
 
   async requestStatementAddress(
