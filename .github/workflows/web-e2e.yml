@@ -1,0 +1,93 @@
+name: Web E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Chromium suite to run
+        type: choice
+        options: [authenticated, live]
+        default: authenticated
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    name: Chromium (${{ matrix.suite }} ${{ matrix.part }}/${{ matrix.parts }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJSON(github.event_name == 'workflow_dispatch'
+            && (inputs.suite == 'live'
+              && '[{"suite":"live","part":1,"parts":1}]'
+              || '[{"suite":"authenticated","part":1,"parts":1}]')
+            || format('[{0}{1}]',
+              '{"suite":"guest","part":1,"parts":1},{"suite":"navigation","part":1,"parts":3},{"suite":"navigation","part":2,"parts":3},{"suite":"navigation","part":3,"parts":3},{"suite":"personal","part":1,"parts":2},{"suite":"personal","part":2,"parts":2}',
+              github.event.pull_request.head.repo.full_name == github.repository
+                && vars.OPENBOT_E2E_AUTHENTICATED == 'true'
+                && ',{"suite":"authenticated","part":1,"parts":1}' || '')) }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: openbot_e2e
+          POSTGRES_USER: openbot
+          POSTGRES_PASSWORD: openbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openbot -d openbot_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://openbot:openbot@127.0.0.1:5432/openbot_e2e
+      OPENBOT_E2E_SUITE: ${{ matrix.suite }}
+      OPENBOT_E2E_SHARD: ${{ matrix.part }}/${{ matrix.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bunx --no-install e2e-web install chromium --with-deps
+      - name: Run local browser journeys
+        if: matrix.suite == 'guest' || matrix.suite == 'navigation' || matrix.suite == 'personal'
+        run: bash scripts/test-web-e2e.sh --shard "$OPENBOT_E2E_SHARD"
+      - name: Run signed-in journeys
+        if: matrix.suite == 'authenticated' || matrix.suite == 'live'
+        env:
+          CASDOOR_OAUTH_ISSUER: ${{ vars.OPENBOT_E2E_CASDOOR_ISSUER }}
+          CASDOOR_OAUTH_CLIENT_ID: ${{ vars.OPENBOT_E2E_CASDOOR_CLIENT_ID }}
+          CASDOOR_OAUTH_CLIENT_SECRET: ${{ secrets.OPENBOT_E2E_CASDOOR_CLIENT_SECRET }}
+          OPENBOT_E2E_CASDOOR_USERNAME: ${{ secrets.OPENBOT_E2E_CASDOOR_USERNAME }}
+          OPENBOT_E2E_CASDOOR_PASSWORD: ${{ secrets.OPENBOT_E2E_CASDOOR_PASSWORD }}
+          INTELLIGENCE_API_URL: ${{ vars.OPENBOT_E2E_INTELLIGENCE_API_URL }}
+          INTELLIGENCE_GATEWAY_WS_URL: ${{ vars.OPENBOT_E2E_INTELLIGENCE_GATEWAY_WS_URL }}
+          CPK_INTELLIGENCE_API_KEY: ${{ secrets.OPENBOT_E2E_INTELLIGENCE_API_KEY }}
+          OPENAI_API_KEY: ${{ matrix.suite == 'live' && secrets.OPENBOT_E2E_OPENAI_API_KEY || '' }}
+          OPENAI_BASE_URL: ${{ matrix.suite == 'live' && vars.OPENBOT_E2E_OPENAI_BASE_URL || '' }}
+          OPENBOT_E2E_AGENT_MODEL: ${{ matrix.suite == 'live' && vars.OPENBOT_E2E_AGENT_MODEL || '' }}
+          AI_GATEWAY_API_KEY: ${{ matrix.suite == 'live' && secrets.OPENBOT_E2E_AI_GATEWAY_API_KEY || '' }}
+        run: bash scripts/test-web-e2e.sh
+      - name: Explain signed-in coverage
+        if: always() && matrix.suite == 'guest' && (github.event.pull_request.head.repo.full_name != github.repository || vars.OPENBOT_E2E_AUTHENTICATED != 'true')
+        run: echo 'Signed-in Chromium journeys did not run. Run the authenticated suite on a trusted branch.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload browser report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-e2e-${{ matrix.suite }}-${{ matrix.part }}-of-${{ matrix.parts }}
+          path: |
+            .e2e/report.json
+            .e2e/junit.xml
+            .e2e/results/
+          include-hidden-files: true
+          if-no-files-found: ignore

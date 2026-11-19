@@ -224,7 +224,7 @@ function siteOf(url: unknown): string | undefined {
  * and colours of the lines around it. A step with nothing to report yet, such as one held for the
  * person's approval, draws nothing here: its approval card says what it is waiting for.
  */
-function NavigationStep({
+export function NavigationStep({
   computerId,
   url,
   result,

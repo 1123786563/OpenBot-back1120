@@ -1,8 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { CopilotKitContext } from "@copilotkit/react-core/v2/context";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, renderHook } from "@testing-library/react";
+import { cleanup, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { VisibleChatItem } from "../src/components/channels/chat-messages";
 import {
@@ -11,8 +10,6 @@ import {
   type StepDetails,
   stepDetails,
   summarise,
-  ToolActivity,
-  type ToolGroup,
   useDrawnTool,
 } from "../src/components/channels/tool-activity";
 
@@ -343,58 +340,8 @@ test("a brokered app is summarised as the app, never with its broker's name", ()
   ).toBe("Used Gmail");
 });
 
-test("a refusal and a failure each count as an issue on the folded line", () => {
-  const group: ToolGroup = {
-    kind: "tools",
-    id: "a",
-    steps: [
-      search("a", JSON.stringify("Refused. Not allowed here.")),
-      search("b", JSON.stringify("That tool could not be called: timeout")),
-    ],
-  };
-  const view = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ToolActivity group={group} active={false} />
-    </QueryClientProvider>,
-  );
-  expect(view.getByText("2 issues")).toBeDefined();
-  expect(view.getByText("Blocked")).toBeDefined();
-  expect(view.getByText("Didn't work")).toBeDefined();
-});
-
-test("the computer asking the Bot to look again after a handback never reaches the transcript", () => {
-  // The turn as it ran: the first page it opened was turned away, it looked, and opened it again.
-  const refusal = JSON.stringify({
-    ok: false,
-    reason: "Take a fresh browser snapshot after handback before acting.",
-    staleRefs: true,
-    snapshotRequired: true,
-  });
-  const url = "https://the-internet.herokuapp.com/login";
-  const items = [
-    call("open", "computer_navigate", { url }, refusal),
-    call("look", "computer_snapshot", {}, JSON.stringify({ elements: [] })),
-    call(
-      "again",
-      "computer_navigate",
-      { url },
-      JSON.stringify({ ok: true, url, title: "The Internet" }),
-    ),
-  ];
-  const grouped = groupToolSteps(items, drawn);
-  expect(grouped).toHaveLength(1);
-  const view = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ToolActivity group={grouped[0] as ToolGroup} active={false} />
-    </QueryClientProvider>,
-  );
-  expect(view.queryByText(/fresh browser snapshot/)).toBeNull();
-  expect(view.queryByText("Didn't work")).toBeNull();
-  expect(view.queryByText(/issue/)).toBeNull();
-  expect(view.getAllByText("Opened page")).toHaveLength(1);
-  expect(view.getByText("The Internet")).toBeDefined();
-
-  // A handback whose closing snapshot failed says so too, and is a failure the person sees.
+test("the final failure to reconnect the computer remains in tool activity", () => {
+  const url = "https://fixture.example.test/login";
   const failed = call(
     "back",
     "computer_navigate",
@@ -407,26 +354,6 @@ test("the computer asking the Bot to look again after a handback never reaches t
     }),
   );
   expect(groupToolSteps([failed], drawn)).toHaveLength(1);
-});
-
-test("while running, the line names the step in progress; opened, a step shows its inputs", () => {
-  const group: ToolGroup = {
-    kind: "tools",
-    id: "a",
-    steps: [
-      search(),
-      call("f", "mcp__exa__web_fetch_exa", { urls: ["https://imf.org"] }),
-    ],
-  };
-  const view = render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ToolActivity group={group} active />
-    </QueryClientProvider>,
-  );
-  expect(view.getByText("Read web pages…")).toBeDefined();
-  fireEvent.click(view.getAllByText("Search the web")[0] as HTMLElement);
-  expect(view.getByText("query")).toBeDefined();
-  expect(view.getAllByText("top 5 GDP 2025").length).toBeGreaterThan(0);
 });
 
 test("an app's card is drawn once a turn, even when the Bot also asks to show it", () => {

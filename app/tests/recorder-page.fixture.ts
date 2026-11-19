@@ -211,35 +211,3 @@ export function installChromeRuntime(
     else delete globals.chrome;
   };
 }
-
-/** The brands a browser reports in `navigator.userAgentData`, as Chrome 156 and Edge 155 report them (captured
- * headless on macOS, 2026-10-23), or none (Safari and Firefox have no `userAgentData`). Returns the undo. */
-export function setBrowserBrands(
-  brands: "chrome" | "edge" | "chromium" | null,
-  options: { mobile?: boolean } = {},
-): () => void {
-  const named = {
-    chrome: ["Not:A-Brand", "Chromium", "Google Chrome"],
-    edge: ["Microsoft Edge", "Chromium", "Not(A:Brand"],
-    chromium: ["Chromium", "Not=A?Brand"],
-  };
-  const descriptor = Object.getOwnPropertyDescriptor(
-    navigator,
-    "userAgentData",
-  );
-  Object.defineProperty(navigator, "userAgentData", {
-    configurable: true,
-    value: brands
-      ? {
-          brands: named[brands].map((brand) => ({ brand, version: "156" })),
-          mobile: options.mobile ?? false,
-          platform: "macOS",
-        }
-      : undefined,
-  });
-  return () => {
-    if (descriptor)
-      Object.defineProperty(navigator, "userAgentData", descriptor);
-    else delete (navigator as { userAgentData?: unknown }).userAgentData;
-  };
-}

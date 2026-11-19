@@ -1,14 +1,21 @@
 import {
-  type LanguagePreference,
   isLanguagePreference,
+  type LanguagePreference,
 } from "@openbot/shared/user-preferences";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  notifyManager,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   createContext,
+  type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useState,
-  type ReactNode,
+  useSyncExternalStore,
 } from "react";
 import { currentUserQueryOptions } from "@/lib/auth/queries";
 import {
@@ -32,19 +39,31 @@ type LanguageSettings = {
   retry: () => void;
 };
 const LanguageContext = createContext<LanguageSettings | null>(null);
+const currentUserQuery = currentUserQueryOptions();
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { data: user } = useQuery(currentUserQueryOptions());
-  const owner = user?.id ?? null;
-  const preferences = useQuery(userPreferencesQueryOptions(user?.id));
+  useQuery(currentUserQuery);
+  // Sign-out removes the auth query while this provider stays mounted.
+  const owner = useSyncExternalStore(
+    useCallback(
+      (changed) =>
+        queryClient
+          .getQueryCache()
+          .subscribe(notifyManager.batchCalls(changed)),
+      [queryClient],
+    ),
+    () => queryClient.getQueryData(currentUserQuery.queryKey)?.id,
+    () => undefined,
+  );
+  const preferences = useQuery(userPreferencesQueryOptions(owner));
   const [local, setLocal] = useState(readLocalLanguage);
   const [draft, setDraft] = useState<{
     owner: string;
     language: LanguagePreference;
   } | null>(null);
-  const saveOptions = saveUserPreferencesMutationOptions(queryClient, user?.id);
-  const preferenceKey = userPreferencesQueryOptions(user?.id).queryKey;
+  const saveOptions = saveUserPreferencesMutationOptions(queryClient, owner);
+  const preferenceKey = userPreferencesQueryOptions(owner).queryKey;
   const save = useMutation({
     ...saveOptions,
     onMutate: () => queryClient.cancelQueries({ queryKey: preferenceKey }),

@@ -3,7 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { hasUnseenActivity } from "@/components/app-sidebar/app-sidebar";
 import { markChannelReadMutationOptions } from "./mutations";
 import { channelListQueryOptions } from "./queries";
@@ -22,9 +22,19 @@ export function useMarkOpenChannelRead(channelId: string) {
   const markRead = useMutation(markChannelReadMutationOptions(queryClient));
   const roster = useInfiniteQuery(channelListQueryOptions());
   const summary = roster.data?.find((row) => row.id === channelId);
-  const unseen = summary !== undefined && hasUnseenActivity(summary);
+  const unseenAt =
+    summary && hasUnseenActivity(summary) ? summary.lastMessageAt : null;
+  const requested = useRef<{ channelId: string; at: string } | null>(null);
   const markReadMutate = markRead.mutate;
   useEffect(() => {
-    if (unseen) markReadMutate(channelId);
-  }, [channelId, unseen, markReadMutate]);
+    if (!unseenAt) return;
+    // Effect replay can run before the mutation applies its optimistic roster update.
+    if (
+      requested.current?.channelId === channelId &&
+      requested.current.at === unseenAt
+    )
+      return;
+    requested.current = { channelId, at: unseenAt };
+    markReadMutate(channelId);
+  }, [channelId, unseenAt, markReadMutate]);
 }

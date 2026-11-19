@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { messageMode } from "@/components/channels/chat-transcript";
 import { FINISH_MS, nextReveal } from "@/components/channels/paced-reveal";
 
 /**
@@ -124,4 +125,10 @@ test("a tail that has stopped growing is shown", () => {
     });
   }
   expect(shown).toBe(text.length);
+});
+
+test("history is drawn static, and anything live or still streaming is not", () => {
+  expect(messageMode(false, false)).toBe("static");
+  expect(messageMode(true, false)).toBe("streaming");
+  expect(messageMode(false, true)).toBe("streaming");
 });

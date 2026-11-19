@@ -1,13 +1,15 @@
+import { Platform } from "react-native";
 import { authClient, serverUrl } from "./auth";
 export async function api<T>(
   path: string,
   input?: { method?: string; body?: unknown; signal?: AbortSignal },
 ): Promise<T> {
   if (!path.startsWith("/api/")) throw new Error("Use an OpenBot API path.");
-  const cookie = await authClient.getCookie();
+  const isWeb = Platform.OS === "web";
+  const cookie = isWeb ? undefined : await authClient.getCookie();
   const response = await fetch(`${serverUrl}${path}`, {
     method: input?.method,
-    credentials: "omit",
+    credentials: isWeb ? "include" : "omit",
     headers: {
       ...(cookie ? { Cookie: cookie } : {}),
       ...(input?.body !== undefined

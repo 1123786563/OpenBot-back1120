@@ -73,3 +73,4 @@ extension/**/*.pem
 docker/observability/env.openobserve
 deploy/t04/vendor/vendor-state.json
 deploy/t04/vendor/unanswered.log
+.e2e/

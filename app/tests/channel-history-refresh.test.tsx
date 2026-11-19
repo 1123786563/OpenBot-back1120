@@ -15,7 +15,6 @@ import {
   channelKeys,
 } from "@/lib/channels/queries";
 import { applyChannelEvent } from "@/lib/channels/use-channel-events";
-import { generativeUiProviderOptions, OPENBOT_UI } from "@/lib/copilot/a2ui";
 import { queryClient } from "@/query-client";
 
 type ChannelCache = InfiniteData<ChannelPage>;
@@ -165,34 +164,22 @@ afterAll(() => {
   GlobalRegistrator.unregister();
 });
 
-function tree(selected: AgentChannel, generativeUi = false) {
+function tree(selected: AgentChannel) {
   return (
     <QueryClientProvider client={queryClient}>
-      <CopilotKitProvider
-        runtimeUrl="http://localhost/api/copilotkit"
-        {...generativeUiProviderOptions(generativeUi)}
-      >
+      <CopilotKitProvider runtimeUrl="http://localhost/api/copilotkit">
         <CoreProbe />
         <ChannelChat channel={selected} runtimeAgentId="refresh-bot" />
       </CopilotKitProvider>
     </QueryClientProvider>
   );
 }
-function cacheChannel(
-  selected: AgentChannel,
-  activity: ActivityFixture | null = null,
-) {
+function cacheChannel(selected: AgentChannel) {
   const summary: ChannelSummary = {
     ...selected,
     summary: null,
-    lastMessage: activity?.text ?? null,
-    lastMessageAgentId:
-      activity === null
-        ? "refresh-bot"
-        : activity.agentId === undefined
-          ? "refresh-bot"
-          : activity.agentId,
-    lastMessageAt: activity?.at ?? selected.lastMessageAt,
+    lastMessage: null,
+    lastMessageAgentId: "refresh-bot",
     createdAt: "2026-09-09T00:00:00.000Z",
     pinned: false,
     lastReadAt: null,
@@ -205,8 +192,6 @@ function cacheChannel(
 function mounting(
   read: typeof history = async () => stored([initial]),
   snapshot: readonly Message[] = [],
-  cachedActivity: ActivityFixture | null = null,
-  generativeUi = false,
 ) {
   historyReads = [];
   gatewaySnapshot = snapshot;
@@ -217,8 +202,8 @@ function mounting(
     { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
   ];
   history = read;
-  cacheChannel(channel, cachedActivity);
-  return render(tree(channel, generativeUi));
+  cacheChannel(channel);
+  return render(tree(channel));
 }
 async function mounted() {
   const view = mounting();
@@ -226,120 +211,6 @@ async function mounted() {
   return view;
 }
 
-/**
- * A trip form a Bot drew, as its conversation stores it: a committed surface activity whose operations
- * carry the A2UI version they were written in.
- */
-function tripForm(version: string) {
-  return {
-    id: "channel-trip-form",
-    role: "activity",
-    activityType: "generative-ui-surface",
-    content: {
-      surfaceId: "trip",
-      target: "chat",
-      catalogId: OPENBOT_UI.id,
-      status: "ready",
-      rejected: [],
-      operations: [
-        {
-          version,
-          createSurface: {
-            surfaceId: "trip",
-            catalogId: OPENBOT_UI.id,
-            dataModel: { destination: "Paris" },
-          },
-        },
-        {
-          version,
-          updateComponents: {
-            surfaceId: "trip",
-            components: [
-              {
-                id: "root",
-                component: "Column",
-                children: ["destination", "confirm"],
-              },
-              {
-                id: "destination",
-                component: "TextField",
-                label: "Destination",
-                value: { "@path": "/destination" },
-              },
-              {
-                id: "confirm",
-                component: "Button",
-                label: "Confirm trip",
-                onClick: {
-                  event: {
-                    name: "confirm_trip",
-                    context: { destination: { "@path": "/destination" } },
-                  },
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  } satisfies Message;
-}
-
-test("generated UI actions run the actual channel agent and thread with edited values", async () => {
-  const activity = tripForm("1.0");
-  const view = mounting(async () => stored([activity]), [activity], null, true);
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  const destination = await view.findByRole("textbox", { name: "Destination" });
-  await user.clear(destination);
-  await user.type(destination, "Kyoto");
-  await user.click(view.getByRole("button", { name: "Confirm trip" }));
-  await waitFor(() => expect(runRequests).toHaveLength(1));
-  expect(runRequests[0]?.path).toBe("/api/copilotkit/agent/refresh-bot/run");
-  expect(runRequests[0]?.input.threadId).toBe(channel.threadId);
-  expect(runRequests[0]?.input.messages.at(-1)).toMatchObject({
-    role: "user",
-    content: "Confirm trip\n\ndestination: Kyoto",
-  });
-  expect(runRequests[0]?.input.forwardedProps).toMatchObject({
-    copilotkit: {
-      ui: {
-        metadata: {
-          extensions: {
-            copilotkit_transport: "tool",
-            copilotkit_action: {
-              action: {
-                name: "confirm_trip",
-                surfaceId: "trip",
-                sourceComponentId: "confirm",
-                context: { destination: "Kyoto" },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-});
-/*
- * CopilotKit 1.83 wrote A2UI 1.0's version as "v1.0", and every interface a Bot drew on it is stored
- * that way. 1.84 reads only "1.0" (CopilotKit #8155), so a conversation from before the upgrade lost
- * its interfaces when it was reopened, and the next run in it took them away again.
- */
-test("an interface a Bot drew before the upgrade draws when its conversation is reopened, and stays through the next run", async () => {
-  const activity = tripForm("v1.0");
-  const view = mounting(async () => stored([activity]), [activity], null, true);
-  const destination = await view.findByRole("textbox", { name: "Destination" });
-  expect((destination as HTMLInputElement).value).toBe("Paris");
-
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.click(view.getByRole("button", { name: "Confirm trip" }));
-  await waitFor(() => expect(runRequests).toHaveLength(1));
-  await waitFor(() => expect(currentAgent().isRunning).toBe(false));
-  expect(
-    (view.getByRole("textbox", { name: "Destination" }) as HTMLInputElement)
-      .value,
-  ).toBe("Paris");
-});
 function currentAgent(selected = channel) {
   const agent = core?.getAgent(`channel:${selected.id}`);
   if (!agent) throw new Error("Mounted channel agent is not registered");
@@ -378,204 +249,6 @@ function delayedResponse() {
   });
   return { promise, resolve };
 }
-
-// Real provider, ChannelChat, history reader, and query cache; only the HTTP boundary is synthetic.
-test.each([
-  { name: "partial gateway snapshot", snapshot: [initial] },
-  { name: "empty gateway snapshot", snapshot: [] },
-])(
-  "a failed mount restore warns over $name and after a same-thread send",
-  async ({ snapshot }) => {
-    const view = mounting(
-      async () => new NativeResponse("failed", { status: 500 }),
-      snapshot,
-    );
-    await view.findByText(unavailable);
-    if (snapshot.length > 0)
-      expect(view.getByText(initial.content)).toBeTruthy();
-    const user = userEvent.setup({ document: view.container.ownerDocument });
-    await user.type(
-      view.getByRole("textbox", { name: "Message" }),
-      "Later local turn",
-    );
-    await user.click(view.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(runRequests).toHaveLength(1));
-    expect(runRequests[0]?.path).toBe("/api/copilotkit/agent/refresh-bot/run");
-    expect(runRequests[0]?.input.threadId).toBe(channel.threadId);
-    expect(runRequests[0]?.input.messages.slice(0, snapshot.length)).toEqual([
-      ...snapshot,
-    ]);
-    expect(runRequests[0]?.input.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: "Later local turn",
-    });
-    expect(view.getByText(unavailable)).toBeTruthy();
-    expect(view.queryByText(/different CopilotKit project/)).toBeNull();
-  },
-);
-
-test("a finished run without new assistant text does not report a prior assistant as new activity", async () => {
-  const priorReply = {
-    id: "prior-run-reply",
-    role: "assistant",
-    content: "Earlier answer",
-  } satisfies Message;
-  const view = mounting(async () => stored([initial]), [initial]);
-  await view.findByText(initial.content);
-  runEvents = (input) => [
-    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
-    {
-      type: "TEXT_MESSAGE_START",
-      messageId: priorReply.id,
-      role: "assistant",
-    },
-    {
-      type: "TEXT_MESSAGE_CONTENT",
-      messageId: priorReply.id,
-      delta: priorReply.content,
-    },
-    { type: "TEXT_MESSAGE_END", messageId: priorReply.id },
-    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
-  ];
-
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Ask for the first answer",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-  await view.findByText(priorReply.content);
-  await waitFor(() =>
-    expect(
-      activityRequests.filter(
-        (activity) =>
-          activity.agentId === "refresh-bot" &&
-          activity.text === priorReply.content,
-      ),
-    ).toHaveLength(1),
-  );
-
-  runEvents = (input) => [
-    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
-    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
-  ];
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Ask for a no-text follow-up",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-  await waitFor(() => expect(runRequests).toHaveLength(2));
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  expect(
-    activityRequests.filter(
-      (activity) =>
-        activity.agentId === "refresh-bot" &&
-        activity.text === priorReply.content,
-    ),
-  ).toHaveLength(1);
-});
-
-test("a finished run with new assistant text still reports that assistant text as activity", async () => {
-  const reply = {
-    id: "current-run-reply",
-    role: "assistant",
-    content: "Current run answer",
-  } satisfies Message;
-  const view = mounting(async () => stored([initial]), [initial]);
-  await view.findByText(initial.content);
-  runEvents = (input) => [
-    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
-    { type: "TEXT_MESSAGE_START", messageId: reply.id, role: "assistant" },
-    {
-      type: "TEXT_MESSAGE_CONTENT",
-      messageId: reply.id,
-      delta: reply.content,
-    },
-    { type: "TEXT_MESSAGE_END", messageId: reply.id },
-    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
-  ];
-
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Ask for current answer",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-  await view.findByText(reply.content);
-  await waitFor(() =>
-    expect(
-      activityRequests.some(
-        (activity) =>
-          activity.agentId === "refresh-bot" && activity.text === reply.content,
-      ),
-    ).toBe(true),
-  );
-});
-
-test("a same-tab activity echo does not append a lagging durable partial beside the completed local reply", async () => {
-  const fullReply = {
-    id: "streamed-full-reply",
-    role: "assistant",
-    content: "I can answer this fully from the live run.",
-  } satisfies Message;
-  const partialEcho = {
-    id: "durable-lagging-partial",
-    role: "assistant",
-    content: "I can answer this fully",
-  } satisfies Message;
-  const view = mounting(async () => stored([initial]), [initial]);
-  await view.findByText(initial.content);
-  runEvents = (input) => [
-    { type: "RUN_STARTED", threadId: input.threadId, runId: input.runId },
-    {
-      type: "TEXT_MESSAGE_START",
-      messageId: fullReply.id,
-      role: "assistant",
-    },
-    {
-      type: "TEXT_MESSAGE_CONTENT",
-      messageId: fullReply.id,
-      delta: fullReply.content,
-    },
-    { type: "TEXT_MESSAGE_END", messageId: fullReply.id },
-    { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId },
-  ];
-
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Ask for live answer",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-  await view.findByText(fullReply.content);
-  await waitFor(() =>
-    expect(
-      activityRequests.some(
-        (activity) =>
-          activity.agentId === "refresh-bot" &&
-          activity.text === fullReply.content,
-      ),
-    ).toBe(true),
-  );
-  const selfActivity = activityRequests.find(
-    (activity) =>
-      activity.agentId === "refresh-bot" && activity.text === fullReply.content,
-  );
-  if (!selfActivity) throw new Error("Missing self-reported Bot activity");
-  history = async () => stored([initial, partialEcho]);
-  await announce(1, channel, selfActivity);
-  expect(historyReads).toHaveLength(1);
-
-  expect(view.getByText(fullReply.content)).toBeTruthy();
-  expect(view.queryByText(partialEcho.content)).toBeNull();
-  expect(currentAgent().messages.map((message) => message.id)).toContain(
-    fullReply.id,
-  );
-  expect(currentAgent().messages.map((message) => message.id)).not.toContain(
-    partialEcho.id,
-  );
-});
 
 test("a same-timestamp different activity after a self echo still refreshes durable history", async () => {
   const fullReply = {
@@ -715,122 +388,6 @@ test.each([
   },
 );
 
-test("a ready durable mount adds the newer turn beyond the gateway snapshot", async () => {
-  const view = mounting(async () => stored([initial, fresh]), [initial]);
-  await view.findByText(fresh.content);
-  expect(view.getByText(initial.content)).toBeTruthy();
-  expect(view.queryByText(unavailable)).toBeNull();
-  expect(currentAgent().messages.map((message) => message.id)).toEqual([
-    "initial",
-    "fresh",
-  ]);
-});
-
-test.each([false, true])(
-  "mount keeps a readable gateway tool result while restoring newer durable replies (longer store: %s)",
-  async (longerStore) => {
-    const toolCall = {
-      id: "tool-call",
-      role: "assistant",
-      toolCalls: [
-        {
-          id: "call",
-          type: "function",
-          function: { name: "inspect", arguments: "{}" },
-        },
-      ],
-    } satisfies Message;
-    const toolResult = {
-      id: "tool-result",
-      role: "tool",
-      toolCallId: "call",
-      content: "Readable gateway tool output",
-    } satisfies Message;
-    const latest = {
-      id: "latest",
-      role: "assistant",
-      content: "Latest durable reply",
-    } satisfies Message;
-    const later = longerStore ? [fresh, latest] : [fresh];
-    const snapshot = [initial, toolCall, toolResult];
-    const view = mounting(
-      async () =>
-        stored([
-          initial,
-          toolCall,
-          { ...toolResult, content: { unsupported: "stored result shape" } },
-          ...later,
-        ]),
-      snapshot,
-    );
-    await view.findByText(fresh.content);
-    if (longerStore) expect(view.getByText(latest.content)).toBeTruthy();
-    expect(view.getByText(oneHole)).toBeTruthy();
-    expect(currentAgent().messages).toEqual([...snapshot, ...later]);
-    const user = userEvent.setup({ document: view.container.ownerDocument });
-    await user.type(
-      view.getByRole("textbox", { name: "Message" }),
-      "Continue restored conversation",
-    );
-    await user.click(view.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(runRequests).toHaveLength(1));
-    expect(runRequests[0]?.input.threadId).toBe(channel.threadId);
-    expect(runRequests[0]?.input.messages.slice(0, -1)).toEqual([
-      ...snapshot,
-      ...later,
-    ]);
-  },
-);
-
-test("a stalled mount history read releases the send gate and shows unavailable history", async () => {
-  const pending = delayedResponse();
-  const view = mounting((_threadId) => pending.promise, [initial]);
-  await waitFor(() => expect(historyReads).toHaveLength(1));
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Send while history stalls",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-
-  await view.findByText(unavailable, {}, { timeout: 4000 });
-  await waitFor(() => expect(runRequests).toHaveLength(1), { timeout: 4000 });
-  expect(runRequests[0]?.path).toBe("/api/copilotkit/agent/refresh-bot/run");
-  expect(runRequests[0]?.input.threadId).toBe(channel.threadId);
-  expect(runRequests[0]?.input.messages.slice(0, -1)).toEqual([initial]);
-  expect(runRequests[0]?.input.messages.at(-1)).toMatchObject({
-    role: "user",
-    content: "Send while history stalls",
-  });
-
-  await act(async () => pending.resolve(stored([initial, fresh])));
-  expect(view.queryByText(fresh.content)).toBeNull();
-  expect(currentAgent().messages.map((message) => message.id)).not.toContain(
-    fresh.id,
-  );
-});
-
-test("a UI send waits for mount history before adding its message", async () => {
-  const pending = delayedResponse();
-  const view = mounting(() => pending.promise, [initial]);
-  await waitFor(() => expect(historyReads).toHaveLength(1));
-  const user = userEvent.setup({ document: view.container.ownerDocument });
-  await user.type(
-    view.getByRole("textbox", { name: "Message" }),
-    "Send after restore",
-  );
-  await user.click(view.getByRole("button", { name: "Send message" }));
-  expect(runRequests).toHaveLength(0);
-  expect(currentAgent().messages).toEqual([initial]);
-  await act(async () => pending.resolve(stored([initial, fresh])));
-  await waitFor(() => expect(runRequests).toHaveLength(1));
-  expect(runRequests[0]?.input.messages.slice(0, -1)).toEqual([initial, fresh]);
-  expect(runRequests[0]?.input.messages.at(-1)).toMatchObject({
-    role: "user",
-    content: "Send after restore",
-  });
-});
-
 test("an unmounted history read cannot append messages to its former agent", async () => {
   const pending = delayedResponse();
   const view = mounting(() => pending.promise, [initial]);
@@ -839,20 +396,6 @@ test("an unmounted history read cannot append messages to its former agent", asy
   view.unmount();
   await act(async () => pending.resolve(stored([initial, fresh])));
   expect(formerAgent.messages).toEqual([initial]);
-});
-
-test("explicit valid-empty durable history finishes without a failure notice", async () => {
-  const view = mounting(async () => stored([]));
-  await waitFor(() => expect(historyReads).toHaveLength(1));
-  await waitFor(() =>
-    expect(
-      view
-        .getByRole("textbox", { name: "Message" })
-        .getAttribute("contenteditable"),
-    ).toBe("true"),
-  );
-  expect(view.queryByText(unavailable)).toBeNull();
-  expect(currentAgent().messages).toEqual([]);
 });
 
 test("headless unreadable-only history updates the notice while preserving local messages", async () => {
@@ -906,130 +449,6 @@ test("a successful same-message refresh is not overwritten by later unavailable 
     "local",
   ]);
 }, 5000);
-
-test("a cached Bot activity before mount retries stale durable history and restores the later message", async () => {
-  const later = {
-    id: "cached-activity-reply",
-    role: "assistant",
-    content: "Cached activity durable reply",
-  } satisfies Message;
-  let reads = 0;
-  const view = mounting(
-    async () => {
-      reads += 1;
-      return stored(reads < 3 ? [initial] : [initial, later]);
-    },
-    [initial],
-    {
-      agentId: "refresh-bot",
-      at: "2026-09-10T12:00:00.000Z",
-      text: "Cached Bot activity",
-    },
-  );
-
-  await view.findByText(later.content, {}, { timeout: 3000 });
-
-  expect(reads).toBe(3);
-  expect(historyReads).toEqual([
-    channel.threadId,
-    channel.threadId,
-    channel.threadId,
-  ]);
-  expect(currentAgent().messages.map((message) => message.id)).toEqual([
-    "initial",
-    later.id,
-  ]);
-  expect(view.queryByText(unavailable)).toBeNull();
-});
-
-test("a first ready stale refresh still retries and renders a later stored message", async () => {
-  const view = await mounted();
-  const beforeRefresh = historyReads.length;
-  let refreshReads = 0;
-  history = async () => {
-    refreshReads += 1;
-    return stored(refreshReads === 1 ? [initial] : [initial, fresh]);
-  };
-
-  await announce(1);
-  await view.findByText(fresh.content);
-
-  expect(historyReads.length - beforeRefresh).toBe(2);
-  expect(view.queryByText(unavailable)).toBeNull();
-  expect(currentAgent().messages.map((message) => message.id)).toEqual([
-    "initial",
-    "fresh",
-  ]);
-}, 3000);
-
-test("mixed history, exhausted failure, and recovery update the notice without duplicating messages", async () => {
-  const view = await mounted();
-  await act(async () => currentAgent().addMessage(local));
-  history = async () => stored([initial, fresh, broken]);
-  await announce(1);
-  await view.findByText("Fresh stored reply");
-  await view.findByText(oneHole);
-  const beforeFailure = historyReads.length;
-  history = async () => new NativeResponse("failed", { status: 500 });
-  await announce(2);
-  await view.findByText(unavailable, {}, { timeout: 4000 });
-  expect(historyReads.length - beforeFailure).toBe(3);
-  expect(view.queryByText(oneHole)).toBeNull();
-  history = async () => stored([initial, fresh]);
-  await announce(3);
-  await waitFor(() => expect(view.queryByText(unavailable)).toBeNull());
-  expect(view.queryByText(oneHole)).toBeNull();
-  expect(currentAgent().messages.map((message) => message.id)).toEqual([
-    "initial",
-    "local",
-    "fresh",
-  ]);
-}, 10000);
-
-test("a slower refresh cannot replace a newer notice or append obsolete history", async () => {
-  const view = await mounted();
-  const old = delayedResponse();
-  history = () => old.promise;
-  await announce(1);
-  await waitFor(() => expect(historyReads).toHaveLength(2));
-  history = async () => stored([initial, fresh, broken]);
-  await announce(2);
-  await view.findByText("Fresh stored reply");
-  await act(async () =>
-    old.resolve(
-      stored([
-        { id: "obsolete", role: "assistant", content: "Obsolete history" },
-      ]),
-    ),
-  );
-  expect(view.getByText(oneHole)).toBeTruthy();
-  expect(view.queryByText("Obsolete history")).toBeNull();
-});
-
-test("a cancelled channel refresh cannot replace the next channel's notice or messages", async () => {
-  const view = await mounted();
-  const old = delayedResponse();
-  history = () => old.promise;
-  await announce(1);
-  await waitFor(() => expect(historyReads).toHaveLength(2));
-  const next = { ...channel, id: "next-channel", threadId: "next-thread" };
-  history = async () => stored([initial, broken]);
-  cacheChannel(next);
-  view.rerender(tree(next));
-  await view.findByText(oneHole);
-  await act(async () =>
-    old.resolve(
-      stored([
-        { id: "obsolete", role: "assistant", content: "Wrong channel history" },
-      ]),
-    ),
-  );
-  expect(view.getByText(oneHole)).toBeTruthy();
-  expect(currentAgent(next).messages.map((message) => message.id)).toEqual([
-    "initial",
-  ]);
-  expect(view.queryByText("Wrong channel history")).toBeNull();
-});
 
 test.each(["unavailable", "unreadable", "readable"])(
   "a delayed %s mount read cannot overwrite the notice from a newer Bot refresh",

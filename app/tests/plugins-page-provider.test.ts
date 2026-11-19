@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { type PluginsPage, pluginsProvider } from "@/lib/plugins/queries";
+import {
+  type PluginsPage,
+  pluginKeys,
+  pluginsProvider,
+} from "@/lib/plugins/queries";
 
 const page = (extra: Partial<PluginsPage>): PluginsPage => ({
   catalogue: [],
@@ -23,4 +27,8 @@ test("a payload that names a provider is believed", () => {
 
 test("no page yet answers composio", () => {
   expect(pluginsProvider(undefined)).toBe("composio");
+});
+
+test("the plugins page uses the shared cache key", () => {
+  expect(pluginKeys.page()).toEqual(["plugins", "page"]);
 });

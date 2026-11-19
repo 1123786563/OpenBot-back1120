@@ -797,8 +797,8 @@ export function Composer({
    *
    * EVERY BRANCH BELOW HAS TO PASS IT, WHICH IS THE WHOLE OF THIS PROP'S CORRECTNESS. It went on
    * the compact one alone for a while, and the full-size branch — the shape the home screen draws
-   * — swallowed exactly this paste in silence. `composer-paste.test.tsx` renders that branch for
-   * no other reason.
+   * — swallowed exactly this paste in silence. The full-size paste case in
+   * `tests/e2e/composer.e2e.ts` exercises this branch.
    */
   const stagePastedImage = useCallback(
     (file: File) => {

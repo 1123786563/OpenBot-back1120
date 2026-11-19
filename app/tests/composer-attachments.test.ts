@@ -190,8 +190,7 @@ describe("attachmentsConfigFor", () => {
    * `processFiles` applies `accept` with an exact `file.type === filter`, so it stood behind
    * `screenPickedFiles` as a second, stricter, machine-worded gate and refused the very files that
    * screen deliberately passes — a claim naming no format, which the server is supposed to sniff.
-   * See `attachmentsConfigFor` for the full argument, and `composer-unnamed-mime.test.tsx` for the
-   * end-to-end proof, which is the level this could only ever have been caught at.
+   * The MIME detection cases in `tests/e2e/composer.e2e.ts` verify that these files reach the server.
    */
   test("accept refuses nothing, leaving screenPickedFiles the only client gate", () => {
     const config = attachmentsConfigFor(

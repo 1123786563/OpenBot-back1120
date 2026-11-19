@@ -118,6 +118,38 @@ test("and the same for Arcade's GitHub app, which is the same vendor through the
   ).toEqual(["arcade-gmail", "github"]);
 });
 
+test("an enabled sign-in App has an available tile until its account is connected", () => {
+  const rows = connectionRows({
+    ...none,
+    brokered: [
+      app("composio-slack", "Slack"),
+      app("arcade-gmail", "Gmail", "arcade"),
+    ],
+    connected: new Set(["arcade-gmail"]),
+  });
+  expect(
+    rows.map(({ key, state, notConnected }) => ({ key, state, notConnected })),
+  ).toEqual([
+    { key: "arcade-gmail", state: "connected", notConnected: false },
+    { key: "composio-slack", state: "available", notConnected: true },
+  ]);
+});
+
+test("GitHub keeps one tile and still needs its tools connected after account linking", () => {
+  const rows = connectionRows({
+    ...none,
+    brokered: [app("composio-github", "GitHub")],
+    links: [link("github")],
+    providers: { github: true, slack: false },
+  });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    key: "github",
+    state: "available",
+    notConnected: true,
+  });
+});
+
 /**
  * A key app's tile says it takes a key before anybody opens it, so the form on its page is no
  * surprise. Reported from OpenBot Desktop 0.3.3, where every key app read as one more sign-in.

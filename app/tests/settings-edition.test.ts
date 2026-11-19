@@ -1,0 +1,121 @@
+import { describe, expect, test } from "bun:test";
+import { QueryClient } from "@tanstack/react-query";
+import { isRedirect } from "@tanstack/react-router";
+import { settingsSidebarItems } from "@/components/settings/settings-sidebar";
+import {
+  type DeploymentCapabilities,
+  deploymentKeys,
+} from "@/lib/deployment/queries";
+import { Route as PersonalSettingsRoute } from "@/routes/_authed/settings/_personal";
+import { Route as LearningRoute } from "@/routes/_authed/settings/learning";
+
+function capabilities(edition: "team" | "personal"): DeploymentCapabilities {
+  return {
+    generativeUi: true,
+    selfHostBanner: false,
+    localEvaluation: edition === "personal",
+    edition,
+  };
+}
+
+function clientFor(edition: "team" | "personal" | undefined) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  if (edition)
+    client.setQueryData(deploymentKeys.capabilities(), capabilities(edition));
+  return client;
+}
+
+const PERSONAL_ENTRIES = [
+  ["Saved logins", "/settings/passwords"],
+  ["Keys", "/settings/credentials"],
+  ["Skills", "/settings/skills"],
+  ["Computer", "/settings/computer"],
+  ["Activity", "/settings/activity"],
+] as const;
+
+describe("the Settings sidebar", () => {
+  test("lists what the personal edition moved out of Admin", () => {
+    const items = settingsSidebarItems("personal");
+    for (const [title, to] of PERSONAL_ENTRIES) {
+      expect(items.find((item) => item.title === title)?.linkOptions).toEqual({
+        to,
+      });
+    }
+  });
+
+  test("has no Apps entry, because apps are part of Connections", () => {
+    const items = settingsSidebarItems("personal");
+    expect(items.map((item) => item.title)).not.toContain("Apps");
+    expect(
+      items.some(
+        (item) =>
+          (item.linkOptions as { to?: string }).to === "/settings/plugins",
+      ),
+    ).toBe(false);
+  });
+
+  test("keeps saved logins and keys, named as on Connections", () => {
+    const titles = settingsSidebarItems("personal").map((item) => item.title);
+    expect(titles).not.toContain("Passwords");
+    expect(titles).not.toContain("Credentials");
+    expect(settingsSidebarItems("team").map((item) => item.title)).toContain(
+      "Passwords",
+    );
+  });
+
+  test("Learning shows in the personal edition's settings", () => {
+    for (const edition of ["personal", "team"] as const) {
+      expect(settingsSidebarItems(edition).map((item) => item.title)).toContain(
+        "Learning",
+      );
+    }
+    expect(LearningRoute.options.beforeLoad).toBeUndefined();
+  });
+
+  test("lists none of it in the team edition", () => {
+    const titles = settingsSidebarItems("team").map((item) => item.title);
+    for (const [title] of PERSONAL_ENTRIES) expect(titles).not.toContain(title);
+  });
+});
+
+describe("the personal pages under Settings", () => {
+  type BeforeLoad = (input: {
+    context: { queryClient: QueryClient };
+  }) => Promise<unknown> | unknown;
+  const beforeLoad = PersonalSettingsRoute.options
+    .beforeLoad as unknown as BeforeLoad;
+
+  async function outcome(client: QueryClient) {
+    try {
+      await beforeLoad({ context: { queryClient: client } });
+      return "open";
+    } catch (thrown) {
+      return isRedirect(thrown) ? thrown.options.to : thrown;
+    } finally {
+      client.clear();
+    }
+  }
+
+  test("open in the personal edition", async () => {
+    expect(await outcome(clientFor("personal"))).toBe("open");
+  });
+
+  test("send the team edition back to Settings", async () => {
+    expect(await outcome(clientFor("team"))).toBe("/settings");
+  });
+
+  test("send an edition that couldn't be read back to Settings", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = Object.assign(
+      async () => new Response(null, { status: 500 }),
+      { preconnect: originalFetch.preconnect },
+    );
+    try {
+      expect(await outcome(clientFor(undefined))).toBe("/settings");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});

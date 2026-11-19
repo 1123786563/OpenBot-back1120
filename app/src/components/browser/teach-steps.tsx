@@ -1,4 +1,3 @@
-import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { BrowserApiState } from "@openbot/shared/openbot-browser";
 import { IconArrowLeft, IconPlayerRecordFilled } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
@@ -10,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { openBrowserMutationOptions } from "@/lib/browser/mutations";
+import { ui, uiNodes, useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
 import {
@@ -94,7 +94,11 @@ export function TeachSteps({ state }: { state: BrowserApiState }) {
         description={ui(
           "Do a task in your browser as you always would. The Recorder follows each step, and your Bots learn to do it for you.",
         )}
-        action={<Button onClick={() => setStep(2)}>{ui("Continue")}</Button>}
+        action={
+          <Button key="continue-introduction" onClick={() => setStep(2)}>
+            {ui("Continue")}
+          </Button>
+        }
       >
         <RecorderIllustration />
       </Slide>

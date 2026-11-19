@@ -295,6 +295,7 @@ export type StepDetails = {
   href?: string;
   pending: boolean;
   failed: boolean;
+  notYet?: boolean;
   refused: boolean;
   reason?: string;
   /** Pages a browser step opened, or a fetch read; zero for anything else. */
@@ -405,6 +406,7 @@ function detailsOf(step: ToolItem, folders: FolderNames): StepDetails {
       ...(browser.href ? { href: browser.href } : {}),
       pending: browser.pending,
       failed: browser.failed,
+      notYet: browser.notYet,
       refused: false,
       ...(browser.reason ? { reason: browser.reason } : {}),
       pages: browser.visited ? 1 : 0,
@@ -748,7 +750,9 @@ export function StepRow({
     <span className="flex min-w-0 items-center gap-2">
       <StepIcon kind={step.kind} />
       <span className={running ? "shrink-0 tool-line-running" : "shrink-0"}>
-        {step.label}
+        {step.notYet
+          ? ui("{{value0}}, not done yet", { value0: step.label })
+          : step.label}
       </span>
       {step.href ? (
         <a
@@ -766,8 +770,14 @@ export function StepRow({
     </span>
   );
   const reason =
-    step.failed && step.kind === "browser" ? (
-      <p className="mt-0.5 pl-6 text-destructive">
+    step.kind === "browser" && (step.failed || step.notYet) ? (
+      <p
+        className={
+          step.notYet
+            ? "mt-0.5 pl-6 text-muted-foreground"
+            : "mt-0.5 pl-6 text-destructive"
+        }
+      >
         {step.reason ?? ui("Couldn't finish this step.")}
       </p>
     ) : null;

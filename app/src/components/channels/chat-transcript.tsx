@@ -1,4 +1,3 @@
-import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import type { ActivityMessage, Message } from "@ag-ui/core";
 import type { Attachment } from "@copilotkit/react-core/v2";
 import {
@@ -41,6 +40,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { Streamdown } from "streamdown";
 import { InlineApproval } from "@/components/approvals/inline-approval";
 import {
@@ -86,6 +86,7 @@ import {
   folderStepBody,
   folderStepSubject,
 } from "@/lib/folders/folder-steps";
+import { ui, uiNodes, useLocale } from "@/lib/i18n";
 import {
   markdownComponents,
   markdownPlugins,
@@ -2338,39 +2339,28 @@ export function ChatTranscript({
    * scroller's hold on the reader's place would fight it.
    */
   const jumpRef = useRef<string | null>(null);
-  const goToTurn = useCallback((id: string) => {
-    const element = viewportRef.current;
-    const row = element?.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
-    if (!element || !row) return;
-    // Less the transcript's own top padding (`py-6`), so the turn sits where a first row would.
-    element.scrollTop +=
-      row.getBoundingClientRect().top -
-      element.getBoundingClientRect().top -
-      TURN_INSET_PX;
-  }, []);
-  /*
-   * Following stops as the view moves, not before the pages are drawn: the scroller holds the
-   * reader's place across a prepend by moving `scrollTop` down by what was added, and at the end of
-   * the conversation that reads exactly like the person scrolling back to the end, which picks
-   * following up again (`nextFollow`).
-   */
-  const goToTurnStill = useCallback(
+  const goToTurn = useCallback(
     (id: string) => {
-      goToTurn(id);
-      /*
-       * Not when the move left the view at the end: a short last turn is clamped there, nothing
-       * scrolls, and nothing would ever pick following up again.
-       */
       const element = viewportRef.current;
-      if (
-        element !== null &&
-        element.scrollHeight - element.scrollTop - element.clientHeight >
-          RESUME_PX
-      ) {
-        dispatchFollow({ type: "jump" });
+      const row = element?.querySelector(
+        `[data-message-id="${CSS.escape(id)}"]`,
+      );
+      if (!element || !row) return;
+      const end = Math.max(0, element.scrollHeight - element.clientHeight);
+      const top = Math.max(
+        0,
+        element.scrollTop +
+          row.getBoundingClientRect().top -
+          element.getBoundingClientRect().top -
+          TURN_INSET_PX,
+      );
+      // Commit the pause before moving so the scroller cannot follow an older page back to the end.
+      if (end - top > RESUME_PX) {
+        flushSync(() => dispatchFollow({ type: "jump" }));
       }
+      element.scrollTop = top;
     },
-    [dispatchFollow, goToTurn],
+    [dispatchFollow],
   );
   const jump = useCallback(
     (turn: Turn) => {
@@ -2379,10 +2369,10 @@ export function ChatTranscript({
         jumpRef.current = turn.id;
         drawTo(turn.index);
       } else {
-        goToTurnStill(turn.id);
+        goToTurn(turn.id);
       }
     },
-    [drawTo, goToTurnStill, pagesFrom],
+    [drawTo, goToTurn, pagesFrom],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs after the commit that drew the pages a jump asked for, which is a change of `pagesFrom`.
   useLayoutEffect(() => {
@@ -2390,10 +2380,10 @@ export function ChatTranscript({
     if (id === null) return;
     const frame = window.requestAnimationFrame(() => {
       jumpRef.current = null;
-      goToTurnStill(id);
+      goToTurn(id);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [pagesFrom, goToTurnStill]);
+  }, [pagesFrom, goToTurn]);
 
   /*
    * NOTHING BUT THE PLACEHOLDER UNTIL HISTORY IS COMPLETE, AND THE SCROLLER MOUNTED FRESH AFTER IT.

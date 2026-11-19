@@ -89,11 +89,13 @@ export function browserStepDetails(step: BrowserStep) {
     !step.result.startsWith("Error:")
       ? readOutcome(step.result)
       : null;
+  const notYet = result.ok === false && result.starting === true;
   const failed =
-    result.ok === false ||
-    result.refused === true ||
-    step.result?.startsWith("Error:") === true ||
-    sentence?.ok === false;
+    !notYet &&
+    (result.ok === false ||
+      result.refused === true ||
+      step.result?.startsWith("Error:") === true ||
+      sentence?.ok === false);
   return {
     label: ownToolLabel(step.toolCall.function.name, false, ui) ?? undefined,
     href: url?.href,
@@ -102,6 +104,7 @@ export function browserStepDetails(step: BrowserStep) {
         ? result.title
         : url?.hostname,
     failed,
+    notYet,
     reason:
       typeof result.reason === "string"
         ? result.reason
