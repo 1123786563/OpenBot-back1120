@@ -7,6 +7,7 @@ Start with [How OpenBot works](how-openbot-works.md): what a Bot has, and where 
 - [Configuration](configuration.md): environment variables and tenant package YAML.
 - [Personal edition](personal-edition.md): OpenBot for one person, with no sign-in.
 - [Development](development.md): local setup, migrations, ports, and quality checks.
+- [OpenBot Web 页面评分](design/web-page-critique.md): use Impeccable to review existing pages and compare follow-up scores.
 - [The API spec](../api/README.md): the REST API in OpenAPI and the live channels in AsyncAPI, the client generated from them, and how to change them.
 - [Bots](coworkers.md): durable Bot profiles, conversations, visibility, deletion, and external AG-UI registration.
 - [Approvals](approvals.md): which actions a Bot asks before, the order that decides it, and what an admin can close.
