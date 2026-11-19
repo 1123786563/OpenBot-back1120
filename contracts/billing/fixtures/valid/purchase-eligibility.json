@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "schema": "PurchaseEligibility",
+  "instance": {
+    "allowed": true,
+    "reason": "eligible",
+    "next_action": "create_order",
+    "target_period": {
+      "index": "1",
+      "start_us": "1709170215123456",
+      "end_us": "1711848615123456"
+    },
+    "state_revision": "7",
+    "existing_commitment": null
+  }
+}

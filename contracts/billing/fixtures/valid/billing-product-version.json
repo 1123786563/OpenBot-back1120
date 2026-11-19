@@ -1,0 +1,20 @@
+{
+  "expect": "accept",
+  "schema": "BillingProductVersion",
+  "instance": {
+    "id": "aa000000-0000-4000-8000-000000000001",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": null,
+    "environment": "production",
+    "product_id": "pack_1m_credits",
+    "product_type": "credit_pack",
+    "display_name": "1M credits pack",
+    "price_fen": "9900",
+    "currency": "CNY",
+    "granted_microcredits": "1000000",
+    "period_months": null,
+    "quota_version_id": null,
+    "status": "active"
+  }
+}

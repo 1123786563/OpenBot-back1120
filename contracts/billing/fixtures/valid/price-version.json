@@ -16,13 +16,17 @@
         "resource": "model_input_tokens",
         "price_unit": "1000",
         "price_numerator": "37",
-        "price_denominator": "1000000"
+        "price_denominator": "1000000",
+        "measurement_unit": "token",
+        "unit_size": "1000"
       },
       {
         "resource": "model_output_tokens",
         "price_unit": "1000",
         "price_numerator": "111",
-        "price_denominator": "1000000"
+        "price_denominator": "1000000",
+        "measurement_unit": "token",
+        "unit_size": "1000"
       }
     ],
     "rounding": "half_up",

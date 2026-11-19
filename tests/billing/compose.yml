@@ -12,6 +12,17 @@
 #     tag AND amd64 manifest digest (digests fetched from the registries on
 #     2026-11-17 and recorded in docs/billing-contract.md).
 #
+# Boot fixes verified against the actual v1.57.0 image (#65 full-stack run):
+#   - service commands point at /app/scripts/... (the image has no
+#     ./scripts/docker/ directory);
+#   - the api healthcheck uses /health with curl (no wget in the image, and
+#     /healthz answers 404 on this version);
+#   - Lago reads the standard DATABASE_URL/REDIS_URL (the older LAGO_* names
+#     are not consulted by this image) and additionally needs
+#     SECRET_KEY_BASE in production;
+#   - BILLING62_LAGO_RSA_KEY is the Base64 of the PEM (Lago Base64-decodes
+#     it), which keeps the compose env file single-line.
+#
 # Credentials: NEVER baked into this file. The runner generates one-time
 # credentials per run and injects them through a permission-restricted env
 # file (BILLING62_ENV_FILE) plus a generated Lago RSA key.
@@ -116,21 +127,16 @@ services:
   lago-migrate:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
-    command: ["./scripts/migrate.sh"]
+    command: ["/app/scripts/migrate.sh"]
     restart: "no"
-    # one-shot service: excluded from plain `up -d --wait` (the reconciler
-    # keeps re-running an exited service and recreating its dependents in a
-    # loop); the runner invokes it explicitly via `compose run --rm`.
+    # Run this one-shot explicitly before starting API/worker services.
     profiles: [migrate]
     environment: &lago-env
-      # v1.57 database.yml reads the plain DATABASE_URL (user+password in it).
+      # Lago v1.57.0 reads the standard DATABASE_URL/REDIS_URL (the older
+      # LAGO_* names are not consulted by this image).
       DATABASE_URL: postgres://${BILLING62_LAGO_USER}:${BILLING62_LAGO_PASSWORD}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
-      LAGO_REDIS_URL: redis://lago-redis:6379
-      # Lago v1.57 reads the key as Base64.decode64(ENV["LAGO_RSA_PRIVATE_KEY"])
-      # (config/initializers/rsa_keys.rb), and a multiline PEM does not survive
-      # compose interpolation anyway — so the one-time key travels exactly as
-      # the base64 string Lago expects.
-      LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY_B64:?one-time key}
+      REDIS_URL: redis://lago-redis:6379/0
+      LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY:?one-time key}
       RAILS_ENV: production
       RAILS_LOG_TO_STDOUT: "true"
       SECRET_KEY_BASE: ${BILLING62_LAGO_SECRET_KEY_BASE:?one-time key}
@@ -145,7 +151,7 @@ services:
   lago-api:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-api
-    command: ["./scripts/start.api.sh"]
+    command: ["/app/scripts/start.api.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     expose:
@@ -154,8 +160,13 @@ services:
       lago-db: { condition: service_healthy }
       lago-redis: { condition: service_healthy }
     healthcheck:
-      # the v1.57 api image ships curl, not wget
+      # v1.57.0 serves /health (the old /healthz answers 404) and ships curl
+      # (no wget in this image). start_period gives the Rails boot (bundle
+      # install checks, DB pool warmup) a no-penalty window: probes that fail
+      # during it do not consume retries, so a slow first boot on a loaded
+      # host no longer fails `compose up --wait` while the API is coming up.
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
+      start_period: 240s
       interval: 10s
       timeout: 5s
       retries: 60
@@ -163,7 +174,7 @@ services:
   lago-clock:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-clock
-    command: ["./scripts/start.clock.sh"]
+    command: ["/app/scripts/start.clock.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
@@ -173,7 +184,7 @@ services:
   lago-worker:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-worker
-    command: ["./scripts/start.worker.sh"]
+    command: ["/app/scripts/start.worker.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:

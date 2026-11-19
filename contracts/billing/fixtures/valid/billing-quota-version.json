@@ -1,0 +1,17 @@
+{
+  "expect": "accept",
+  "schema": "BillingQuotaVersion",
+  "instance": {
+    "id": "aa000000-0000-4000-8000-000000000002",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": null,
+    "environment": "production",
+    "tier": "subscription",
+    "quotas": [
+      { "resource_key": "concurrent_runs", "limit": "5", "unit": "count" },
+      { "resource_key": "automatic_task_seats", "limit": "20", "unit": "count" }
+    ],
+    "status": "active"
+  }
+}

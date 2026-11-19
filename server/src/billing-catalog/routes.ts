@@ -1,0 +1,803 @@
+/**
+ * Internal billing catalog HTTP surface (#65): the four trusted read-only
+ * operations of the billing contract, as one Hono sub-app.
+ *
+ * Not browser-reachable: every route demands a trusted service credential
+ * (`Authorization: Bearer`, verified by the injected verifier) under the
+ * /internal prefix; CORS is not access control. The organization/account scope
+ * is resolved server-side by the credential verifier from the trusted
+ * credential context — the request body never designates a caller, an account
+ * outside the credential's trusted authorization is 403 forbidden, and every
+ * operation requires the contract's `billing:quote` capability.
+ *
+ * These operations have NO write side effects (quotes are observations; they
+ * occupy no purchase eligibility and pin nothing), which the contract marks
+ * with x-readonly: true; error answers use application/problem+json.
+ */
+
+import { type Context, Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type {
+  BillingCatalogService,
+  CatalogServiceError,
+  ProductQuote,
+} from "./service";
+
+type CatalogEnv = {
+  Variables: {
+    trustedOrganizationId: string;
+    /** Trusted account authorization: null = unrestricted in the organization. */
+    trustedBillingAccountIds: string[] | null;
+    /** Trusted authorization to select explicitly-marked test catalogs. */
+    trustedTestCatalogAuthorized: boolean;
+  };
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DECIMAL_RE = /^(0|[1-9][0-9]{0,18})$/;
+const SMALL_INDEX_RE = /^(0|[1-9][0-9]{0,9})$/;
+const PRODUCT_ID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+export interface TrustedCredentialVerifierResult {
+  ok: boolean;
+  /** The organization the credential is bound to, when ok. */
+  organizationId?: string;
+  /**
+   * The billing accounts this credential may act for (the trusted personal
+   * account authorization). null = unrestricted within the organization;
+   * an account outside this set is 403 forbidden, and account-scoped catalog
+   * content of another account is invisible (404), never leaked.
+   */
+  billingAccounts?: string[] | null;
+  /**
+   * Capabilities the credential carries; every catalog operation requires
+   * `billing:quote` (the contract's x-required-capability). A credential
+   * without it is 403 forbidden.
+   */
+  capabilities?: string[];
+  /**
+   * Whether the credential is trusted to see explicitly-marked TEST catalogs
+   * (environment: "test"). Test configurations are acceptance fixtures by
+   * definition — a credential without this authorization never selects them,
+   * and requesting the test environment is 403 forbidden.
+   */
+  testCatalogAuthorized?: boolean;
+}
+
+export function createBillingCatalogRoutes(deps: {
+  service: BillingCatalogService;
+  /**
+   * Verifies the service credential and resolves the trusted organization,
+   * account authorization and capability scope.
+   */
+  verifyCredential: (
+    authorizationHeader: string | undefined,
+  ) => TrustedCredentialVerifierResult;
+}) {
+  const routes = new Hono<CatalogEnv>();
+
+  function problem(
+    c: Context<CatalogEnv>,
+    status: ContentfulStatusCode,
+    code: string,
+    detail: string,
+    fieldErrors?: { field: string; issue: string }[],
+  ): Response {
+    return c.json(
+      {
+        type: `https://openbot.dev/billing/errors/${code}`,
+        title: problemTitle(code),
+        status,
+        detail,
+        instance: c.req.path,
+        code,
+        request_id: crypto.randomUUID(),
+        ...(fieldErrors ? { field_errors: fieldErrors } : {}),
+      },
+      status,
+      // The contract declares problem+json; Hono's c.json defaults to
+      // application/json, which would quietly break content-type-sensitive
+      // consumers.
+      { "Content-Type": "application/problem+json" },
+    );
+  }
+
+  function fail(c: Parameters<typeof problem>[0], e: unknown): Response {
+    const err = e as CatalogServiceError;
+    if (err && err.name === "CatalogServiceError") {
+      return problem(
+        c,
+        err.status as ContentfulStatusCode,
+        err.code,
+        err.message,
+        err.field ? [{ field: err.field, issue: err.code }] : undefined,
+      );
+    }
+    return problem(
+      c,
+      503,
+      "ledger_unavailable",
+      `catalog storage unavailable: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  // Every route: trusted service credential, server-resolved organization,
+  // capability AND personal-account authorization. The request body never
+  // designates a caller or an account it is not authorized for.
+  routes.use("*", async (c, next) => {
+    const verdict = deps.verifyCredential(c.req.header("authorization"));
+    if (!verdict.ok || !verdict.organizationId) {
+      return problem(
+        c,
+        401,
+        "unauthenticated",
+        "No or invalid trusted service credential.",
+      );
+    }
+    if (!(verdict.capabilities ?? []).includes("billing:quote")) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential does not carry the billing:quote capability required by every catalog operation.",
+      );
+    }
+    c.set("trustedOrganizationId", verdict.organizationId);
+    c.set("trustedBillingAccountIds", verdict.billingAccounts ?? null);
+    c.set(
+      "trustedTestCatalogAuthorized",
+      verdict.testCatalogAuthorized === true,
+    );
+    await next();
+  });
+
+  /**
+   * The account the request names must be inside the credential's trusted
+   * account authorization; a mismatch is forbidden, not "not found".
+   */
+  function accountForbidden(
+    c: Context<CatalogEnv>,
+    billingAccountId: string | null,
+  ): Response | null {
+    const allowed = c.get("trustedBillingAccountIds");
+    if (
+      billingAccountId !== null &&
+      allowed !== null &&
+      !allowed.includes(billingAccountId)
+    ) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential is not authorized to act for the requested billing account.",
+        [{ field: "billing_account_id", issue: "forbidden" }],
+      );
+    }
+    return null;
+  }
+
+  /**
+   * Parse the optional `environment` selector. Defaults to production; the
+   * test environment exists only for explicitly test-authorized credentials
+   * (acceptance fixtures — never a production sale), and a request for it
+   * without that trusted authorization is 403 forbidden.
+   */
+  function parseEnvironment(
+    c: Context<CatalogEnv>,
+    raw: unknown,
+  ): "production" | "test" | Response {
+    if (raw === undefined || raw === null) return "production";
+    if (raw !== "production" && raw !== "test") {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        'environment must be "production" or "test"',
+        [{ field: "environment", issue: "invalid_environment" }],
+      );
+    }
+    if (raw === "test" && !c.get("trustedTestCatalogAuthorized")) {
+      return problem(
+        c,
+        403,
+        "forbidden",
+        "This credential is not authorized to quote explicitly-marked test configurations.",
+        [{ field: "environment", issue: "forbidden" }],
+      );
+    }
+    return raw;
+  }
+
+  async function readJson(
+    c: Context<CatalogEnv>,
+  ): Promise<Record<string, unknown> | Response> {
+    try {
+      const body = (await c.req.json()) as unknown;
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new Error("not an object");
+      }
+      return body as Record<string, unknown>;
+    } catch {
+      return problem(
+        c,
+        400,
+        "invalid_integer",
+        "request body must be a JSON object",
+        [{ field: "body", issue: "not_json_object" }],
+      );
+    }
+  }
+
+  // ------------------------------------------------------------ product quote
+  routes.post("/internal/v1/billing/product-quotes", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const rawAccount = body.billing_account_id;
+    if (rawAccount !== undefined && rawAccount !== null) {
+      if (typeof rawAccount !== "string" || !UUID_RE.test(rawAccount)) {
+        return problem(
+          c,
+          422,
+          "invalid_integer",
+          "billing_account_id must be a UUID or null",
+          [{ field: "billing_account_id", issue: "not_a_uuid" }],
+        );
+      }
+    }
+    const productId = body.product_id;
+    if (typeof productId !== "string" || !PRODUCT_ID_RE.test(productId)) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "product_id must match ^[A-Za-z0-9._:-]{1,128}$",
+        [{ field: "product_id", issue: "invalid_product_id" }],
+      );
+    }
+    const action = body.action;
+    if (
+      action !== "initial_purchase" &&
+      action !== "renewal" &&
+      action !== "change_tier"
+    ) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "action must be initial_purchase, renewal or change_tier",
+        [{ field: "action", issue: "invalid_action" }],
+      );
+    }
+    const expected = body.expected_price_version_id;
+    if (
+      expected !== undefined &&
+      (typeof expected !== "string" || !UUID_RE.test(expected))
+    ) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "expected_price_version_id must be a UUID",
+        [{ field: "expected_price_version_id", issue: "not_a_uuid" }],
+      );
+    }
+    const requestedAccount = typeof rawAccount === "string" ? rawAccount : null;
+    const accountCheck = accountForbidden(c, requestedAccount);
+    if (accountCheck) return accountCheck;
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const quote = await deps.service.quoteProduct({
+        organizationId,
+        billingAccountId: requestedAccount,
+        environment,
+        productId,
+        action,
+        expectedPriceVersionId:
+          typeof expected === "string" ? expected : undefined,
+      });
+      return c.json(serializeQuote(quote));
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // --------------------------------------------------- current price basis
+  routes.post("/internal/v1/billing/current-prices", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const rawAccount = body.billing_account_id;
+    if (rawAccount !== undefined && rawAccount !== null) {
+      if (typeof rawAccount !== "string" || !UUID_RE.test(rawAccount)) {
+        return problem(
+          c,
+          422,
+          "invalid_integer",
+          "billing_account_id must be a UUID or null",
+          [{ field: "billing_account_id", issue: "not_a_uuid" }],
+        );
+      }
+    }
+    const rawProduct = body.product_id;
+    if (
+      rawProduct !== undefined &&
+      (typeof rawProduct !== "string" || !PRODUCT_ID_RE.test(rawProduct))
+    ) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "product_id must match ^[A-Za-z0-9._:-]{1,128}$",
+        [{ field: "product_id", issue: "invalid_product_id" }],
+      );
+    }
+    const requestedAccount = typeof rawAccount === "string" ? rawAccount : null;
+    const accountCheck = accountForbidden(c, requestedAccount);
+    if (accountCheck) return accountCheck;
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const resolution = await deps.service.resolveCurrentPrice({
+        organizationId,
+        billingAccountId: requestedAccount,
+        environment,
+        productId: typeof rawProduct === "string" ? rawProduct : undefined,
+      });
+      return c.json({
+        sellable: resolution.sellable,
+        ...(resolution.notSellableReason
+          ? { not_sellable_reason: resolution.notSellableReason }
+          : {}),
+        test_only: resolution.testOnly,
+        quoted_at_us: resolution.quotedAtUs,
+        ...(resolution.sellable
+          ? {
+              release_id: resolution.releaseId,
+              release_content_digest: resolution.releaseContentDigest,
+              scope_is_account_specific: resolution.scopeIsAccountSpecific,
+              price_version_id: resolution.priceVersionId,
+              run_cap_version_id: resolution.runCapVersionId,
+              run_cap_microcredits: resolution.runCapMicrocredits,
+              prices: resolution.prices.map((p) => ({
+                resource: p.resource,
+                measurement_unit: p.measurementUnit,
+                unit_size: p.unitSize,
+                numerator: p.numerator,
+                denominator: p.denominator,
+              })),
+            }
+          : {}),
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // -------------------------------------------------------------- step quote
+  routes.post("/internal/v1/billing/step-quotes", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const priceVersionId = body.price_version_id;
+    if (typeof priceVersionId !== "string" || !UUID_RE.test(priceVersionId)) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "price_version_id must be a UUID",
+        [{ field: "price_version_id", issue: "not_a_uuid" }],
+      );
+    }
+    const resources = body.resources;
+    const linesOk =
+      Array.isArray(resources) &&
+      resources.length > 0 &&
+      (resources as unknown[]).every(
+        (r) =>
+          r !== null &&
+          typeof r === "object" &&
+          typeof (r as Record<string, unknown>).resource === "string" &&
+          typeof (r as Record<string, unknown>).quantity === "string" &&
+          DECIMAL_RE.test((r as Record<string, unknown>).quantity as string),
+      );
+    if (!linesOk) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "resources must be [{resource, quantity}] with contract decimal-string quantities",
+        [{ field: "resources", issue: "invalid_resource_vector" }],
+      );
+    }
+    const expected = body.expected_price_version_id;
+    if (
+      expected !== undefined &&
+      (typeof expected !== "string" || !UUID_RE.test(expected))
+    ) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "expected_price_version_id must be a UUID",
+        [{ field: "expected_price_version_id", issue: "not_a_uuid" }],
+      );
+    }
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const quote = await deps.service.quoteStep({
+        organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
+        priceVersionId,
+        expectedPriceVersionId:
+          typeof expected === "string" ? expected : undefined,
+        resources: (resources as Record<string, string>[]).map((r) => ({
+          resource: r.resource,
+          quantity: r.quantity,
+        })),
+      });
+      return c.json({
+        price_version_id: quote.priceVersionId,
+        rounding: quote.rounding,
+        lines: quote.lines.map((l) => ({
+          resource: l.resource,
+          quantity: l.quantity,
+          measurement_unit: l.measurementUnit,
+          unit_size: l.unitSize,
+          numerator: l.numerator,
+          denominator: l.denominator,
+        })),
+        total_microcredits: quote.totalMicrocredits,
+        total_display: quote.totalDisplay,
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // -------------------------------------------------- step settlement quote
+  routes.post("/internal/v1/billing/step-settlement-quotes", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const ref = body.step_reservation_ref;
+    if (typeof ref !== "string" || !/^[\w.:-]{1,128}$/.test(ref)) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "step_reservation_ref must match ^[A-Za-z0-9._:-]{1,128}$",
+        [{ field: "step_reservation_ref", issue: "invalid_reservation_ref" }],
+      );
+    }
+    const resources = body.resources;
+    const linesOk =
+      Array.isArray(resources) &&
+      resources.length > 0 &&
+      (resources as unknown[]).every(
+        (r) =>
+          r !== null &&
+          typeof r === "object" &&
+          typeof (r as Record<string, unknown>).resource === "string" &&
+          typeof (r as Record<string, unknown>).quantity === "string" &&
+          DECIMAL_RE.test((r as Record<string, unknown>).quantity as string),
+      );
+    if (!linesOk) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "resources must be [{resource, quantity}] with contract decimal-string quantities",
+        [{ field: "resources", issue: "invalid_resource_vector" }],
+      );
+    }
+    // Optional client assertions: never authoritative, validated for shape and
+    // (in the service) for divergence from the reservation's pinned version.
+    for (const field of ["price_version_id", "expected_price_version_id"]) {
+      const v = body[field];
+      if (v !== undefined && v !== null) {
+        if (typeof v !== "string" || !UUID_RE.test(v)) {
+          return problem(c, 422, "invalid_integer", `${field} must be a UUID`, [
+            { field, issue: "not_a_uuid" },
+          ]);
+        }
+      }
+    }
+    const environment = parseEnvironment(c, body.environment);
+    if (environment instanceof Response) return environment;
+    try {
+      const quote = await deps.service.quoteStepSettlement({
+        organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
+        stepReservationRef: ref,
+        priceVersionId: body.price_version_id as string | undefined,
+        expectedPriceVersionId:
+          typeof body.expected_price_version_id === "string"
+            ? body.expected_price_version_id
+            : undefined,
+        resources: (resources as Record<string, string>[]).map((r) => ({
+          resource: r.resource,
+          quantity: r.quantity,
+        })),
+      });
+      return c.json({
+        step_reservation_ref: quote.stepReservationRef,
+        price_version_id: quote.priceVersionId,
+        rounding: quote.rounding,
+        lines: quote.lines.map((l) => ({
+          resource: l.resource,
+          quantity: l.quantity,
+          measurement_unit: l.measurementUnit,
+          unit_size: l.unitSize,
+          numerator: l.numerator,
+          denominator: l.denominator,
+        })),
+        total_microcredits: quote.totalMicrocredits,
+        total_display: quote.totalDisplay,
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // ------------------------------------------------------------ period query
+  routes.post("/internal/v1/billing/period-queries", async (c) => {
+    const body = await readJson(c);
+    if (body instanceof Response) return body;
+    const organizationId = c.get("trustedOrganizationId");
+    const anchor = body.original_purchased_at_us;
+    if (typeof anchor !== "string" || !DECIMAL_RE.test(anchor)) {
+      return problem(
+        c,
+        422,
+        "invalid_integer",
+        "original_purchased_at_us must be a contract decimal string",
+        [{ field: "original_purchased_at_us", issue: "not_a_decimal_string" }],
+      );
+    }
+    const hasIndex =
+      typeof body.target_period_index === "string" &&
+      SMALL_INDEX_RE.test(body.target_period_index);
+    const hasOccurrence =
+      typeof body.occurrence_us === "string" &&
+      DECIMAL_RE.test(body.occurrence_us);
+    if (hasIndex === hasOccurrence) {
+      return problem(
+        c,
+        422,
+        "out_of_range",
+        "provide exactly one of target_period_index or occurrence_us",
+        [
+          {
+            field: "target_period_index",
+            issue: "exactly_one_selector_required",
+          },
+        ],
+      );
+    }
+    try {
+      const answer = await deps.service.queryPeriod({
+        organizationId,
+        originalPurchasedAtUs: anchor,
+        targetPeriodIndex: hasIndex
+          ? (body.target_period_index as string)
+          : undefined,
+        occurrenceUs: hasOccurrence
+          ? (body.occurrence_us as string)
+          : undefined,
+      });
+      return c.json({
+        timezone: answer.timezone,
+        anchor: {
+          utc_us: answer.anchor.utcUs,
+          utc_iso: answer.anchor.utcIso,
+          local: answer.anchor.local,
+        },
+        period: {
+          index: answer.period.index,
+          start_us: answer.period.startUs,
+          end_us: answer.period.endUs,
+          start_iso: answer.period.startIso,
+          end_iso: answer.period.endIso,
+          start_local: answer.period.startLocal,
+          end_local: answer.period.endLocal,
+        },
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  // ------------------------------------------------- historical version read
+  routes.get("/internal/v1/billing/catalog-versions/:release_id", async (c) => {
+    const releaseId = c.req.param("release_id");
+    if (!UUID_RE.test(releaseId)) {
+      return problem(c, 422, "invalid_integer", "release_id must be a UUID", [
+        { field: "release_id", issue: "not_a_uuid" },
+      ]);
+    }
+    // The history path answers under the SAME environment authorization as
+    // the quote path: a test-environment release is readable only with
+    // environment=test under a test-authorized credential — history is never
+    // a side door to test amounts, credits or unit prices.
+    const rawEnvironment = c.req.query("environment");
+    let environment: "production" | "test" = "production";
+    if (rawEnvironment !== undefined) {
+      const parsed = parseEnvironment(c, rawEnvironment);
+      if (parsed instanceof Response) return parsed;
+      environment = parsed;
+    }
+    const organizationId = c.get("trustedOrganizationId");
+    try {
+      const snapshot = await deps.service.getCatalogVersion({
+        organizationId,
+        billingAccountIds: c.get("trustedBillingAccountIds"),
+        environment,
+        releaseId,
+      });
+      return c.json({
+        release_id: snapshot.releaseId,
+        content_digest: snapshot.contentDigest,
+        status: snapshot.status,
+        environment: snapshot.environment,
+        effective_from_us: snapshot.effectiveFromUs,
+        effective_to_us: snapshot.effectiveToUs,
+        basic_quota: snapshot.basicQuota
+          ? {
+              quota_version_id: snapshot.basicQuota.quotaVersionId,
+              tier: snapshot.basicQuota.tier,
+              quotas: snapshot.basicQuota.quotas.map((q) => ({
+                resource_key: q.resource_key,
+                limit: q.limit,
+                unit: q.unit,
+              })),
+            }
+          : null,
+        items: snapshot.items.map((item) => ({
+          product_version_id: item.productVersionId,
+          product_id: item.productId,
+          product_type: item.productType,
+          display_name: item.displayName,
+          amount_fen: item.amountFen,
+          currency: item.currency,
+          granted_microcredits: item.grantedMicrocredits,
+          // Contract scalar UnsignedInt64Nullable: a decimal string, never a JS number.
+          period_months:
+            item.periodMonths === null ? null : String(item.periodMonths),
+          price_version_id: item.priceVersionId,
+          quota_version_id: item.quotaVersionId,
+          quota: item.quota
+            ? {
+                quota_version_id: item.quota.quotaVersionId,
+                tier: item.quota.tier,
+                quotas: item.quota.quotas.map((q) => ({
+                  resource_key: q.resource_key,
+                  limit: q.limit,
+                  unit: q.unit,
+                })),
+              }
+            : null,
+          run_cap_version_id: item.runCapVersionId,
+          run_cap_microcredits: item.runCapMicrocredits,
+          prices: item.prices.map((p) => ({
+            resource: p.resource,
+            measurement_unit: p.measurementUnit,
+            unit_size: p.unitSize,
+            numerator: p.numerator,
+            denominator: p.denominator,
+          })),
+        })),
+      });
+    } catch (e) {
+      return fail(c, e);
+    }
+  });
+
+  return routes;
+}
+
+function problemTitle(code: string): string {
+  switch (code) {
+    case "invalid_integer":
+      return "Malformed integer";
+    case "out_of_range":
+      return "Value outside the contract range";
+    case "forbidden":
+      return "Forbidden";
+    case "resource_not_found":
+      return "Not found in this scope";
+    case "state_conflict":
+      return "State conflict";
+    case "price_version_conflict":
+      return "Price version conflict";
+    case "ledger_unavailable":
+      return "Catalog storage unavailable";
+    case "unauthenticated":
+      return "Unauthenticated";
+    default:
+      return "Billing catalog error";
+  }
+}
+
+/** Serialize a quote to the contract's snake_case JSON shape. */
+function serializeQuote(quote: ProductQuote): Record<string, unknown> {
+  const s = quote.snapshot;
+  const preview = quote.periodPreview;
+  return {
+    sellable: quote.sellable,
+    ...(quote.notSellableReason
+      ? { not_sellable_reason: quote.notSellableReason }
+      : {}),
+    test_only: quote.testOnly,
+    quoted_at_us: quote.quotedAtUs,
+    ...(s
+      ? {
+          snapshot: {
+            release_id: s.releaseId,
+            release_content_digest: s.releaseContentDigest,
+            scope_is_account_specific: s.scopeIsAccountSpecific,
+            product_version_id: s.productVersionId,
+            product_id: s.productId,
+            product_type: s.productType,
+            display_name: s.displayName,
+            amount_fen: s.amountFen,
+            currency: s.currency,
+            granted_microcredits: s.grantedMicrocredits,
+            period_months:
+              s.periodMonths === null ? null : String(s.periodMonths),
+            long_lived: s.longLived,
+            price_version_id: s.priceVersionId,
+            quota_version_id: s.quotaVersionId,
+            basic_quota_version_id: s.basicQuotaVersionId,
+            run_cap_version_id: s.runCapVersionId,
+            run_cap_microcredits: s.runCapMicrocredits,
+          },
+        }
+      : {}),
+    ...(preview !== undefined
+      ? {
+          period_preview:
+            preview === null
+              ? null
+              : {
+                  index: preview.index.toString(),
+                  start_us: preview.startUs,
+                  end_us: preview.endUs,
+                  start_iso: preview.startIso,
+                  end_iso: preview.endIso,
+                },
+        }
+      : {}),
+    ...(quote.eligibility
+      ? {
+          eligibility: {
+            allowed: quote.eligibility.allowed,
+            reason: quote.eligibility.reason,
+            next_action: quote.eligibility.nextAction,
+            target_period:
+              quote.eligibility.targetPeriod === null
+                ? null
+                : {
+                    index: quote.eligibility.targetPeriod.index.toString(),
+                    start_us: quote.eligibility.targetPeriod.startUs.toString(),
+                    end_us: quote.eligibility.targetPeriod.endUs.toString(),
+                  },
+            state_revision: quote.eligibility.stateRevision.toString(),
+            existing_commitment:
+              quote.eligibility.existingCommitment === null
+                ? null
+                : {
+                    product_id: quote.eligibility.existingCommitment.productId,
+                    target_period_start_us:
+                      quote.eligibility.existingCommitment.targetPeriodStartUs.toString(),
+                  },
+          },
+        }
+      : {}),
+  };
+}

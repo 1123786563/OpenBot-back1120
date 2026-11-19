@@ -91,6 +91,10 @@ import { createRoleRepository } from "./auth/guards";
 import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import { createOrganizationAuth } from "./auth/organization";
 import { organizationUserStore } from "./auth/organization-store";
+import {
+  createBillingCatalogRoutes,
+  createBillingCatalogService,
+} from "./billing-catalog";
 import { openbotAddress } from "./browser/address";
 import { botBrowserNetwork } from "./browser/bot-browser";
 import { personBrowserEgressPolicy } from "./browser/egress";
@@ -3396,11 +3400,23 @@ const app = createApp(
   profileStore,
   // Sign-out ends the identity's live subscriptions, not only the session row: this instance's
   // sockets close at once, and the same fact rides the activity topic to every other replica.
-  // Last, matching `createApp`'s own last positional parameter.
   async (userId) => {
     channelEvents.revokeUser(userId);
     await announceSessionRevoked(database, [userId]);
   },
+  undefined, // Alipay notification inbox is not configured in this assembly.
+  // The billing catalog's internal read surface (#65), mounted in the default
+  // assembly. Until the trusted service-credential issuer lands (#67/#76) the
+  // verifier below accepts NO credential: every request is 401 problem+json
+  // and no session or browser path can reach /internal — the routes exist and
+  // answer, but only a future credential issuer can ever open them.
+  createBillingCatalogRoutes({
+    service: createBillingCatalogService({
+      database,
+      clock: { nowUs: () => BigInt(Date.now() * 1000) },
+    }),
+    verifyCredential: () => ({ ok: false }),
+  }),
 );
 
 startHttpServer({

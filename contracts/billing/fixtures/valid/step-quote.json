@@ -1,0 +1,20 @@
+{
+  "expect": "accept",
+  "schema": "StepQuote",
+  "instance": {
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "rounding": "half_up",
+    "lines": [
+      {
+        "resource": "model_input_tokens",
+        "quantity": "9007199254740993",
+        "measurement_unit": "token",
+        "unit_size": "1",
+        "numerator": "1",
+        "denominator": "1000000"
+      }
+    ],
+    "total_microcredits": "9007199254740993",
+    "total_display": "9007199254740993.000000"
+  }
+}

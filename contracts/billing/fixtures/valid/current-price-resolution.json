@@ -1,0 +1,24 @@
+{
+  "expect": "accept",
+  "schema": "CurrentPriceResolution",
+  "instance": {
+    "sellable": true,
+    "test_only": false,
+    "quoted_at_us": "1700003600000000",
+    "release_id": "aa000000-0000-4000-8000-000000000004",
+    "release_content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+    "scope_is_account_specific": false,
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+    "run_cap_microcredits": "5000000",
+    "prices": [
+      {
+        "resource": "model_input_tokens",
+        "measurement_unit": "token",
+        "unit_size": "1",
+        "numerator": "1",
+        "denominator": "1000000"
+      }
+    ]
+  }
+}
