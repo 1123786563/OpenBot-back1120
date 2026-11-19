@@ -348,6 +348,11 @@ export interface components {
              * @enum {string}
              */
             payment_scenario: "h5" | "native" | "jsapi";
+            /**
+             * @description Alipay only, and only with payment_scenario h5: which website product the server opens — pc = alipay.trade.page.pay (FAST_INSTANT_TRADE_PAY, desktop cashier), wap = alipay.trade.wap.pay (QUICK_WAP_WAY, mobile cashier). Omitted defaults to wap. Chosen by an explicit user entry point, never by User-Agent sniffing; the server, not the client, decides the actual channel method.
+             * @enum {string}
+             */
+            alipay_website_mode?: "pc" | "wap";
             /** @description Redirect target after payment; MUST match the server-side whitelist. Returning to the app never proves payment. */
             return_url: string;
         };
@@ -1671,6 +1676,9 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CallbackEnvelope"];
+                "application/x-www-form-urlencoded": {
+                    [key: string]: string;
+                };
             };
         };
         responses: {
@@ -1681,6 +1689,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChannelAcknowledgment"];
+                    "text/plain": "success" | "failure";
                 };
             };
             /** @description Gateway overload; channel will retry per protocol. */
@@ -1690,6 +1699,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChannelAcknowledgment"];
+                    "text/plain": "failure";
                 };
             };
         };

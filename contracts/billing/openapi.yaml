@@ -548,6 +548,26 @@ paths:
           application/json:
             schema:
               $ref: "./schemas/channel.yaml#/components/schemas/CallbackEnvelope"
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              description: >-
+                Alipay (#70): the gateway POSTs the notification AS the form —
+                there is no JSON envelope. The raw urlencoded body bytes ARE
+                the payload (they play the role of raw_payload_b64); the
+                `sign` and `sign_type` form fields are the protocol metadata.
+                Fields appear each exactly once — key names are the gateway's
+                (app_id, trade_no, out_trade_no, total_amount, trade_status,
+                gmt_payment, notify_id, ...) and values are the strings the
+                signature covers, decoded exactly once; repeated keys are
+                refused. Signature verification runs over the decoded values
+                with `sign` and `sign_type` removed, per the official rule. A
+                body that is not verifiable is answered with the channel's own
+                failure word, not with business problem+json.
+              additionalProperties:
+                type: string
+              minProperties: 1
+              maxProperties: 128
       responses:
         "200":
           description: Channel-protocol acknowledgment (receipt of the persisted raw message).
@@ -555,12 +575,29 @@ paths:
             application/json:
               schema:
                 $ref: "./schemas/channel.yaml#/components/schemas/ChannelAcknowledgment"
+            text/plain:
+              schema:
+                type: string
+                enum: [success, failure]
+                description: >-
+                  Alipay's acknowledgment form (#70): exactly the two words
+                  `success` or `failure`. `success` means the raw payload is
+                  durably persisted (or is a verified replay of a payload
+                  already held); anything else — a signature or identity
+                  failure, a storage failure — answers `failure` so the
+                  gateway retries. This is deliberately NOT JSON and NOT the
+                  business problem+json.
         "429":
           description: Gateway overload; channel will retry per protocol.
           content:
             application/json:
               schema:
                 $ref: "./schemas/channel.yaml#/components/schemas/ChannelAcknowledgment"
+            text/plain:
+              schema:
+                type: string
+                enum: [failure]
+                description: Alipay sees the plain word `failure` and retries.
       x-error-codes: [rate_limited, dependency_unavailable]
       x-no-session-auth: true
 
@@ -1097,6 +1134,17 @@ components:
           type: string
           enum: [h5, native, jsapi]
           description: Channel-supported payment scenario; must be one the server actually supports.
+        alipay_website_mode:
+          type: string
+          enum: [pc, wap]
+          description: >-
+            Alipay only, and only with payment_scenario h5: which website
+            product the server opens — pc = alipay.trade.page.pay
+            (FAST_INSTANT_TRADE_PAY, desktop cashier), wap =
+            alipay.trade.wap.pay (QUICK_WAP_WAY, mobile cashier). Omitted
+            defaults to wap. Chosen by an explicit user entry point, never by
+            User-Agent sniffing; the server, not the client, decides the
+            actual channel method.
         return_url:
           type: string
           maxLength: 512

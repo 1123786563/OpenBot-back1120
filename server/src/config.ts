@@ -27,6 +27,10 @@ import {
 } from "./dictation/config";
 import { type Edition, parseEdition } from "./edition";
 import { proxiedClientSocketUrl } from "./intelligence-gateway-proxy";
+import {
+  type AlipayChannelConfig,
+  alipayConfigFromEnvironment,
+} from "./payments/alipay/config";
 import type { BrokerProvider } from "./plugins/access";
 import { type VoiceConfig, voiceConfig } from "./voice/config";
 import { type WebBotAuth, webBotAuthFromEnv } from "./web-bot-auth";
@@ -266,6 +270,13 @@ export type DeploymentConfig = {
   /** Audio configuration is independent of agent model providers. */
   transcription?: TranscriptionConfig;
   voice?: VoiceConfig;
+  /**
+   * Payment channels (#70). Absent, no payment route is mounted at all: an
+   * entry that verifies nothing is worse than no entry. The alipay half is
+   * bound from the ALIPAY_* environment entries or not at all — a partial
+   * binding refuses to start (payments/alipay/config.ts).
+   */
+  payments?: { alipay: AlipayChannelConfig };
   /** The port the API listens on. Named `PORT` or `SERVER_PORT`; see `serverPort`. */
   port: number;
   databaseUrl: string;
@@ -1703,11 +1714,13 @@ export function loadConfig(
     throw new Error("OPENBOT_LISTEN_HOSTNAME must be an IP address");
 
   // Built first and checked after, so every refusal the team edition gives keeps its order.
+  const alipay = alipayConfigFromEnvironment(environment);
   const loaded = {
     ...(listenHostname ? { listenHostname } : {}),
     port: serverPort(environment),
     transcription: transcriptionConfig(environment),
     voice: voiceConfig(environment),
+    ...(alipay ? { payments: { alipay } } : {}),
     databaseUrl: required(environment, "DATABASE_URL"),
     keyEncryptionKey: deploymentKey,
     ...(webBotAuth ? { webBotAuth } : {}),
