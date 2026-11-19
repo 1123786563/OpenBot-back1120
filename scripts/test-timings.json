@@ -197,7 +197,6 @@
     "app/tests/relative-time-short.test.ts": 1,
     "app/tests/repair-history.test.ts": 2,
     "app/tests/research-step.test.ts": 24,
-    "app/tests/result-consumption.test.tsx": 1228,
     "app/tests/route-long-message.test.ts": 7,
     "app/tests/router.test.ts": 231,
     "app/tests/routines-no-worker.test.ts": 1,

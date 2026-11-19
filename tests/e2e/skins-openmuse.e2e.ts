@@ -326,7 +326,9 @@ async function serveMuse(
   });
   // Seed the pre-paint cache on the app's own origin; a plain document, so the
   // browser treats it as a page rather than a download.
-  await browser.goto(`${process.env.OPENBOT_WEB_URL ?? "http://localhost:3010"}/`);
+  await browser.goto(
+    `${process.env.OPENBOT_WEB_URL ?? "http://localhost:3010"}/`,
+  );
   await browser.evaluate(() => {
     localStorage.setItem("openbot-skin", "openmuse");
     return localStorage.getItem("openbot-skin");
@@ -507,12 +509,13 @@ for (const [path, tab, width] of [
       "data-openmuse-width",
       width,
     );
-    await expect(browser.locator('nav a[aria-current="page"]')).toHaveCount(
-      tab ? 1 : 0,
-    );
+    // The page's own tabs light themselves too; the skin's bar is named for the product.
+    await expect(
+      browser.locator('nav[aria-label="OpenBot"] a[aria-current="page"]'),
+    ).toHaveCount(tab ? 1 : 0);
     if (tab)
       await expect(
-        browser.locator('nav a[aria-current="page"]'),
+        browser.locator('nav[aria-label="OpenBot"] a[aria-current="page"]'),
       ).toHaveAttribute("aria-label", tab);
   });
 }
@@ -662,13 +665,20 @@ for (const role of ["admin", "user"] as const) {
       ["Settings", "/settings"],
       ...(!personal ? [["Capabilities", "/capabilities"]] : []),
       ...(!personal && role === "admin" ? [["Admin", "/admin"]] : []),
-      ["Planning the week", "/channel/c-muse"],
-      ["Competitor notes", "/channel/c-scout"],
-      ["Launch plan", "/group/g-team"],
     ])
       await expect(
         menu.getByRole("link", new RegExp(`^${name}`)),
       ).toHaveAttribute("href", href);
+    // A conversation row's name opens with its faces when the avatar carries a label.
+    for (const [name, href] of [
+      ["Planning the week", "/channel/c-muse"],
+      ["Competitor notes", "/channel/c-scout"],
+      ["Launch plan", "/group/g-team"],
+    ])
+      await expect(menu.getByRole("link", new RegExp(name))).toHaveAttribute(
+        "href",
+        href,
+      );
     await expect(menu.getByRole("link", "Admin", { exact: true })).toHaveCount(
       !personal && role === "admin" ? 1 : 0,
     );

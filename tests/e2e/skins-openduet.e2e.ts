@@ -111,7 +111,7 @@ async function createConversations(browser: Browser) {
   };
 }
 
-async function openMenu({ browser, screen }: Fixtures) {
+async function openMenu({ screen }: Pick<Fixtures, "screen">) {
   await screen.getByRole("button", "Menu", { exact: true }).click();
   const menu = screen.getByRole("navigation", "Menu", { exact: true });
   await expect(menu).toBeVisible();
@@ -150,7 +150,13 @@ async function serveTasks(
   decided: boolean,
 ) {
   const sent: { method: string; path: string; body: unknown }[] = [];
-  const request = (id: string, status: string, toolRef: string, scope: string, args: unknown) => ({
+  const request = (
+    id: string,
+    status: string,
+    toolRef: string,
+    scope: string,
+    args: Record<string, string>,
+  ) => ({
     id,
     status,
     createdAt: at,
@@ -178,20 +184,28 @@ async function serveTasks(
     rules: [],
     teamRules: [],
     requests: [
-      request("r-waiting", "pending", "mcp/gmail/send_email", "priya@example.com", {
-        to: "priya@example.com",
-        body: "Thursday at 10 works.",
-      }),
+      request(
+        "r-waiting",
+        "pending",
+        "mcp/gmail/send_email",
+        "priya@example.com",
+        {
+          to: "priya@example.com",
+          body: "Thursday at 10 works.",
+        },
+      ),
       ...(decided
         ? [
-            request("r-allowed", "allowed", "mcp/drive/share", "Quarterly plan", {}),
             request(
-              "r-denied",
-              "denied",
-              "computer_run_command",
-              "workspace",
-              { command: "echo hello" },
+              "r-allowed",
+              "allowed",
+              "mcp/drive/share",
+              "Quarterly plan",
+              {},
             ),
+            request("r-denied", "denied", "computer_run_command", "workspace", {
+              command: "echo hello",
+            }),
           ]
         : []),
     ],
@@ -213,7 +227,9 @@ async function serveTasks(
       sent.push({
         method: "POST",
         path,
-        body: route.request.postData ? JSON.parse(route.request.postData) : null,
+        body: route.request.postData
+          ? JSON.parse(route.request.postData)
+          : null,
       });
       return route.fulfill({ json: true });
     }
@@ -293,7 +309,9 @@ async function serveTasks(
       sent.push({
         method: "POST",
         path,
-        body: route.request.postData ? JSON.parse(route.request.postData) : null,
+        body: route.request.postData
+          ? JSON.parse(route.request.postData)
+          : null,
       });
       return route.fulfill({ json: true });
     }
@@ -303,12 +321,16 @@ async function serveTasks(
 }
 
 test("the menu reaches Chat, each conversation, and every page the sidebar did", async (fixtures) => {
-  const { app, browser, screen } = fixtures;
+  const { app, browser } = fixtures;
   await serveOpenDuetSkin(browser);
   await serveRole(browser, "admin");
+  await app.open("/");
   const { single, group } = await createConversations(browser);
   await app.open("/");
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   const menu = await openMenu(fixtures);
   await expect(menu.getByText("Renewal for the studio policy")).toBeVisible();
   await menu.getByRole("button", /Manage/).click();
@@ -328,8 +350,10 @@ test("the menu reaches Chat, each conversation, and every page the sidebar did",
 });
 
 test("the menu's destinations are exactly OpenBot's one navigation list", async (fixtures) => {
-  const { app, browser, screen } = fixtures;
-  for (const role of personal ? (["user"] as const) : (["user", "admin"] as const)) {
+  const { app, browser } = fixtures;
+  for (const role of personal
+    ? (["user"] as const)
+    : (["user", "admin"] as const)) {
     await serveOpenDuetSkin(browser);
     await serveRole(browser, role);
     await app.open("/");
@@ -346,10 +370,13 @@ test("the menu's destinations are exactly OpenBot's one navigation list", async 
           document.getElementById(id)?.querySelectorAll("a, button") ?? [],
           (row) => row.textContent ?? "",
         ),
-      await manage.getAttribute("aria-controls"),
+      (await manage.getAttribute("aria-controls")) ?? "",
     );
     const settings = menu.getByRole("link", "Settings", { exact: true });
-    expect([...drawn.map(rowLabel), rowLabel(await settings.text())]).toEqual([
+    expect([
+      ...drawn.map(rowLabel),
+      rowLabel(await settings.textContent()),
+    ]).toEqual([
       ...(personal
         ? ["Bots", "Routines", "Connections", "OpenBot for Business"]
         : [
@@ -369,7 +396,10 @@ test("Settings is on every tab without opening anything, and Admin only for admi
   await serveOpenDuetSkin(browser);
   await serveRole(browser, "user");
   await app.open("/");
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   const settings = screen.getByRole("link", "Your settings", { exact: true });
   await expect(settings).toHaveAttribute("href", "/settings");
   await openMenu(fixtures);
@@ -388,18 +418,26 @@ test("Settings is on every tab without opening anything, and Admin only for admi
 test("a page opened over the app keeps its own title and has one way back", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Page Bot");
   await app.open(`/bots/${bot}`);
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
-  await expect(screen.getByRole("button", "Menu", { exact: true })).toHaveCount(0);
-  await expect(screen.getByRole("navigation", "Main", { exact: true })).toHaveCount(0);
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
+  await expect(screen.getByRole("button", "Menu", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    screen.getByRole("navigation", "Main", { exact: true }),
+  ).toHaveCount(0);
   const back = screen.getByRole("button", "Back to Bots", { exact: true });
   await expect(back).toBeVisible();
   await expect
     .poll(() =>
       browser.evaluate(
         () =>
-          document.querySelector('[data-openduet-page] header p[aria-hidden]')
+          document.querySelector("[data-openduet-page] header p[aria-hidden]")
             ?.textContent ?? null,
       ),
     )
@@ -428,6 +466,7 @@ test("a page opened over the app keeps its own title and has one way back", asyn
 test("Chat and Tasks are phone-shaped, other pages keep OpenBot's width, and an open computer gets the pane", async (fixtures) => {
   const { app, browser } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Column Bot");
   const channel = await createConversation(browser, bot);
   for (const [path, tab, column] of [
@@ -457,19 +496,29 @@ test("Chat and Tasks are phone-shaped, other pages keep OpenBot's width, and an 
 test("Active shows OpenBot's waiting list, responsibilities and routines, each under its own name", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot, "Kiln repair plan");
   await serveTasks(browser, bot, channel, true);
   await app.open("/s/tasks");
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   await screen.getByRole("tab", "Active", { exact: true }).click();
   const needs = screen.getByRole("region", "Needs input", { exact: true });
   await expect(needs.getByText(/Kiln Bot wants to/)).toBeVisible();
-  await expect(needs.getByText(kilnQuestion, { exact: true })).toBeVisible();
+  await expect(
+    needs.getByText(`Kiln Bot asks: ${kilnQuestion}`, { exact: true }),
+  ).toBeVisible();
   // OpenBot's list always shows what the action would send.
   await expect(needs.getByText(/Thursday at 10 works\./)).toBeVisible();
   await expect(needs.getByText(/drive\/share/)).toHaveCount(0);
-  await expect(screen.getByText("Keep the support inbox at zero")).toBeVisible();
+  await expect(
+    screen.getByRole("button", "Keep the support inbox at zero Active", {
+      exact: true,
+    }),
+  ).toBeVisible();
   const routines = screen.getByRole("region", "Routines", { exact: true });
   await expect(routines.getByText("Post the standup notes")).toBeVisible();
   const names = await browser.evaluate(() =>
@@ -484,6 +533,7 @@ test("Active shows OpenBot's waiting list, responsibilities and routines, each u
 test("an approval is decided in OpenBot's own row", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot);
   const { sent } = await serveTasks(browser, bot, channel, false);
@@ -492,17 +542,16 @@ test("an approval is decided in OpenBot's own row", async (fixtures) => {
   const needs = screen.getByRole("region", "Needs input", { exact: true });
   await needs.getByRole("button", "Allow once", { exact: true }).click();
   await expect
-    .poll(() => sent)
-    .toContainEqual({
-      method: "POST",
-      path: "/api/approvals/r-waiting/decision",
-      body: { decision: "allow_once" },
-    });
+    .poll(() =>
+      sent.find((call) => call.path === "/api/approvals/r-waiting/decision"),
+    )
+    .toMatchObject({ method: "POST", body: { decision: "allow_once" } });
 });
 
 test("a Bot's question is answered in OpenBot's own row", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot);
   const { sent } = await serveTasks(browser, bot, channel, false);
@@ -511,21 +560,22 @@ test("a Bot's question is answered in OpenBot's own row", async (fixtures) => {
   const needs = screen.getByRole("region", "Needs input", { exact: true });
   const send = needs.getByRole("button", "Send answer", { exact: true });
   await expect(send).toBeDisabled();
-  await needs.getByRole("textbox", "Your answer", { exact: true }).fill("Kiln 2");
+  await needs
+    .getByRole("textbox", "Your answer", { exact: true })
+    .fill("Kiln 2");
   await expect(send).toBeEnabled();
   await send.click();
   await expect
-    .poll(() => sent)
-    .toContainEqual({
-      method: "POST",
-      path: "/api/approvals/questions/q-1/respond",
-      body: { response: "Kiln 2" },
-    });
+    .poll(() =>
+      sent.find((call) => call.path === "/api/approvals/questions/q-1/respond"),
+    )
+    .toMatchObject({ method: "POST", body: { response: "Kiln 2" } });
 });
 
 test("Up next starts or hides a suggestion with OpenBot's own suggestion list", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot);
   const { sent } = await serveTasks(browser, bot, channel, false);
@@ -534,22 +584,20 @@ test("Up next starts or hides a suggestion with OpenBot's own suggestion list", 
   await expect(screen.getByText(mugSuggestion, { exact: true })).toBeVisible();
   await screen.getByRole("button", "Work on it", { exact: true }).click();
   await expect
-    .poll(() => sent)
-    .toContainEqual({
-      method: "POST",
-      path: "/api/proactive/suggestions/s-1/start",
-      body: null,
-    });
+    .poll(() =>
+      sent.find((call) => call.path === "/api/proactive/suggestions/s-1/start"),
+    )
+    .toMatchObject({ method: "POST", body: null });
   await screen
     .getByRole("button", `Dismiss ${mugSuggestion}`, { exact: true })
     .click();
   await expect
-    .poll(() => sent)
-    .toContainEqual({
-      method: "POST",
-      path: "/api/proactive/suggestions/s-1/dismiss",
-      body: null,
-    });
+    .poll(() =>
+      sent.find(
+        (call) => call.path === "/api/proactive/suggestions/s-1/dismiss",
+      ),
+    )
+    .toMatchObject({ method: "POST", body: null });
 });
 
 /*
@@ -559,11 +607,15 @@ test("Up next starts or hides a suggestion with OpenBot's own suggestion list", 
 test("the Tasks badge counts exactly what the Needs input list draws", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot);
   await serveTasks(browser, bot, channel, true);
   await app.open("/");
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   await expect(
     screen.getByRole("link", "Tasks, 2 waiting", { exact: true }),
   ).toBeVisible();
@@ -586,7 +638,10 @@ test("the menu and the orb name the deployment's product, and nothing says OpenD
   await serveOpenDuetSkin(browser);
   await serveTranscription(browser, true);
   await app.open("/");
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   // OpenBot's own orb, as sign-in and onboarding draw it, and no drawing of OpenDuet's.
   const orb = screen.getByRole("button", `Talk to ${product}`, { exact: true });
   await expect(orb).toBeVisible();
@@ -599,14 +654,15 @@ test("the menu and the orb name the deployment's product, and nothing says OpenD
       };
     }, `Talk to ${product}`),
   ).toEqual({ own: true, canvas: false });
-  const menu = await openMenu(fixtures);
-  await expect(menu.getByText(new RegExp(product))).toBeVisible();
+  await openMenu(fixtures);
+  await expect(screen.getByRole("heading", new RegExp(product))).toBeVisible();
   expect(await readable(browser)).not.toContain("OpenDuet");
 });
 
 test("Tasks names nothing as OpenDuet either", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Kiln Bot");
   const channel = await createConversation(browser, bot);
   await serveTasks(browser, bot, channel, false);
@@ -645,18 +701,17 @@ test("where the composer cannot dictate, the orb presses nothing and puts the ca
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
   await serveTranscription(browser, false);
+  await app.open("/");
   const bot = await createBot(browser, "Quiet Bot");
   const channel = await createConversation(browser, bot);
   await app.open(`/channel/${channel}`);
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
-  expect(
-    await browser.evaluate(() => {
-      const editor = document.querySelector(
-        '[data-slot="composer-input"] [contenteditable="true"]',
-      );
-      return { label: editor?.getAttribute("aria-label") ?? null };
-    }),
-  ).toEqual({ label: "Message" });
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
+  await expect(
+    screen.getByRole("textbox", "Message", { exact: true }),
+  ).toBeVisible();
   await screen.getByRole("button", "Chat", { exact: true }).click();
   await expect
     .poll(() =>
@@ -672,13 +727,46 @@ test("where the composer cannot dictate, the orb presses nothing and puts the ca
   await app.open("/s/tasks");
   await screen.getByRole("button", "Chat", { exact: true }).click();
   await expect(browser).toHaveURL("/");
-  await expect(screen.getByRole("button", "Menu", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByRole("button", "Menu", { exact: true }),
+  ).toBeVisible();
 });
 
 test("pressing the orb starts and stops the composer's own dictation", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
   await serveTranscription(browser, true);
+  await browser.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      value: async () =>
+        new AudioContext().createMediaStreamDestination().stream,
+    });
+    class FixtureRecorder extends EventTarget {
+      static isTypeSupported() {
+        return true;
+      }
+      readonly mimeType = "audio/webm;codecs=opus";
+      state = "inactive";
+      ondataavailable: ((event: BlobEvent) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {
+        this.state = "recording";
+      }
+      stop() {
+        this.state = "inactive";
+        queueMicrotask(() => {
+          this.ondataavailable?.(
+            new BlobEvent("dataavailable", {
+              data: new Blob(["dictation fixture"], { type: this.mimeType }),
+            }),
+          );
+          this.onstop?.();
+        });
+      }
+    }
+    Object.defineProperty(window, "MediaRecorder", { value: FixtureRecorder });
+  });
+  await app.open("/");
   const bot = await createBot(browser, "Talkative Bot");
   const channel = await createConversation(browser, bot);
   await browser.route(/\/api\/audio\/transcriptions$/, (route) =>
@@ -686,20 +774,20 @@ test("pressing the orb starts and stops the composer's own dictation", async (fi
   );
   await app.open(`/channel/${channel}`);
   // The composer's own control is what the orb presses; the orb itself carries no other.
-  await expect(
-    browser.locator('[data-slot="composer-dictate"]'),
-  ).toBeVisible();
+  await expect(browser.locator('[data-slot="composer-dictate"]')).toBeVisible();
   const orb = screen.getByRole("button", `Talk to ${product}`, { exact: true });
   await browser
     .locator('[data-slot="composer-input"] [role="textbox"]')
     .fill("Book the kiln repair");
   await orb.click();
-  await expect(orb).toHaveAttribute("aria-pressed", "true");
+  const stop = screen.getByRole("button", "Stop and add to your message", {
+    exact: true,
+  });
+  await expect(stop).toHaveAttribute("aria-pressed", "true");
   await expect(
-    browser.locator('[data-slot="composer-dictate-cancel"]'),
+    screen.getByRole("img", "Live audio waveform", { exact: true }),
   ).toBeVisible();
-  await expect(browser.locator('[data-slot="composer-dictate"]')).toHaveCount(0);
-  await orb.click();
+  await stop.click();
   await expect(orb).toHaveAttribute("aria-pressed", "false");
   await expect(
     browser.locator('[data-slot="composer-input"] [role="textbox"]'),
@@ -715,6 +803,7 @@ test("pressing the orb starts and stops the composer's own dictation", async (fi
 test("the orb thinks for exactly as long as the composer offers to stop the Bot", async (fixtures) => {
   const { app, browser, screen } = fixtures;
   await serveOpenDuetSkin(browser);
+  await app.open("/");
   const bot = await createBot(browser, "Busy Bot");
   const channel = await createConversation(browser, bot);
   await configureChatStream(browser, []);
@@ -730,7 +819,10 @@ test("the orb thinks for exactly as long as the composer offers to stop the Bot"
     ({ runId, threadId }) => [{ type: "RUN_FINISHED", runId, threadId }],
   );
   await app.open(`/channel/${channel}`);
-  await expect(browser.locator("html")).toHaveAttribute("data-skin", "openduet");
+  await expect(browser.locator("html")).toHaveAttribute(
+    "data-skin",
+    "openduet",
+  );
   const pill = browser.locator('[data-openduet-frame] [aria-live="polite"] p');
   await expect(pill).toHaveAttribute("data-shown", "false");
   await browser

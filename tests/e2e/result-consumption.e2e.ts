@@ -191,3 +191,45 @@ for (const scrollAway of [false, true]) {
     await expect.poll(() => requests).toEqual([event()]);
   });
 }
+
+test("a clipped result with no visible area records only after it is revealed", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const requests = await observeRequests(browser);
+  await app.open(`${fixture}?clipped`);
+  await expect(screen.getByText(reply, { exact: true })).toHaveCount(1);
+  const height = await browser.evaluate(
+    () =>
+      document.querySelector("main > section")?.getBoundingClientRect().height,
+  );
+  expect(height).toBe(0);
+  await browser.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(requests).toEqual([]);
+  await screen.getByRole("button", "Reveal answer", { exact: true }).click();
+  await expect.poll(() => requests).toEqual([event()]);
+});
+
+test("a previous direct Bot result records while the next turn is running", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  const requests = await observeRequests(browser);
+  await app.open(`${fixture}?direct&busy&below-fold`);
+  await expect(screen.getByText(reply, { exact: true })).toHaveCount(1);
+  await screen.getByRole("button", "Begin next turn", { exact: true }).click();
+  await expect(screen.getByText("Still working", { exact: true })).toHaveCount(
+    1,
+  );
+  expect(requests).toEqual([]);
+  await screen.getByRole("button", "Move answer", { exact: true }).click();
+  await expect.poll(() => requests).toEqual([event()]);
+  await expect(screen.getByRole("status", "Run state")).toHaveText("Working");
+});

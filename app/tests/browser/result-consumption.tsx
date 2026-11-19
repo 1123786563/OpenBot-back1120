@@ -23,13 +23,15 @@ if (params.has("second"))
     role: "assistant",
     content: "A second part of the answer.",
   });
-if (params.has("next-turn"))
-  messages.push(
-    { id: "next-prompt", role: "user", content: "Another question" },
-    { id: "next-answer", role: "assistant", content: "Still working" },
-  );
+const nextTurn: Message[] = [
+  ...messages,
+  { id: "next-prompt", role: "user", content: "Another question" },
+  { id: "next-answer", role: "assistant", content: "Still working" },
+];
 
 function Fixture() {
+  const [continued, setContinued] = useState(false);
+  const [clipped, setClipped] = useState(params.has("clipped"));
   const [busy, setBusy] = useState(params.has("busy"));
   const [revision, setRevision] = useState(0);
   const [belowFold, setBelowFold] = useState(params.has("below-fold"));
@@ -44,13 +46,23 @@ function Fixture() {
       <button type="button" onClick={() => setBelowFold(!belowFold)}>
         Move answer
       </button>
+      <button type="button" onClick={() => setContinued(true)}>
+        Begin next turn
+      </button>
+      <button type="button" onClick={() => setClipped(false)}>
+        Reveal answer
+      </button>
       <output aria-label="Run state">{busy ? "Working" : "Settled"}</output>
       {belowFold && <div style={{ height: "110vh" }} />}
-      <section key={revision} className="mx-auto max-w-2xl">
+      <section
+        key={revision}
+        className="mx-auto max-w-2xl"
+        style={clipped ? { height: 0, overflow: "hidden" } : undefined}
+      >
         {direct ? (
           <CopilotChatConfigurationProvider threadId={threadId}>
             <CopilotChatMessageView
-              messages={messages}
+              messages={continued ? nextTurn : messages}
               assistantMessage={TelemetryAssistantMessage}
               isRunning={busy}
             />

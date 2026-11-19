@@ -125,7 +125,7 @@ export function createBillingCatalogRoutes(deps: {
   // Every route: trusted service credential, server-resolved organization,
   // capability AND personal-account authorization. The request body never
   // designates a caller or an account it is not authorized for.
-  routes.use("*", async (c, next) => {
+  routes.use("/internal/v1/billing/*", async (c, next) => {
     const verdict = deps.verifyCredential(c.req.header("authorization"));
     if (!verdict.ok || !verdict.organizationId) {
       return problem(

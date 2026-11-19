@@ -137,6 +137,10 @@ const suites = {
     "tests/e2e/check-in-row.e2e.ts",
     "tests/e2e/transcript-updates.e2e.ts",
     "tests/e2e/result-consumption.e2e.ts",
+    "tests/e2e/skin-slots.e2e.ts",
+    "tests/e2e/skins-opendots.e2e.ts",
+    "tests/e2e/skins-openduet.e2e.ts",
+    "tests/e2e/skins-openmuse.e2e.ts",
 
     "tests/e2e/subtask-transcript.e2e.ts",
 
@@ -202,6 +206,10 @@ const suites = {
     "tests/e2e/check-in-row.e2e.ts",
     "tests/e2e/transcript-updates.e2e.ts",
     "tests/e2e/result-consumption.e2e.ts",
+    "tests/e2e/skin-slots.e2e.ts",
+    "tests/e2e/skins-opendots.e2e.ts",
+    "tests/e2e/skins-openduet.e2e.ts",
+    "tests/e2e/skins-openmuse.e2e.ts",
 
     "tests/e2e/subtask-transcript.e2e.ts",
 

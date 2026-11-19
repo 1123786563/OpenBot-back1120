@@ -58,6 +58,10 @@ for (const skin of skins) {
     await screen
       .getByRole("textbox", "Message", { exact: true })
       .fill("Keep the hooks honest");
+    // Connecting briefly makes the composer busy; inspect the idle hooks after it settles.
+    await expect(
+      browser.locator('[data-slot="composer-send"]'),
+    ).toHaveAttribute("aria-label", "Send message");
     const hooks = await browser.evaluate(() => {
       const composer = document.querySelector('[data-slot="composer"]');
       const input = composer?.querySelector('[data-slot="composer-input"]');
@@ -103,41 +107,34 @@ for (const skin of skins) {
   });
 }
 
-test("the full-size composer on the home page carries the same hooks", async ({
+test("the full-size composer carries its form, input, attach and send hooks", async ({
   app,
   browser,
   screen,
 }) => {
   await app.open("/");
-  const composer = browser.locator('form[data-slot="composer"]');
-  await expect(composer).toBeVisible();
-  await screen
-    .getByRole("textbox", "Message", { exact: true })
-    .fill("Keep the hooks honest");
+  const channelId = await createConversation(browser, "general-assistant");
+  // Real conversation pages use the compact layout; the existing fixture exposes the full layout.
+  await app.open(`/tests/browser/composer.html?channel=${channelId}`);
+  await expect(screen.getByRole("button", "Attach a file")).toBeEnabled();
+  await expect(browser.locator('form[data-slot="composer"]')).toBeVisible();
   await expect(
     browser.locator(
-      '[data-slot="composer-input"] [role="textbox"][aria-label="Message"]',
+      '[data-slot="composer"] [data-slot="composer-input"] [role="textbox"][aria-label="Message"]',
     ),
   ).toBeVisible();
   await expect(
     browser.locator('[data-slot="composer-input"] button'),
   ).toHaveCount(0);
-  const send = browser.locator('[data-slot="composer-send"]');
+  const attach = browser.locator(
+    '[data-slot="composer"] button[data-slot="composer-attach"]',
+  );
+  await expect(attach).toHaveAttribute("aria-label", "Attach a file");
+  const send = browser.locator(
+    '[data-slot="composer"] button[data-slot="composer-send"]',
+  );
   await expect(send).toHaveAttribute("type", "submit");
   await expect(send).toHaveAttribute("aria-label", "Send message");
-
-  // The attach hook on the full layout needs a conversation to attach to.
-  const channelId = await createConversation(browser, "general-assistant");
-  await app.open(`/tests/browser/composer.html?channel=${channelId}`);
-  await expect(screen.getByRole("button", "Attach a file")).toBeEnabled();
-  const attach = await browser.evaluate(() => {
-    const attach = document.querySelector('[data-slot="composer-attach"]');
-    return {
-      tag: attach?.tagName ?? null,
-      label: attach?.getAttribute("aria-label") ?? null,
-    };
-  });
-  expect(attach).toEqual({ tag: "BUTTON", label: "Attach a file" });
 });
 
 test("the composer's stop button carries its hook while a Bot is working", async (fixtures) => {
@@ -172,7 +169,9 @@ test("the composer's stop button carries its hook while a Bot is working", async
     .getByRole("textbox", "Message", { exact: true })
     .fill("Summarise my inbox.");
   await screen.getByRole("button", "Send message", { exact: true }).tap();
-  const stop = browser.locator('[data-slot="composer-stop"]');
+  const stop = browser.locator(
+    'form[data-slot="composer"] button[data-slot="composer-stop"]',
+  );
   await expect(stop).toBeVisible();
   await expect(stop).toHaveAttribute("aria-label", "Stop the Bot");
   // One action button: while the Bot works, Stop stands in for Send.
@@ -188,6 +187,11 @@ test("the detail pane, its header and its title carry their hooks", async (fixtu
   await browser.setViewport({ width: 1450, height: 800 });
   await app.open(`/channel/${channelId}?watch=true`);
   await expect(browser.locator('[data-slot="detail-pane"]')).toBeVisible();
+  await expect(
+    browser.locator(
+      '[data-slot="detail-pane"] section[aria-label="Computer sidebar"]',
+    ),
+  ).toBeVisible();
   const pane = await browser.evaluate(() => {
     const pane = document.querySelector('[data-slot="detail-pane"]');
     const header = pane?.querySelector('[data-slot="detail-pane-header"]');
@@ -198,16 +202,24 @@ test("the detail pane, its header and its title carry their hooks", async (fixtu
       close:
         header?.querySelector('button[aria-label="Close details"]') instanceof
         HTMLElement,
+      hasComputer:
+        pane?.querySelector('section[aria-label="Computer sidebar"]') instanceof
+        HTMLElement,
       holdsComposer:
         pane?.querySelector('[data-slot="composer"]') instanceof HTMLElement,
+      holdsTranscript:
+        pane?.querySelector('[data-slot="message-scroller"]') instanceof
+        HTMLElement,
     };
   });
   expect(pane).toEqual({
     headerIsChild: true,
     title: "Computer",
     close: true,
+    hasComputer: true,
     // The pane holds the Bot's screen, not the conversation it belongs to.
     holdsComposer: false,
+    holdsTranscript: false,
   });
 });
 
@@ -252,6 +264,7 @@ test("each conversation page has one header naming the conversation", async (fix
   await app.open(`/channel/${group}`);
   await expect(browser).toHaveURL(new RegExp(`/group/${RegExp.escape(group)}`));
   await expect(header).toHaveCount(1);
+  await expect(header).toContainText(first.name);
   await expect(header).toContainText(second.name);
 
   await app.open("/channel/new");

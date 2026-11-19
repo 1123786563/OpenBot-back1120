@@ -96,6 +96,7 @@ async function serveFrame(browser: Browser) {
     agentListReads: 0,
     memoryReads: 0,
     lifecycleWrites: [] as string[],
+    lifecycleReads: [] as boolean[],
     paused: new Set<string>(),
   };
 
@@ -178,11 +179,13 @@ async function serveFrame(browser: Browser) {
     /\/api\/bots\/[^/]+\/(?:lifecycle|pause|resume)$/,
     (route) => {
       const url = new URL(route.request.url);
-      const [, , id, action] = url.pathname.split("/");
+      const [, , , id, action] = url.pathname.split("/");
       if (route.request.method === "POST") {
         if (action === "pause") state.paused.add(id);
         if (action === "resume") state.paused.delete(id);
         state.lifecycleWrites.push(`${route.request.method} ${url.pathname}`);
+      } else {
+        state.lifecycleReads.push(state.paused.has(id));
       }
       return route.fulfill({
         json: {
@@ -524,8 +527,22 @@ test("the Bot on screen can be paused and resumed from the top bar", async (fixt
   await expect
     .poll(() => [...state.lifecycleWrites])
     .toContain("POST /api/bots/ada/pause");
+  // The write flips the served state, and the invalidated read brings it back to the top bar.
+  await expect
+    .poll(() => [
+      ...state.lifecycleWrites,
+      ...state.lifecycleReads.map((paused) => `read:${String(paused)}`),
+    ])
+    .toEqual(["POST /api/bots/ada/pause", "read:false", "read:true"]);
   await expect(
     screen.getByRole("button", "Resume Ada", { exact: true }),
+  ).toBeVisible();
+  await screen.getByRole("button", "Resume Ada", { exact: true }).click();
+  await expect
+    .poll(() => state.lifecycleWrites)
+    .toEqual(["POST /api/bots/ada/pause", "POST /api/bots/ada/resume"]);
+  await expect(
+    screen.getByRole("button", "Pause Ada", { exact: true }),
   ).toBeVisible();
   // A page about no one Bot offers no pause, since there would be nothing to say it applies to.
   await openSkin(fixtures, "/connections");
@@ -655,11 +672,13 @@ test("every Bot wears OpenBot's own avatar, drawn from its avatarSeed", async (f
   expect(byName.Brook?.drawing).not.toBe(byName.Ada?.drawing);
   // The coworker home wears the same Bot's face, larger.
   await openSkin(fixtures, "/channel/new?agent=ada");
-  expect(
-    await browser.evaluate(
-      () =>
-        document.querySelector("[data-opendots-persona] [role='img'] svg") !==
-        null,
-    ),
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      browser.evaluate(
+        () =>
+          document.querySelector("[data-opendots-persona] [role='img'] svg") !==
+          null,
+      ),
+    )
+    .toBe(true);
 });
