@@ -1,5 +1,3 @@
-import { ErrorDetails } from "@/lib/i18n/errors";
-import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   OPENBOT_HARNESS_NAME,
   summaryFor,
@@ -18,7 +16,14 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { MotionConfig, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { HarnessMark } from "@/components/agents/harness-mark";
 import AgentOrb from "@/components/agents/orb/agent-orb";
 import { BusinessComputerLink } from "@/components/edition/team-features-dialog";
@@ -40,6 +45,7 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -55,9 +61,10 @@ import {
   agentInputFrom,
 } from "@/lib/agents/form";
 import {
+  ISOLATED_EXPLAINED,
+  ISOLATED_PUBLIC,
   ISOLATION_NOT_ALLOWED,
   ISOLATION_UNAVAILABLE,
-  isolatedExplained,
 } from "@/lib/agents/isolation";
 import { createAgentMutationOptions } from "@/lib/agents/mutations";
 import {
@@ -73,6 +80,8 @@ import { isComposing } from "@/lib/composing";
 import { ALWAYS_ON_APP } from "@/lib/connections/rows";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { myCapabilitiesQueryOptions } from "@/lib/enterprise/queries";
+import { ui, uiNodes, useLocale } from "@/lib/i18n";
+import { ErrorDetails } from "@/lib/i18n/errors";
 import {
   type PluginsPage,
   pluginKeys,
@@ -90,29 +99,72 @@ import { queryClient } from "@/query-client";
 export function NewBotSheet({
   open,
   onClose,
+  onOpen,
   onCreated,
+  children,
+  preserveDraft = false,
 }: {
   open: boolean;
   onClose: () => void;
+  onOpen?: () => void;
+  children?: ReactNode;
+  preserveDraft?: boolean;
   /** The new Bot's id, so the caller can take the person to it. */
   onCreated: (agentId: string) => void;
 }) {
   useLocale();
+  const [draftVersion, setDraftVersion] = useState(0);
+  const discardOnClose = useRef(false);
+  const submission = useRef(false);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const app = document.getElementById("root");
+    if (!app || app.inert) return;
+    // The sheet is portaled outside the app root. Keep the app untabbable while
+    // the dialog's focus guards transfer focus across animation frames.
+    app.inert = true;
+    return () => {
+      app.inert = false;
+    };
+  }, [open]);
   return (
     <Sheet
-      onOpenChange={(next) => {
-        if (!next) onClose();
+      onOpenChange={(next, event) => {
+        if (next) {
+          onOpen?.();
+        } else if (submission.current) {
+          event.cancel();
+        } else {
+          discardOnClose.current = event.reason === "close-press";
+          onClose();
+        }
+      }}
+      onOpenChangeComplete={(next) => {
+        if (!next && discardOnClose.current) {
+          discardOnClose.current = false;
+          setDraftVersion((current) => current + 1);
+        }
       }}
       open={open}
     >
+      {children}
       <SheetContent
         className="gap-0 data-[side=right]:w-[calc(100%-1rem)] data-[side=right]:sm:max-w-2xl"
+        keepMounted={preserveDraft}
         showCloseButton={false}
         side="right"
         variant="inset"
       >
-        {/* Inside the popup, so it unmounts on close and a reopened sheet starts empty. */}
-        <NewBotFlow onCreated={onCreated} />
+        <NewBotFlow
+          key={draftVersion}
+          onCreated={(agentId) => {
+            discardOnClose.current = true;
+            onCreated(agentId);
+          }}
+          open={open}
+          preserveDraft={preserveDraft}
+          submission={submission}
+        />
       </SheetContent>
     </Sheet>
   );
@@ -191,7 +243,17 @@ function defaultInstructions(name: string, runtime: Runtime): string {
  * The body is the one part of the sheet that scrolls, and it has to say so: a flex child with
  * `min-h-0` and no overflow of its own shrinks and paints over the footer instead.
  */
-function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
+function NewBotFlow({
+  onCreated,
+  open,
+  preserveDraft,
+  submission,
+}: {
+  onCreated: (agentId: string) => void;
+  open: boolean;
+  preserveDraft: boolean;
+  submission: RefObject<boolean>;
+}) {
   useLocale();
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
@@ -229,6 +291,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
   const [tried, setTried] = useState(false);
   /** Continue on the address is dialling it, before anything is created. */
   const [checking, setChecking] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   /** Why the server could not reach the address on the last Continue, in its own words. */
   const [unreachable, setUnreachable] = useState<string>();
   /** The Bot just made, held for the moment the sheet spends saying so before it hands over. */
@@ -268,13 +331,16 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
     onCreatedRef.current = onCreated;
   });
   useEffect(() => {
-    if (!createdId) return;
+    if (!open) setKey("");
+  }, [open]);
+  useEffect(() => {
+    if (!open || !createdId) return;
     const timer = window.setTimeout(
       () => onCreatedRef.current(createdId),
       reduceMotion ? CREATED_BEAT_REDUCED_MS : CREATED_BEAT_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [createdId, reduceMotion]);
+  }, [createdId, open, reduceMotion]);
 
   const named = name.trim() !== "";
   const endpointIssue =
@@ -282,7 +348,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
       ? "Enter your agent's address."
       : agentFormSchema.shape.endpoint.safeParse(endpoint).error?.issues[0]
           ?.message;
-  const busy = checking || createAgent.isPending;
+  const busy = submitting;
   const canContinue =
     !busy &&
     (step === "about"
@@ -380,13 +446,25 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
   }
 
   const submit = () => {
+    if (step === "about" && !named) {
+      setNameError("Name is required.");
+      return;
+    }
     if (!canContinue) return;
-    // The failure is shown from the mutation's own state; nothing more to do with it here.
-    void Promise.resolve(advance()).catch(() => undefined);
+    if (submission.current) return;
+    submission.current = true;
+    setSubmitting(true);
+    void Promise.resolve(advance())
+      .catch(() => undefined)
+      .finally(() => {
+        submission.current = false;
+        setSubmitting(false);
+      });
   };
 
   return (
     <form
+      aria-busy={busy}
       className="flex min-h-0 flex-1 flex-col"
       noValidate
       /*
@@ -412,7 +490,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
         submit();
       }}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pt-8 pb-6">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pt-5 pb-5 sm:px-6 sm:pt-8 sm:pb-6">
         <MotionConfig reducedMotion="user">
           {/* Shares its layout id with the orb on the created view, so it travels there. */}
           <div className="flex items-center gap-3">
@@ -426,10 +504,17 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
               {ui("New Bot")}
             </SheetTitle>
           </div>
+          {step === "about" && builtInAvailable ? (
+            <SheetDescription className="mt-2">
+              {ui(
+                "Start with a name. You can edit instructions and access later in Setup.",
+              )}
+            </SheetDescription>
+          ) : null}
 
           <motion.div
             animate={{ opacity: 1, x: 0 }}
-            className="mt-6"
+            className="mt-4 sm:mt-6"
             initial={{ opacity: 0, x: 24 * direction }}
             key={step}
             transition={{ duration: 0.2, ease: "easeOut" }}
@@ -459,9 +544,10 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
                     onChange: setIsolated,
                   }}
                   onInstructions={setInstructions}
+                  onInvalidName={() => setNameError("Name is required.")}
                   onName={(value) => {
                     setName(value);
-                    setNameError(undefined);
+                    if (value.trim()) setNameError(undefined);
                   }}
                   onVisibility={setVisibility}
                   visibility={visibility}
@@ -500,17 +586,38 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
             )}
           </motion.div>
         </MotionConfig>
-
-        {createAgent.error ? (
-          <p className="mt-6 text-destructive text-sm" role="alert">
-            {<ErrorDetails error={createAgent.error} />}
-          </p>
-        ) : null}
       </div>
 
-      <SheetFooter className="flex-row flex-wrap items-center justify-between border-t border-border">
+      <SheetFooter className="flex-row flex-wrap items-center justify-between gap-y-2 border-t border-border">
+        {createAgent.error ? (
+          <div
+            className="basis-full rounded-md bg-destructive/10 px-3 py-2 text-destructive text-sm"
+            role="alert"
+          >
+            <span className="block font-medium">
+              {ui("Could not create the Bot. Try again.")}
+            </span>
+            <ErrorDetails error={createAgent.error} />
+          </div>
+        ) : null}
+        {step === "about" && (name.trim() || instructions.trim()) ? (
+          <p
+            className="basis-full text-muted-foreground text-xs"
+            id="new-bot-cancel-hint"
+          >
+            {preserveDraft
+              ? ui("Escape keeps your draft. Cancel discards it.")
+              : ui("Closing this form discards your changes.")}
+          </p>
+        ) : null}
         {step === "about" ? (
           <SheetClose
+            disabled={busy}
+            aria-describedby={
+              name.trim() || instructions.trim()
+                ? "new-bot-cancel-hint"
+                : undefined
+            }
             render={<Button className="px-4" size="lg" variant="ghost" />}
           >
             {ui("Cancel")}
@@ -527,17 +634,27 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
             {ui("Back")}
           </Button>
         )}
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {step === "about" && builtInAvailable ? (
+          <span className="sr-only" id="new-bot-custom-hint">
+            {ui(
+              "Connect an agent you already run. You’ll need its AG-UI address.",
+            )}
+          </span>
+        ) : null}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between">
           {step === "about" && builtInAvailable && (
             <Button
               type="button"
+              aria-describedby="new-bot-custom-hint"
               variant="outline"
               size="lg"
               disabled={busy}
               onClick={() => {
                 const parsed = agentFormSchema.shape.name.safeParse(name);
                 if (!parsed.success) {
-                  setNameError(parsed.error.issues[0]?.message);
+                  setNameError(
+                    parsed.error.issues[0]?.message ?? "Name is required.",
+                  );
                   document.getElementById("new-bot-name")?.focus();
                   return;
                 }
@@ -559,7 +676,7 @@ function NewBotFlow({ onCreated }: { onCreated: (agentId: string) => void }) {
             >
               {checking
                 ? ui("Checking…")
-                : createAgent.isPending
+                : submitting
                   ? ui("Creating…")
                   : step === "endpoint" || (step === "about" && !custom)
                     ? ui("Create Bot")
@@ -684,6 +801,7 @@ function AboutStep({
   instructions,
   visibility,
   onName,
+  onInvalidName,
   onInstructions,
   onVisibility,
 }: {
@@ -692,6 +810,7 @@ function AboutStep({
   instructions: string;
   visibility: Visibility;
   onName: (value: string) => void;
+  onInvalidName: () => void;
   onInstructions: (value: string) => void;
   onVisibility: (value: Visibility) => void;
   apps: GiveableApp[];
@@ -711,20 +830,30 @@ function AboutStep({
           autoFocus
           id="new-bot-name"
           aria-invalid={Boolean(nameError)}
-          aria-describedby={nameError ? "new-bot-name-error" : undefined}
+          aria-describedby={
+            nameError ? "new-bot-name-error" : "new-bot-name-hint"
+          }
           maxLength={80}
+          onBlur={() => {
+            if (name && !name.trim()) onInvalidName();
+          }}
           onChange={(event) => onName(event.target.value)}
           placeholder={ui("Expense Review")}
+          required
           value={name}
         />
-        {nameError && (
+        {nameError ? (
           <p
             id="new-bot-name-error"
             role="alert"
             className="text-sm text-destructive"
           >
-            {nameError}
+            {ui(nameError)}
           </p>
+        ) : (
+          <FieldDescription id="new-bot-name-hint">
+            {ui("Give your Bot a name. You can change it later.")}
+          </FieldDescription>
         )}
       </Field>
       <Field>
@@ -786,7 +915,9 @@ function AboutStep({
         <FieldSet>
           <FieldLegend variant="label">{ui("Apps it can use")}</FieldLegend>
           <FieldDescription>
-            {ui("It always uses the account of whoever is asking.")}
+            {ui(
+              "Checked apps are enabled for this Bot. Each person uses their own connected account.",
+            )}
           </FieldDescription>
           <div className="grid gap-2 sm:grid-cols-2">
             {apps.map((app) => (
@@ -795,7 +926,8 @@ function AboutStep({
               <div
                 className={cn(
                   "flex items-center gap-3 rounded-lg bg-muted/50 pr-3 text-sm",
-                  app.key === ALWAYS_ON_APP && "sm:col-span-2",
+                  app.key === ALWAYS_ON_APP &&
+                    "flex-wrap gap-x-2 gap-y-0 sm:col-span-2",
                 )}
                 key={app.key}
               >
@@ -812,10 +944,12 @@ function AboutStep({
                   />
                   <PluginLogo logo={app.logo} />
                   <span className="min-w-0 truncate font-medium">
-                    {app.displayName}
+                    {app.key === ALWAYS_ON_APP
+                      ? ui("Routines")
+                      : app.displayName}
                   </span>
                 </label>
-                {app.key === ALWAYS_ON_APP ? <RoutinesAppHint /> : null}
+                {app.key === ALWAYS_ON_APP ? <RoutinesAppHint stacked /> : null}
               </div>
             ))}
           </div>
@@ -854,15 +988,16 @@ function EveryAppList({ turnedOn }: { turnedOn: UseQueryResult<PluginsPage> }) {
             <li
               className={cn(
                 "flex items-center gap-3 rounded-lg bg-muted/50 p-3 text-sm",
-                server.id === ALWAYS_ON_APP && "sm:col-span-2",
+                server.id === ALWAYS_ON_APP &&
+                  "flex-wrap gap-x-2 gap-y-1 sm:col-span-2",
               )}
               key={server.id}
             >
               <PluginLogo logo={server.logo} />
               <span className="min-w-0 truncate font-medium">
-                {server.title}
+                {server.id === ALWAYS_ON_APP ? ui("Routines") : server.title}
               </span>
-              {server.id === ALWAYS_ON_APP ? <RoutinesAppHint /> : null}
+              {server.id === ALWAYS_ON_APP ? <RoutinesAppHint stacked /> : null}
             </li>
           ))}
         </ul>
@@ -946,7 +1081,8 @@ function IsolatedOption({
                 }
               />
               <TooltipContent className="block text-pretty">
-                {isolatedExplained(isPublic)}
+                {ui(ISOLATED_EXPLAINED)}
+                {isPublic ? ` ${ui(ISOLATED_PUBLIC)}` : null}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -954,7 +1090,22 @@ function IsolatedOption({
             className="text-pretty text-muted-foreground text-xs"
             id="new-bot-isolated-summary"
           >
-            {reason ?? ui("A computer of its own, instead of sharing yours.")}
+            {reason
+              ? ui(reason)
+              : ui("A computer of its own, instead of sharing yours.")}
+            {!checked || reason ? (
+              <span className="mt-1 block">
+                {isPublic
+                  ? ui(
+                      "Without a dedicated computer, each person’s work uses their own shared computer when available.",
+                    )
+                  : ui(
+                      "Without a dedicated computer, this Bot uses the computer shared by your Bots when available.",
+                    )}
+              </span>
+            ) : isPublic ? (
+              <span className="mt-1 block">{ui(ISOLATED_PUBLIC)}</span>
+            ) : null}
           </p>
         </div>
       </div>

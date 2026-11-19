@@ -8,33 +8,36 @@ web
 
 ## Users
 
-Two audiences use the same app.
+The team edition serves employees and IT owners. The personal edition serves one person on their own machine.
 
 - **Company employee (daily end user).** Usually not technical. Asks Bots to do jobs: read an expense claim, turn a meeting note into follow-ups, research a topic. Expects the ease of ChatGPT, Claude or Grok.
 - **IT owner (buyer and administrator).** Chooses and deploys OpenBot. Adds Bots, grants tools and connections, answers approvals, and reads the audit log. Needs trust and control.
 
+- **Personal edition user.** Uses the Personal Assistant for everyday work and can teach it by recording a browser workflow. The edition starts with one shared Computer and requires no sign-in.
+
 ## Product Purpose
 
-OpenBot is an AI assistant that a company runs on its own infrastructure and can change completely. Any agent that speaks AG-UI arrives as a coworker. Success: employees use it as their everyday assistant, and the IT owner is confident about what each Bot can do.
+OpenBot is a self-hostable workspace for AI coworkers. It connects agents that speak AG-UI and gives people a place to work with them. Success means people use Bots for everyday work and can see what their Bots can do.
 
 ## Positioning
 
-Bots are coworkers, and you own them. Each Bot has a computer of its own (a real browser with its own logins, files and only the tools you grant). It runs on your infrastructure, with your PostgreSQL and your model choice. A hosted chatbot cannot truthfully say either.
+OpenBot lets operators choose where the workspace, agent execution and models run. A Bot can work in a real browser with the connections and tools it has been granted. Team deployments can give Bots their own Computers. The personal edition uses one shared Computer.
 
 ## Operating Context
 
 - The web app in `app/` is the main surface. A Tauri desktop app and a mobile client use the same frame.
 - Main areas: chat with a chosen Bot, the Bot's own computer and browser, Bots, skills, routines, connections, memory, approvals, audit, admin and settings.
 - OpenBot is a template. Companies clone the repository and rename it through `brand.yaml`.
-- A person can pick a skin per account: the default `openbot` skin, OpenDuet, OpenDots or OpenMuse.
+- During the Astryx migration, the existing skins remain available: `openbot`, OpenDuet, OpenDots and OpenMuse.
 
 ## Capabilities and Constraints
 
 - Light and dark mode must both ship finished.
-- The skin system stays. This redesign replaces the default `openbot` skin. The other skins stay as alternates.
+- [The Astryx migration](../docs/adr/0001-unify-web-ui-with-astryx.md) starts with the Bots list and creation flow. The existing interface remains available as a fallback during the pilot. After the migration, retire the four skins and preserve light and dark themes, brand configuration and existing workflows.
+- [Interface localization](../docs/adr/0007-interface-localization-boundary.md) covers English and Simplified Chinese. Changing the interface language preserves user input, Bot names, conversations, skill bodies and external service text.
 - Desktop and mobile must both work at native quality.
 - Dense admin screens (audit log, approvals, tables, settings) must stay easy to scan.
-- Stack: React 19, Vite, Tailwind 4, shadcn and Base UI components, Tabler icons, Motion.
+- The Web app uses React, Vite and Tailwind. Astryx is the target component system. Existing components remain in use until their callers migrate.
 
 ## Brand Commitments
 
@@ -46,14 +49,14 @@ Bots are coworkers, and you own them. Each Bot has a computer of its own (a real
 
 ## Evidence on Hand
 
-- Real product copy in `README.md` and `docs/`.
+- Product copy and workflows are documented in the [README](../README.md) and [personal edition guide](../docs/personal-edition.md).
 - Real Bots: General Assistant, Knowledge, Risk Analyst, and ten catalog Bots in `examples/fintech/catalog/`.
 - No customer logos, testimonials or usage numbers. Do not invent them.
 
 ## Product Principles
 
 1. A Bot is a colleague, not a chat widget. It has a name, a computer and a record of its work.
-2. Ownership feels calm and solid. Nothing in the interface suggests a hosted service.
+2. Make ownership visible. People can see which Bot, Computer and connections are involved in the work.
 3. The conversation leads. Chrome that does not help the current job stays out of the way.
 4. Control is visible but quiet. Approvals and audit are part of the product, not an alarm system.
 5. Every detail is finished. Rough spacing, type and motion break trust.

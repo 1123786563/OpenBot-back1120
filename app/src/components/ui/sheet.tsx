@@ -1,8 +1,8 @@
-import { ui, useLocale } from "@/lib/i18n";
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { IconX } from "@tabler/icons-react";
 import type * as React from "react";
 import { Button } from "@/components/ui/button";
+import { ui, useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -53,16 +53,18 @@ function SheetContent({
   side = "right",
   variant = "default",
   showCloseButton = true,
+  keepMounted = false,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left";
   /** `inset` floats the sheet in from the edges; `default` runs it flush to them. */
   variant?: "default" | "inset";
   showCloseButton?: boolean;
+  keepMounted?: boolean;
 }) {
   useLocale();
   return (
-    <SheetPortal>
+    <SheetPortal keepMounted={keepMounted}>
       <SheetOverlay />
       <SheetPrimitive.Popup
         data-slot="sheet-content"

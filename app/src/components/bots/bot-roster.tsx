@@ -1,13 +1,13 @@
-import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import {
   IconBolt,
   IconChevronRight,
   IconPlus,
+  IconSearch,
   IconShare,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { AbstractAvatar } from "@/components/agents/abstract-avatar";
 import {
   attentionSummary,
@@ -21,6 +21,7 @@ import {
 import { NeedsYouBoard } from "@/components/needs-you/board";
 import { DoneTasks, useNeedsYou } from "@/components/needs-you/needs-you";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Item,
   ItemActions,
@@ -30,6 +31,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
+import { SheetTrigger } from "@/components/ui/sheet";
 import { type AgentProfile, agentListQueryOptions } from "@/lib/agents/queries";
 import { groupRoster } from "@/lib/agents/roster";
 import { shownSubtitle } from "@/lib/agents/subtitle";
@@ -38,6 +40,7 @@ import {
   botAttentionQueryOptions,
 } from "@/lib/bot-lifecycle/queries";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
+import { ui, uiNodes, useLocale } from "@/lib/i18n";
 
 /**
  * Every Bot the person can reach, in the one place they are listed: what needs the person first,
@@ -51,7 +54,9 @@ import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
  * This replaces three screens (Bots, Agents and Team Bots) that listed the same Bots three ways.
  */
 export function BotRoster() {
-  useLocale();
+  const locale = useLocale();
+  const [search, setSearch] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   const agents = useQuery(agentListQueryOptions());
@@ -60,75 +65,152 @@ export function BotRoster() {
   const list = useNeedsYou();
   const byId = new Map((attention.data ?? []).map((bot) => [bot.agentId, bot]));
 
-  if (agents.isPending) return null;
+  if (agents.isPending) {
+    return (
+      <p className="mt-6 text-muted-foreground text-sm" role="status">
+        {ui("Loading Bots…")}
+      </p>
+    );
+  }
   // Only when nothing ever loaded: a failed background refetch keeps the roster it had.
   if (agents.data === undefined) {
     return (
-      <p className="mt-6 text-destructive text-sm" role="alert">
-        {ui("Couldn't load your Bots. Reload the page.")}
-      </p>
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
+        <p className="text-destructive" role="alert">
+          {ui("Could not load Bots.")}
+        </p>
+        <Button
+          disabled={agents.isFetching}
+          onClick={() => void agents.refetch()}
+          size="sm"
+          variant="outline"
+        >
+          {agents.isFetching ? ui("Loading Bots…") : ui("Retry")}
+        </Button>
+      </div>
     );
   }
   // Every Bot stays in its own section; what it waits on is on the board above, by name.
   const { pinned, yours, shared } = groupRoster(agents.data);
   const yoursPinned = pinned.some((agent) => agent.mine);
 
+  const term = search.trim().toLocaleLowerCase(locale);
+  const matches = term
+    ? [...pinned, ...yours, ...shared].filter((agent) =>
+        `${agent.name} ${shownSubtitle(agent.title) ?? ""}`
+          .toLocaleLowerCase(locale)
+          .includes(term),
+      )
+    : [];
+
+  const finder =
+    pinned.length + yours.length + shared.length > 0 ? (
+      <div className="relative mt-6">
+        <IconSearch
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          aria-label={ui("Search Bots")}
+          className="min-h-10 pl-9"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={ui("Search Bots")}
+          ref={searchInput}
+          type="search"
+          value={search}
+        />
+      </div>
+    ) : null;
+
   return (
     <>
-      {/*
-       * What waits on the person, each thing under the Bot it came from and decided where it is.
-       * A Bot waiting on them stays in its own section below too, with its badge.
-       */}
       <NeedsYouBoard />
-      {pinned.length ? (
-        <PageSection title={ui("Pinned")}>
-          <RosterRows agents={pinned} byId={byId} />
-        </PageSection>
-      ) : null}
-      <PageSection title={ui("Yours")}>
-        {yours.length ? (
-          <RosterRows agents={yours} byId={byId} />
-        ) : (
-          <PageEmpty
-            action={
-              yoursPinned ? undefined : (
+      {finder}
+      {term ? (
+        <PageSection title={ui("Search results")}>
+          <div role="status" className="sr-only">
+            {ui("Matching Bots: {{value0}}", {
+              value0: String(matches.length),
+            })}
+          </div>
+          {matches.length ? (
+            <RosterRows agents={matches} byId={byId} />
+          ) : (
+            <PageEmpty
+              action={
                 <Button
-                  render={(props) => (
-                    <Link {...props} search={{ new: true }} to="/bots" />
-                  )}
+                  onClick={() => {
+                    setSearch("");
+                    searchInput.current?.focus();
+                  }}
                   size="sm"
                   variant="outline"
                 >
-                  {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
+                  {ui("Clear search")}
                 </Button>
-              )
-            }
-            icon={IconBolt}
-            title={yoursPinned ? ui("All pinned") : ui("No Bots yet")}
-          >
-            {yoursPinned
-              ? ui("Your Bots are all pinned above.")
-              : ui("Bots you create show up here.")}
-          </PageEmpty>
-        )}
-      </PageSection>
-      {shared.length > 0 || !personal ? (
-        <PageSection
-          title={personal ? ui("Included with OpenBot") : ui("Shared with you")}
-        >
-          {shared.length ? (
-            <RosterRows agents={shared} byId={byId} />
-          ) : (
-            <PageEmpty icon={IconShare} title={ui("Nothing shared yet")}>
-              {ui("Bots somebody shares with you show up here.")}
+              }
+              icon={IconSearch}
+              title={ui("No matching Bots")}
+            >
+              {ui("Try a different name or description.")}
             </PageEmpty>
           )}
         </PageSection>
-      ) : null}
-      <DoneTasks done={list.done} />
-      {hidden.data?.length ? (
-        <HiddenSection agents={hidden.data} byId={byId} personal={personal} />
-      ) : null}
+      ) : (
+        <>
+          {pinned.length ? (
+            <PageSection title={ui("Pinned")}>
+              <RosterRows agents={pinned} byId={byId} />
+            </PageSection>
+          ) : null}
+          <PageSection title={ui("Yours")}>
+            {yours.length ? (
+              <RosterRows agents={yours} byId={byId} />
+            ) : (
+              <PageEmpty
+                action={
+                  yoursPinned ? undefined : (
+                    <SheetTrigger
+                      render={<Button size="sm" variant="outline" />}
+                    >
+                      {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
+                    </SheetTrigger>
+                  )
+                }
+                icon={IconBolt}
+                title={yoursPinned ? ui("All pinned") : ui("No Bots yet")}
+              >
+                {yoursPinned
+                  ? ui("Your Bots are all pinned above.")
+                  : ui("Bots you create show up here.")}
+              </PageEmpty>
+            )}
+          </PageSection>
+          {shared.length > 0 || !personal ? (
+            <PageSection
+              title={
+                personal ? ui("Included with OpenBot") : ui("Shared with you")
+              }
+            >
+              {shared.length ? (
+                <RosterRows agents={shared} byId={byId} />
+              ) : (
+                <PageEmpty icon={IconShare} title={ui("Nothing shared yet")}>
+                  {ui("Bots somebody shares with you show up here.")}
+                </PageEmpty>
+              )}
+            </PageSection>
+          ) : null}
+          <DoneTasks done={list.done} />
+          {hidden.data?.length ? (
+            <HiddenSection
+              agents={hidden.data}
+              byId={byId}
+              personal={personal}
+            />
+          ) : null}
+        </>
+      )}
     </>
   );
 }
@@ -212,7 +294,7 @@ function RosterRow({
       render={<Link params={{ agentId: agent.id }} to="/bots/$agentId" />}
       size="sm"
     >
-      <ItemMedia>
+      <ItemMedia aria-hidden="true">
         <AbstractAvatar name={agent.name} seed={agent.avatarSeed} size={28} />
       </ItemMedia>
       <ItemContent>

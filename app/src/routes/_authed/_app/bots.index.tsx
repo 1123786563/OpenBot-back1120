@@ -1,4 +1,3 @@
-import { ui, useLocale, uiNodes } from "@/lib/i18n";
 import { IconBook, IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -19,7 +18,9 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
+import { SheetTrigger } from "@/components/ui/sheet";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
+import { ui, uiNodes, useLocale } from "@/lib/i18n";
 
 /** Just longer than the sheet's 200ms exit, so it has finished sliding away before the page changes. */
 const SHEET_CLOSE_MS = 240;
@@ -37,49 +38,41 @@ function BotsPage() {
   const personal =
     useQuery(deploymentCapabilitiesQueryOptions()).data?.edition === "personal";
   return (
-    <PageShell
-      action={
-        <Button
-          render={(props) => (
-            <Link {...props} search={{ new: true }} to="/bots" />
-          )}
-          size="sm"
-          variant="ghost"
-        >
-          {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
-        </Button>
-      }
-      description={
-        personal
-          ? ui("Your Bots for everyday work.")
-          : ui("Manage your Bots and access those shared with you.")
-      }
-      title={ui("Bots")}
+    <NewBotSheet
+      onOpen={() => void navigate({ search: { new: true } })}
+      onClose={() => void navigate({ replace: true, search: {} })}
+      onCreated={(agentId) => {
+        void navigate({ replace: true, search: {} });
+        window.setTimeout(
+          () =>
+            void navigate({
+              params: { agentId },
+              search: {},
+              to: "/bots/$agentId",
+            }),
+          SHEET_CLOSE_MS,
+        );
+      }}
+      open={creating === true}
+      preserveDraft
     >
-      <BotRoster />
-      {personal ? <WhatYourBotsKnow /> : null}
-      <NewBotSheet
-        onClose={() => void navigate({ search: {} })}
-        onCreated={(agentId) => {
-          /*
-           * Close first, then go. Navigating straight to the Bot unmounted this page with the sheet
-           * still on it, so it vanished instead of sliding away. Replacing the `?new` entry means Back
-           * from the new Bot lands on the roster, not on an empty sheet.
-           */
-          void navigate({ replace: true, search: {} });
-          window.setTimeout(
-            () =>
-              void navigate({
-                params: { agentId },
-                search: {},
-                to: "/bots/$agentId",
-              }),
-            SHEET_CLOSE_MS,
-          );
-        }}
-        open={creating === true}
-      />
-    </PageShell>
+      <PageShell
+        action={
+          <SheetTrigger render={<Button size="sm" />}>
+            {uiNodes("{{slot0}}New Bot", [<IconPlus key="slot0" />])}
+          </SheetTrigger>
+        }
+        description={
+          personal
+            ? ui("Your Bots for everyday work.")
+            : ui("Manage your Bots and access those shared with you.")
+        }
+        title={ui("Bots")}
+      >
+        <BotRoster />
+        {personal ? <WhatYourBotsKnow /> : null}
+      </PageShell>
+    </NewBotSheet>
   );
 }
 
