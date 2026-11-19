@@ -135,6 +135,8 @@ import {
 import { parsePageLimit } from "./paging";
 import { createPasswordRoutes, createSignInRoutes } from "./passwords/routes";
 import type { SignInService } from "./passwords/service";
+import type { AlipayNotifyInbox } from "./payments/alipay/inbox";
+import { createAlipayNotifyRoutes } from "./payments/alipay/routes";
 import type { OnboardingStore } from "./people/onboarding";
 import { createProfileRoutes, type ProfileStore } from "./people/profile";
 import { MAX_PAGE, type PeopleStore } from "./people/store";
@@ -575,6 +577,28 @@ export function createApp(
   identityGithubCallback?: Hono<{ Variables: AppVariables }>,
   profileStore?: ProfileStore,
   /**
+   * Run when a person's sign-out succeeds, before the response is written: end the identity's
+   * live subscriptions here, both this instance's sockets and — through the activity topic — the
+   * other replicas'. Absent leaves a signed-out socket living until its own close, which is a
+   * receiving qualification no valid session backs.
+   *
+   * LATE IN THE LIST ON PURPOSE. Every parameter before it is positional, and a caller that has
+   * already counted its way to `profileStore` must not have its tail arguments shift when a
+   * deployment starts revoking sessions — which is exactly what inserting this earlier did to
+   * every caller and test in the tree.
+   */
+  onSessionEnded?: (userId: string) => Promise<void> | void,
+  /**
+   * The payment channels' durable notification inbox (payments/alipay/inbox.ts).
+   *
+   * Mounted ONLY when the alipay channel is configured AND an inbox was
+   * built: a notify entry that could answer "success" without a durable
+   * insert must not exist at all. Protocol-authenticated, no session — see
+   * payments/alipay/routes.ts. Absent, the path answers 404 like any other
+   * route the deployment has no door for.
+   */
+  alipayNotifyInbox?: AlipayNotifyInbox,
+  /**
    * The billing catalog's internal read surface (#65), already built by the
    * caller (service + trusted credential verifier injected). Absent leaves
    * the app without any /internal/v1/billing route — deployments that do not
@@ -759,7 +783,47 @@ export function createApp(
             .catch(() => null)) as { providerId?: unknown } | null)
         : null;
 
+    /*
+     * A sign-out ends more than the session row. Subscriptions upgraded while the session lived —
+     * the channel event socket — keep receiving until their socket closes, and nothing about a
+     * successful sign-out closes them. So before the handler runs, the person is read off the
+     * still-valid session; after it answers ok, the deployment is told the identity's receiving
+     * qualification has ended. `onSessionEnded` closes this instance's sockets and announces the
+     * revocation on the same topic every instance listens to, so a socket upgraded on another
+     * replica ends too. Absent — single-user mode has no sign-out at all — nothing to end.
+     */
+    const signOutPath = "/api/auth/sign-out";
+    const signingOut =
+      context.req.method === "POST" &&
+      new URL(context.req.url).pathname === signOutPath;
+    const endingUserId = signingOut
+      ? (
+          await auth.api
+            .getSession({
+              headers: context.req.raw.headers,
+              query: { disableCookieCache: true },
+            })
+            .catch(() => null)
+        )?.user.id
+      : undefined;
+
     const answer = await auth.handler(context.req.raw);
+
+    if (signingOut && answer.ok && endingUserId) {
+      try {
+        await onSessionEnded?.(endingUserId);
+      } catch (error) {
+        // A failed revocation must not fail the sign-out the person asked for, and must not name
+        // internals to them. The session is already gone; the socket's own close still detaches.
+        console.error(
+          JSON.stringify({
+            type: "sign-out-revocation-failed",
+            note: "Could not end live subscriptions for the signed-out identity.",
+            error: String(error),
+          }),
+        );
+      }
+    }
 
     if (auditStore && eventType && answer.ok) {
       const session = await auth.api.getSession({
@@ -2369,6 +2433,21 @@ export function createApp(
           createIntelligenceClient(config.runtime.intelligence),
         ),
       ),
+    );
+  }
+
+  /*
+   * The payment channel's notify entry (#70). No session auth: the gateway is
+   * the client, and its signature is the credential. Mounted only when both
+   * halves of the receiving boundary exist — see the parameter note above.
+   */
+  if (config.payments?.alipay && alipayNotifyInbox) {
+    app.route(
+      "/payment-callbacks/alipay",
+      createAlipayNotifyRoutes({
+        config: config.payments.alipay,
+        inbox: alipayNotifyInbox,
+      }),
     );
   }
 

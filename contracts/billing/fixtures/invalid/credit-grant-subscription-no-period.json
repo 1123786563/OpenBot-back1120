@@ -1,0 +1,18 @@
+{
+  "expect": "reject",
+  "via": "schema",
+  "code": "state_conflict",
+  "schema": "CreateCreditGrantRequest",
+  "instance": {
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "source_event_id": "evt_sub_bad_001",
+    "source_type": "subscription",
+    "source_period_id": null,
+    "granted_microcredits": "1000000",
+    "valid_from_us": "1700000000000000",
+    "expires_at_us": "1702512000000000",
+    "original_event_id": null,
+    "actor_subject_id": "subj_entitlement_svc"
+  },
+  "note": "subscription grants always carry their period"
+}

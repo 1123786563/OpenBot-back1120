@@ -202,12 +202,19 @@ components:
           type: string
           enum: [scheduled, active, frozen, exhausted, expired, revoked]
           description: >-
-            scheduled -> active at valid_from_us. active -> exhausted when
-            available+reserved+refund_frozen reach 0. active -> expired at
-            expires_at_us (remaining available+reserved released to expired).
+            scheduled -> active at valid_from_us (before that the available
+            part is NOT counted in the account's spendable balance). active ->
+            exhausted when available+reserved+refund_frozen reach 0. active ->
+            expired at expires_at_us, where ONLY the remaining available
+            moves to expired; reserved and refund_frozen are PRESERVED in
+            flight for the later settlement/refund step (#66/#71) and are
+            never dropped or revived by expiry — a release arriving after
+            expiry moves its amount to expired, never back to available.
             active/frozen -> revoked on revocation (terminal). frozen is a
             partial marker and returns to the pre-freeze state when the freeze
-            is lifted.
+            is lifted. status is an auxiliary projection: spendability is
+            always computed from valid_from_us/expires_at_us AND the
+            components together.
       examples:
         - id: "3b4c5d6e-7f80-4a9b-8c1d-2e3f4a5b6c7d"
           schema_version: billing.v1
@@ -459,11 +466,16 @@ components:
         (billing_account_id, original_event_id, adjustment_type): the same scope
         cannot be duplicated even with a different HTTP idempotency key. Any
         legitimate follow-up correction must carry its own distinct source
-        event id and explicit linkage. Negative deltas credit the account by
-        creating/adding to a CompensationLot when compensation_lot_id is set;
-        compensation created from an expired-subscription source is valid for
-        30 days after grant.actor_subject_id records the audited human or
-        service operator.
+        event id and explicit linkage. Sign semantics are ledger balance
+        semantics: a POSITIVE delta increases consumable entitlement — it
+        restores the original deduction's consumed allocations back to
+        available in the original lots, or creates a CompensationLot when the
+        original source is an expired subscription (valid for 30 days after
+        grant) — recorded in compensation_lot_id. A NEGATIVE delta withdraws
+        revocable available credits of the original event's lots into revoked
+        and never drives anything negative or chases reserved/consumed/frozen
+        credits. actor_subject_id records the audited human or service
+        operator.
       allOf:
         - $ref: "./common.yaml#/components/schemas/CommonFields"
         - type: object
@@ -507,11 +519,11 @@ components:
               $ref: "./scalars.yaml#/components/schemas/SubjectId"
               description: Audited operator (authorized operations / compensation service), not the payer.
             original_period_id:
-              type: string
+              type: ["string", "null"]
               minLength: 1
               maxLength: 128
               pattern: "^[A-Za-z0-9._:-]{1,128}$"
-              description: Adjustment stays attributed to the ORIGINAL period; old snapshots only gain appended confirmation adjustments.
+              description: Adjustment stays attributed to the ORIGINAL period of the referenced event; null when that source has no period (pack); never invented.
             effective_at_us:
               $ref: "./scalars.yaml#/components/schemas/TimestampUs"
             compensation_lot_id:
@@ -521,6 +533,20 @@ components:
               type: string
               enum: [posted]
               description: Terminal and immutable.
+        - if:
+            properties:
+              signed_delta_microcredits:
+                pattern: "^-"
+            required: [signed_delta_microcredits]
+          then:
+            properties:
+              compensation_lot_id:
+                type: "null"
+            description: >-
+              A negative delta withdraws entitlement; it never creates or
+              extends a CompensationLot — compensation_lot_id is null and an
+              over-wide negative is refused with 409 state_conflict, never a
+              negative balance.
       unevaluatedProperties: false
       x-immutability: append-only
 
@@ -1399,6 +1425,169 @@ components:
               price_version_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
           outbox_status: pending
 
+    # ------------------------------------------------------------ ledger events
+    LedgerLine:
+      type: object
+      description: >-
+        One credit lot's component change caused by one ledger event, with the
+        lot's component balances AFTER the change. Signed per-component deltas
+        always conserve the lot: the sum of the deltas of granted,
+        available, reserved, refund_frozen, consumed, expired and revoked is
+        zero, and granted itself only changes on the grant event that created
+        the lot — source type, source event, original period and original
+        granted amount are never rewritten afterwards.
+      required:
+        - lot_id
+        - delta_granted_microcredits
+        - delta_available_microcredits
+        - delta_reserved_microcredits
+        - delta_refund_frozen_microcredits
+        - delta_consumed_microcredits
+        - delta_expired_microcredits
+        - delta_revoked_microcredits
+        - balances_after
+      additionalProperties: false
+      properties:
+        lot_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        delta_granted_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_available_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_reserved_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_refund_frozen_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_consumed_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_expired_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        delta_revoked_microcredits:
+          $ref: "./scalars.yaml#/components/schemas/SignedAdjustmentDelta"
+        balances_after:
+          type: object
+          description: The lot's seven conservation components after this change.
+          required:
+            - granted_microcredits
+            - available_microcredits
+            - reserved_microcredits
+            - refund_frozen_microcredits
+            - consumed_microcredits
+            - expired_microcredits
+            - revoked_microcredits
+          additionalProperties: false
+          properties:
+            granted_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            available_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            reserved_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            refund_frozen_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            consumed_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            expired_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+            revoked_microcredits:
+              $ref: "./scalars.yaml#/components/schemas/Microcredits"
+
+    LedgerEvent:
+      type: object
+      description: >-
+        Immutable event head of the append-only ledger: one grant, adjustment
+        or expiry fact with its per-lot lines. account_seq is the per-account
+        sequence assigned inside the account lock (never a global database
+        sequence). Event content — including its business key, original event
+        reference, actor, reason, original period and lines — is never
+        rewritten; corrections are appended as new events linked by
+        adjustment_id/original_event_id. Every committed event has exactly one
+        pending outbox record whose aggregate_id equals this id.
+      required:
+        - id
+        - schema_version
+        - organization_id
+        - billing_account_id
+        - event_type
+        - account_seq
+        - source_namespace
+        - source_event_id
+        - original_event_id
+        - adjustment_id
+        - actor_subject_id
+        - reason
+        - original_period_id
+        - occurred_at_us
+        - committed_at_us
+        - lines
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        schema_version:
+          $ref: "./scalars.yaml#/components/schemas/SchemaVersion"
+        organization_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account_id:
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        event_type:
+          type: string
+          enum: [credit.granted, credit.adjusted, credit.expired]
+        account_seq:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/UnsignedInt64"
+          description: Per-account committed sequence; the recovery watermark for outbox delivery.
+        source_namespace:
+          type: ["string", "null"]
+          description: Trusted source namespace of the grant's business key; null for internal expiry events.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          x-not-personal-identity: true
+        source_event_id:
+          type: ["string", "null"]
+          description: Business key inside the namespace; null for adjustment/expiry events (their keys live on the adjustment).
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          x-not-personal-identity: true
+        original_event_id:
+          type: ["string", "null"]
+          description: Ledger event id an adjustment corrects; null otherwise.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          x-not-personal-identity: true
+        adjustment_id:
+          type: ["string", "null"]
+          $ref: "./scalars.yaml#/components/schemas/UuidNullable"
+          description: Adjustment row that produced this event; null for grant/expiry events.
+        actor_subject_id:
+          $ref: "./scalars.yaml#/components/schemas/SubjectIdNullable"
+          description: Audited actor (service identity's operator for grants/adjustments; system actor for expiry).
+        reason:
+          type: ["string", "null"]
+          maxLength: 512
+          description: Adjustment reason or expiry cause; null on grants.
+        original_period_id:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          description: Original period this event stays attributed to; null for period-less packs.
+        occurred_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+          description: Business time of the fact (e.g. the expiry instant), preserved verbatim.
+        committed_at_us:
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+          description: Server commit time.
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/LedgerLine"
+
     OutboxRecord:
       type: object
       description: >-
@@ -1441,7 +1630,13 @@ components:
           $ref: "./scalars.yaml#/components/schemas/Revision"
         aggregate_type:
           type: string
-          enum: [usage_event, metering_relationship]
+          enum: [usage_event, metering_relationship, ledger_event]
+          description: >-
+            ledger_event marks the LOCAL ledger facts (#64): grant, adjustment
+            and expiry events of the credit ledger. They are accounting facts
+            for the delivery worker (#73) to project — they are NEVER usage
+            events: a grant creates no consumption, no metering charge and no
+            CNY receivable.
         aggregate_id:
           type: string
           $ref: "./scalars.yaml#/components/schemas/Uuid"
@@ -2586,3 +2781,181 @@ components:
                   unit_size: "1000"
                   numerator: "37"
                   denominator: "1000000"
+    CreateCreditGrantRequest:
+      type: object
+      description: >-
+        Trusted grant input. The source namespace and actor come from the
+        authenticated service credential; the request can never choose them.
+        Period and expiry follow the source type: subscription requires a
+        period id and a finite expiry after valid_from (from the trusted
+        period result); pack forbids both; compensation requires the original
+        deduction event reference.
+      required:
+        - billing_account_id
+        - source_event_id
+        - source_type
+        - granted_microcredits
+        - valid_from_us
+        - expires_at_us
+        - original_event_id
+        - actor_subject_id
+      additionalProperties: false
+      properties:
+        billing_account_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+          description: Target account; the credential must be authorized for its organization.
+        source_event_id:
+          type: string
+          description: Stable business key of THIS grant inside the credential's source namespace; dedupe anchor across idempotency keys.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+          x-not-personal-identity: true
+        source_type:
+          type: string
+          enum: [subscription, pack, compensation]
+        source_period_id:
+          type: ["string", "null"]
+          description: Original billing period; REQUIRED and non-null for subscription, null for pack/compensation.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        granted_microcredits:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/PositiveMicrocredits"
+        valid_from_us:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+          description: When the lot becomes spendable; earlier instants answer the scheduled status until reached.
+        expires_at_us:
+          type: ["string", "null"]
+          $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
+          description: Absolute expiry; REQUIRED finite and after valid_from_us for subscription; null for pack; compensation sends null or the server-computed arrival+30d echo.
+        original_event_id:
+          type: ["string", "null"]
+          description: Original deduction event a compensation restores; REQUIRED for source_type=compensation, null otherwise.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+        actor_subject_id:
+          $ref: "./scalars.yaml#/components/schemas/SubjectId"
+          description: Audited operator on whose behalf the trusted service acts.
+      allOf:
+        - if:
+            properties:
+              source_type:
+                const: subscription
+            required: [source_type]
+          then:
+            properties:
+              source_period_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+                pattern: "^[A-Za-z0-9._:-]{1,128}$"
+              expires_at_us:
+                type: string
+                $ref: "./scalars.yaml#/components/schemas/TimestampUs"
+            required: [source_period_id, expires_at_us]
+            description: subscription grants always carry their period and a finite expiry.
+        - if:
+            properties:
+              source_type:
+                const: pack
+            required: [source_type]
+          then:
+            properties:
+              source_period_id:
+                type: "null"
+              expires_at_us:
+                type: "null"
+              original_event_id:
+                type: "null"
+            description: packs are long-lived and period-less.
+        - if:
+            properties:
+              source_type:
+                const: compensation
+            required: [source_type]
+          then:
+            properties:
+              original_event_id:
+                type: string
+                minLength: 1
+                maxLength: 128
+                pattern: "^[A-Za-z0-9._:-]{1,128}$"
+              expires_at_us:
+                type: ["string", "null"]
+                $ref: "./scalars.yaml#/components/schemas/TimestampUsNullable"
+              source_period_id:
+                type: "null"
+            required: [original_event_id]
+            description: >-
+              compensation links its original deduction event. Shares whose
+              original source is still valid are restored IN PLACE with the
+              original lot's validity; only shares whose source subscription
+              has expired become a compensation lot expiring 30 days after
+              grant arrival. expires_at_us is the caller's optional echo of
+              that server-computed instant — send null, or exactly
+              arrival+30d (small transport tolerance); any other value is
+              refused, and the server never adopts a caller-declared expiry.
+              Total recovery across ALL entries (grants and adjustments) can
+              never exceed the original deduction.
+
+    CreditGrantMutationResult:
+      type: object
+      description: Created (or replayed) grant; the lot id, ledger event id and account revision are stable under replay.
+      required: [credit_lot, ledger_event_id, billing_account, request_id]
+      additionalProperties: false
+      properties:
+        credit_lot:
+          $ref: "./objects.yaml#/components/schemas/CreditLot"
+          description: >-
+            The issued compensation lot when the recovery includes an
+            expired-source share; otherwise the original credit lot after the
+            in-place restoration (the largest restored share when one
+            deduction spanned several live lots).
+        ledger_event_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        billing_account:
+          $ref: "./objects.yaml#/components/schemas/BillingAccount"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    RegisterBillingAccountRequest:
+      type: object
+      description: >-
+        Trusted registration input from the identity service; a browser can
+        never reach this. The subject and Personal Workspace are stable
+        identity facts — never an email or a client payer claim.
+      required: [organization_id, owner_subject_id, personal_workspace_id]
+      additionalProperties: false
+      properties:
+        organization_id:
+          type: string
+          $ref: "./scalars.yaml#/components/schemas/Uuid"
+        owner_subject_id:
+          $ref: "./scalars.yaml#/components/schemas/SubjectId"
+        personal_workspace_id:
+          type: string
+          description: Personal Workspace relation the account is derived from; unique across accounts.
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]{1,128}$"
+
+    RegisterBillingAccountResult:
+      type: object
+      description: Registered (or replayed) account; one stable subject always answers the same account id.
+      required: [billing_account, request_id]
+      additionalProperties: false
+      properties:
+        billing_account:
+          $ref: "./objects.yaml#/components/schemas/BillingAccount"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128

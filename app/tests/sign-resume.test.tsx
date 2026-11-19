@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-router";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { authKeys } from "@/lib/auth/queries";
 import { resumeUrlFor } from "@/lib/auth/resume";
 
@@ -42,7 +43,7 @@ let domainSignInSpy: DomainSignInSpy = async () => {};
  * drives the real functions through their injectable starter. The two together cover the handoff.
  */
 mock.module("@/lib/auth/client", () => ({
-  providerName: () => "Google",
+  providerName: (provider: string) => provider === "casdoor" ? "Casdoor" : "Google",
   signInWith: (...args: Parameters<SignInSpy>) => signInSpy(...args),
   signInWithEmailDomain: (...args: Parameters<DomainSignInSpy>) =>
     domainSignInSpy(...args),
@@ -130,6 +131,94 @@ async function redirectFrom(search: { flow_id?: string }) {
   throw new Error("expected a redirect");
 }
 
+/*
+ * Casdoor is the only provider a deployment offers, so the screen starts it by itself rather than
+ * waiting for a press. The starter is pinned here: it must carry the flow's handle (the test above)
+ * and survive the double-invoked effects of StrictMode, and a refusal must leave the button for a retry
+ * rather than starting again by itself.
+ */
+test("the only provider starts by itself, carrying the resume URL", async () => {
+  const started: string[][] = [];
+  signInSpy = async (...args: Parameters<SignInSpy>) => {
+    started.push([args[0], args[2] ?? ""]);
+  };
+
+  const { view } = renderSignScreen({
+    providers: ["casdoor"],
+    sso: false,
+    ssoRequired: false,
+  });
+  await waitFor(() => expect(started).toHaveLength(1));
+  expect(started[0]).toEqual([
+    "casdoor",
+    `http://localhost:3010${RESUME_URL}`,
+  ]);
+});
+
+test("a refused auto-start leaves the button for a manual retry", async () => {
+  const calls: string[] = [];
+  signInSpy = async (...args: Parameters<SignInSpy>) => {
+    calls.push(args[0]);
+    throw new Error("Casdoor is down");
+  };
+
+  const { view, user } = renderSignScreen({
+    providers: ["casdoor"],
+    sso: false,
+    ssoRequired: false,
+  });
+  // The refusal reaches the person; the screen stays put.
+  await view.findByText("Casdoor is down");
+  expect(calls).toEqual(["casdoor"]);
+
+  // Whatever re-renders the error state settles into, it must not start again by itself.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(calls).toEqual(["casdoor"]);
+
+  // The person's own retry still goes through.
+  await user.click(await view.findByText(/Continue with Casdoor/));
+  await waitFor(() => expect(calls).toEqual(["casdoor", "casdoor"]));
+});
+
+test("a deployment with other providers starts nothing by itself", async () => {
+  const calls: string[] = [];
+  signInSpy = async (...args: Parameters<SignInSpy>) => {
+    calls.push(args[0]);
+  };
+
+  const { view, user } = renderSignScreen({
+    providers: ["google"],
+    sso: false,
+    ssoRequired: false,
+  });
+
+  await user.click(await view.findByText(/Continue with Google/));
+  await waitFor(() => expect(calls).toEqual(["google"]));
+
+  // However long the screen then sits there, nothing starts by itself.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(calls).toEqual(["google"]);
+});
+
+test("an error callback stays on the sign screen until a manual retry", async () => {
+  const calls: string[] = [];
+  signInSpy = async (provider) => { calls.push(provider); };
+  const browser = window as unknown as { happyDOM: { setURL(url: string): void } };
+  browser.happyDOM.setURL("http://localhost:3010/sign?error=AUTH_CALLBACK_FAILED");
+  try {
+    const { view, user } = renderSignScreen({
+      providers: ["casdoor"], sso: false, ssoRequired: false,
+    });
+    await view.findByRole("alert");
+    expect(calls).toEqual([]);
+    await user.click(await view.findByText(/Continue with Casdoor/));
+    await waitFor(() => expect(calls).toEqual(["casdoor"]));
+  } finally {
+    cleanup();
+    browser.happyDOM.setURL("http://localhost:3010/");
+  }
+});
+
 test("a signed-in arrival with a handle goes to the verifier, without one to /", async () => {
   const withHandle = await redirectFrom({ flow_id: "f 1" });
   expect(withHandle.options.href).toBe(
@@ -163,11 +252,13 @@ function renderSignScreen(options: {
     history: createMemoryHistory({ initialEntries: ["/sign?flow_id=h1"] }),
   } as never) as never;
   const view = render(
-    <QueryClientProvider client={queryClient}>
-      <LanguageProvider>
-        <RouterProvider router={router} />
-      </LanguageProvider>
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider>
+          <RouterProvider router={router} />
+        </LanguageProvider>
+      </QueryClientProvider>
+    </StrictMode>,
   );
   return {
     view,

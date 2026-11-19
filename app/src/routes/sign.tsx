@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AgentOrb from "@/components/agents/orb/agent-orb";
 import { ProviderLogo } from "@/components/auth/provider-logo";
 import { Button } from "@/components/ui/button";
@@ -117,7 +117,9 @@ function SignScreen() {
     }
   }
 
-  async function handleSignIn(provider: AuthProviderId) {
+  const autoStarted = useRef(false);
+  const handleSignIn = useCallback(async (provider: AuthProviderId) => {
+    autoStarted.current = true;
     setError(null);
     setOpening(provider);
 
@@ -135,9 +137,15 @@ function SignScreen() {
       );
       setOpening(null);
     }
-  }
+  }, [flowId]);
 
   const casdoor = providers.includes("casdoor");
+  useEffect(() => {
+    // One attempt, even under StrictMode; errors stay here for a person's retry.
+    if (!casdoor || providers.length !== 1 || error || autoStarted.current) return;
+    void handleSignIn("casdoor");
+  }, [casdoor, providers.length, error, handleSignIn]);
+
   const providerButtons = (
     <div className="flex flex-col gap-2">
       {providers.map((provider) => (

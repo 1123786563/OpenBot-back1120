@@ -1457,7 +1457,13 @@ export function createChannelRoutes(
         let detach = () => {};
         return {
           onOpen: (_event, ws) => {
-            detach = events.register(userId, (payload) => ws.send(payload));
+            // The hub holds the close as well as the send: ending a signed-out identity's
+            // connection means closing it, not only refusing to write to a socket that stays open.
+            detach = events.register(
+              userId,
+              (payload) => ws.send(payload),
+              () => ws.close(),
+            );
           },
           onClose: () => detach(),
           onError: () => detach(),

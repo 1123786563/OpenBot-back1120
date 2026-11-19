@@ -111,6 +111,7 @@ import {
   markAttachmentsSent,
 } from "./channels/attachments";
 import {
+  announceSessionRevoked,
   createChannelEventHub,
   startChannelActivityListener,
 } from "./channels/events";
@@ -3397,6 +3398,13 @@ const app = createApp(
   identityStore,
   identityGithubCallback,
   profileStore,
+  // Sign-out ends the identity's live subscriptions, not only the session row: this instance's
+  // sockets close at once, and the same fact rides the activity topic to every other replica.
+  async (userId) => {
+    channelEvents.revokeUser(userId);
+    await announceSessionRevoked(database, [userId]);
+  },
+  undefined, // Alipay notification inbox is not configured in this assembly.
   // The billing catalog's internal read surface (#65), mounted in the default
   // assembly. Until the trusted service-credential issuer lands (#67/#76) the
   // verifier below accepts NO credential: every request is 401 problem+json

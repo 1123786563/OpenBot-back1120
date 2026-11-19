@@ -118,7 +118,11 @@ if (action === "stop") {
   const serverVars = withFaults
     ? { ...isolated, OPENBOT_TEST_FAULT_FILE: resolve(FAULT_FILE) }
     : isolated;
-  const saved: ProcessRecord[] = JSON.parse(readFileSync(state, "utf8"));
+  // A fresh checkout has no process state yet; `stop` already tolerates that, and so must `up`,
+  // otherwise the very first `up.sh` on a clean tree fails with ENOENT before spawning anything.
+  const saved: ProcessRecord[] = existsSync(state)
+    ? JSON.parse(readFileSync(state, "utf8"))
+    : [];
   for (const [name, entry, vars] of [
     ["server", "server/src/production-entry.ts", serverVars],
     [

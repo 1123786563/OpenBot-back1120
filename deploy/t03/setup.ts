@@ -18,8 +18,8 @@ let env = await Bun.file(`${dir}/.env.t03.example`).text();
 const generated: Record<string, string> = {
   T03_DB_PASSWORD: db,
   T03_CASDOOR_DB_PASSWORD: casdoorDb,
-  DATABASE_URL: `postgres://openbot_t03:${db}@127.0.0.1:56432/openbot_t03`,
-  TEST_DATABASE_URL: `postgres://openbot_t03:${db}@127.0.0.1:56432/openbot_t03_unit`,
+  DATABASE_URL: `postgres://openbot_t03:${db}@127.0.0.1:56433/openbot_t03`,
+  TEST_DATABASE_URL: `postgres://openbot_t03:${db}@127.0.0.1:56433/openbot_t03_unit`,
   BETTER_AUTH_SECRET: secret(),
   KEY_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
   COMPUTER_TOKEN: secret(),
