@@ -23,6 +23,7 @@
  */
 
 import { execSync, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -160,7 +161,7 @@ async function startDisposablePostgres(
 }
 
 async function runGuardOnly(): Promise<number> {
-  console.log("billing62 guard-only run (real PostgreSQL, no docker required)");
+  console.log("billing62 guard-only run (real PostgreSQL; local binaries or docker)");
   const runId = process.env.BILLING62_RUN_ID ?? makeRunId();
   console.log(`  run id: ${runId}`);
   const pgRoot =
@@ -170,12 +171,20 @@ async function runGuardOnly(): Promise<number> {
     pgRoot.endsWith("bin") ? pgRoot : pgRoot,
     pgRoot.endsWith("bin") ? "" : "bin",
   );
-  if (!existsSync(join(pgBinDir, "postgres"))) {
+  const hasLocalBinaries = existsSync(join(pgBinDir, "postgres"));
+  const dockerUp = sh("docker --version").code === 0;
+  if (!hasLocalBinaries && !dockerUp) {
     console.error(
-      `  FAIL no standalone PostgreSQL found at ${pgBinDir}; set BILLING62_PG_BIN_DIR to a postgres/bin directory. ` +
+      `  FAIL no standalone PostgreSQL at ${pgBinDir} and no docker available. ` +
         "The guard suite requires REAL PostgreSQL and never silently skips.",
     );
     return 2;
+  }
+  if (!hasLocalBinaries) {
+    console.log(
+      "  no local PostgreSQL binaries; using a disposable postgres:17 container on 127.0.0.1 (per #64 design §8)",
+    );
+    return runGuardOnlyDocker(runId);
   }
 
   // -- pure guard assertions (no I/O possible) --------------------------------
@@ -302,26 +311,157 @@ async function runGuardOnly(): Promise<number> {
   return failures === 0 ? 0 : 1;
 }
 
+
+/**
+ * The guard suite against a REAL disposable postgres:17 in docker when no
+ * local binaries exist. Same assertions, same run-id grammar; the container
+ * is name-scoped to this run and removed in finally, loopback port only.
+ */
+async function runGuardOnlyDocker(runId: string): Promise<number> {
+  const container = `billing62_guard_${runId}`;
+  const port = 15432 + Math.floor(Math.random() * 2000);
+  const psql = (db: string, sql: string): { code: number; out: string } =>
+    sh(
+      `docker exec ${container} psql -U billing62_guard -d ${db} -tAc ${JSON.stringify(sql)}`,
+    );
+  let started = false;
+  try {
+    const run = sh(
+      `docker run -d --rm --name ${container} -e POSTGRES_USER=billing62_guard -e POSTGRES_PASSWORD=guard -p 127.0.0.1:${port}:5432 postgres:17`,
+    );
+    if (run.code !== 0) throw new Error(`docker run failed: ${run.out.slice(0, 300)}`);
+    started = true;
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i++) {
+      ready = psql("postgres", "select 1").code === 0;
+      if (!ready) await new Promise((r) => setTimeout(r, 300));
+    }
+    if (!ready) throw new Error("disposable postgres container did not become ready");
+    psql("postgres", `CREATE DATABASE "billing62_${runId}"`);
+
+    console.log("\n== guard: pure target whitelist (zero-I/O assertions)");
+    const good = isolatedTarget({
+      runId,
+      host: "127.0.0.1",
+      port,
+      user: "billing62_guard",
+      password: "guard",
+    });
+    ok(
+      checkTarget({ url: good.url, project: good.project, runId }).ok === true,
+      "accepts its own run target",
+    );
+    const foreignDb = good.url.replace(/\/billing62_[a-z0-9_]+$/, "/postgres");
+    ok(
+      checkTarget({ url: foreignDb, project: good.project, runId }).ok === false,
+      "rejects the default 'postgres' database (existing-database accident)",
+    );
+    const foreignRun = isolatedTarget({
+      runId: "other9999",
+      host: "127.0.0.1",
+      port,
+      user: "u",
+      password: "p",
+    });
+    ok(
+      checkTarget({ url: foreignRun.url, project: good.project, runId }).ok === false,
+      "rejects another run's database",
+    );
+    ok(
+      checkTarget({ url: good.url, project: "openbot", runId }).ok === false,
+      "rejects a non-billing62 compose project",
+    );
+    ok(
+      checkTarget({
+        url: good.url.replace("127.0.0.1", "billing.example.com"),
+        project: good.project,
+        runId,
+      }).ok === false,
+      "rejects a public host",
+    );
+    ok(
+      checkTarget({
+        url: good.url.replace("127.0.0.1", "10.0.0.7"),
+        project: good.project,
+        runId,
+      }).ok === true,
+      "accepts a private-LAN host on the compose internal network",
+    );
+    ok(
+      checkTarget({ url: "not a url", project: good.project, runId }).ok === false,
+      "rejects malformed connection targets before any I/O",
+    );
+
+    console.log("\n== guard: real disposable PostgreSQL 17 (docker)");
+    ok(true, `disposable postgres ready on 127.0.0.1:${port}`);
+    const conn = psql(`billing62_${runId}`, "select 1");
+    ok(conn.code === 0, "guard-accepted target connects to the isolated database");
+
+    const rej = sh(
+      `bun tests/billing/guard.ts --url "postgres://u@127.0.0.1:${port}/postgres" ` +
+        `--project ${good.project} --run-id ${runId}`,
+    );
+    ok(rej.code === 1, "guard CLI exits 1 on the default-database target");
+    const probe = psql(
+      "postgres",
+      `select count(*) from pg_database where datname like 'billing62%' and datname NOT IN ('billing62_${runId}', 'billing62_guard')`,
+    );
+    ok(
+      probe.out.trim() === "0",
+      "rejected target caused zero writes (no stray billing62 databases)",
+    );
+    const otherRun = "zz_probe_not_ours";
+    const createProbe = psql(
+      "postgres",
+      `select count(*) from pg_database where datname='billing62_${otherRun}'`,
+    );
+    ok(
+      createProbe.out.trim() === "0",
+      "no database for a foreign run id exists",
+    );
+    console.log(
+      `\nguard-only (docker) run complete: ${failures === 0 ? "PASS" : "FAIL"} (${failures} failures)`,
+    );
+    return failures === 0 ? 0 : 1;
+  } catch (e) {
+    console.error(`  FAIL guard-only docker run: ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  } finally {
+    if (started) sh(`docker rm -f ${container}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Full-stack mode (docker compose; Lago CE v1.57.0)
 // ---------------------------------------------------------------------------
+const COMPOSE = "docker-compose"; // docker 29.x here has no `compose` subcommand
+
+function composeArgs(
+  project: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = {},
+): { code: number; out: string } {
+  return sh(`${COMPOSE} -f tests/billing/compose.yml -p ${project} ${args.join(" ")}`, { env: { ...process.env, ...env } });
+}
+
+function randomToken(bytes = 16): string {
+  return randomBytes(bytes).toString("hex");
+}
+
 async function runFull(): Promise<number> {
   console.log(
-    "billing62 full-stack run (isolated PostgreSQL 17 + Lago CE v1.57.0)",
+    "billing62 full-stack run (isolated PostgreSQL 17 + Lago CE v1.57.0 + ledger driver)",
   );
   const docker = sh("docker --version");
-  if (docker.code !== 0) {
-    console.error("  FAIL docker engine not available in this environment.");
+  const compose = sh("docker-compose version");
+  if (docker.code !== 0 || compose.code !== 0) {
+    console.error("  FAIL docker engine / compose not available in this environment.");
     console.error("  UNVERIFIED SCOPE (must not be reported as passed):");
     console.error(
       "    - boot of tests/billing/compose.yml (pinned images, internal networks)",
     );
-    console.error(
-      "    - Lago v1.57.0 health + zero-amount metering evidence (AC5/AC8)",
-    );
-    console.error(
-      "    - seed data through the trusted API and cleanup verification",
-    );
+    console.error("    - #64 ledger acceptance phases AC1-AC7 (cases/ledger-core.ts)");
+    console.error("    - Lago v1.57.0 health evidence and the Lago-down boundary phase");
     console.error(
       "  Re-run on a Docker-capable host: BILLING62_RUN_ID=<id> bun run billing:test:integration",
     );
@@ -329,23 +469,219 @@ async function runFull(): Promise<number> {
   }
 
   const runId = process.env.BILLING62_RUN_ID ?? makeRunId();
+  if (!/^[a-z0-9_]{4,64}$/.test(runId)) {
+    console.error(`  FAIL run id ${JSON.stringify(runId)} fails the guard grammar`);
+    return 2;
+  }
   const project = `billing62_${runId}`;
-  console.log(`  run id: ${runId}`);
-  console.log(
-    "  phases: compose up --wait -> health -> seed -> metering assertions -> down -v -> leftover check",
-  );
-  console.error(
-    "  FAIL full-stack phase driver requires a docker-capable host; this binary ships the",
-  );
-  console.error(
-    "       compose contract and guard. Implementing the live driver is tracked for the",
-  );
-  console.error(
-    "       environment-bearing tickets; see docs/billing-contract.md for the procedure.",
-  );
-  // Explicit non-zero: a missing environment is never reported as success.
-  void project;
-  return 2;
+  // one-time per-run credentials, never written to the repo or the report
+  const pgUser = `billing62_${runId.slice(0, 8)}_u`;
+  const pgPassword = randomToken(24);
+  const lagoDbName = `lago_${runId}`;
+  const lagoUser = `lago_${runId.slice(0, 8)}_u`;
+  const lagoPassword = randomToken(24);
+  const appPassword = randomToken(24);
+  const cursorSecret = randomToken(32);
+  const lagoRsa = sh(`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null`);
+  const lagoEnc = randomToken(24);
+  const lagoEncDet = randomToken(24);
+  const lagoSalt = randomToken(24);
+  if (lagoRsa.code !== 0) {
+    console.error("  FAIL openssl unavailable: cannot generate the one-time Lago RSA key");
+    return 2;
+  }
+  const composeEnv: NodeJS.ProcessEnv = {
+    BILLING62_RUN_ID: runId,
+    BILLING62_PG_USER: pgUser,
+    BILLING62_PG_PASSWORD: pgPassword,
+    BILLING62_LAGO_DB_NAME: lagoDbName,
+    BILLING62_LAGO_USER: lagoUser,
+    BILLING62_LAGO_PASSWORD: lagoPassword,
+    BILLING_LEDGER_APP_PASSWORD: appPassword,
+    BILLING_LEDGER_CURSOR_SECRET: cursorSecret,
+    BILLING62_LAGO_RSA_KEY_B64: Buffer.from(lagoRsa.out.trim()).toString("base64"),
+    BILLING62_LAGO_SECRET_KEY_BASE: randomToken(48),
+    BILLING62_LAGO_ENC_PRIMARY: lagoEnc,
+    BILLING62_LAGO_ENC_DETERMINISTIC: lagoEncDet,
+    BILLING62_LAGO_ENC_SALT: lagoSalt,
+  };
+
+  const appContainer = "ledger-app"; // compose exec addresses the SERVICE name
+  const execDriver = (phase: string): { code: number; out: string } =>
+    sh(
+      `docker-compose -p ${project} exec -T ${appContainer} bun tests/billing/cases/ledger-core.ts --phase ${phase}`,
+      { env: composeEnv },
+    );
+
+  // The v1 ledger snapshot: the PRE-recovery-quota commit's server tree,
+  // extracted so the upgrade phase can (1) apply the v1 migration set, (2)
+  // commit refund history through the REAL v1 HTTP entrypoint, and only then
+  // (3) upgrade to the current migration set and prove the backfill. The
+  // snapshot lives INSIDE the repo root so the container's /work bind mount
+  // exposes it AND `bun` resolves the repo's node_modules walking up from it.
+  const v1Ref = process.env.BILLING62_V1_REF ?? "3bcbb143";
+  const v1DirName = `.billing62-v1-${runId}`;
+  const v1HostDir = join(import.meta.dir, "..", "..", v1DirName); // repo root
+  const refCheck = sh(`git cat-file -e ${v1Ref}^{commit}`);
+  if (refCheck.code !== 0) {
+    console.error(
+      `  FAIL the v1 ledger snapshot ref ${v1Ref} is not available in this checkout; ` +
+        "the v1 -> v2 upgrade evidence requires the real pre-recovery ledger. " +
+        "Override with BILLING62_V1_REF=<pre-recovery commit>.",
+    );
+    return 2;
+  }
+  rmSync(v1HostDir, { recursive: true, force: true });
+  sh(`mkdir -p ${JSON.stringify(v1HostDir)}`);
+  const v1Extract = sh(`git archive ${v1Ref} server | tar -x -C ${JSON.stringify(v1HostDir)}`);
+  // The snapshot carries no node_modules; the workspace's `postgres` package
+  // lives in `server/node_modules`, which bun only finds by walking UP from
+  // the importing file. Link the workspace's own dependency directory into
+  // the snapshot's root so the v1 entrypoints resolve exactly like the
+  // current ones (relative link: valid on the host and inside the container).
+  sh(`ln -s ../server/node_modules ${JSON.stringify(join(v1HostDir, "node_modules"))}`);
+  if (v1Extract.code !== 0 || !existsSync(join(v1HostDir, "server", "billing-drizzle"))) {
+    console.error(`  FAIL extracting the v1 ledger snapshot failed: ${v1Extract.out.slice(-500)}`);
+    rmSync(v1HostDir, { recursive: true, force: true });
+    return 2;
+  }
+  composeEnv.BILLING62_V1_DIR = `/work/${v1DirName}`;
+
+  let upOk = false;
+  let failuresFromDriver = 0;
+  try {
+    console.log(`  run id: ${runId}`);
+    // guard FIRST, before any docker command: the target this run will use
+    const t = isolatedTarget({
+      runId,
+      host: `billing62_${runId}-postgres`,
+      port: 5432,
+      user: pgUser,
+      password: pgPassword,
+    });
+    const guarded = checkTarget({ url: t.url, project, runId });
+    if (!guarded.ok) {
+      console.error(`  FAIL guard refused this run's own target: ${guarded.reason}`);
+      return 2;
+    }
+    console.log("  PASS guard accepts this run's isolated target");
+
+    console.log("  phase: compose up --wait (PostgreSQL 17 + Lago CE v1.57.0 + ledger driver)");
+    // SHORT-LIVED compose invocations only: a single long-running
+    // `up -d --wait` over the whole service set re-reconciles continuously on
+    // compose v5.5.0 and recreates containers. Each phase below brings up
+    // exactly what it needs and exits.
+    const up = composeArgs(project, ["up", "-d", "--wait", "postgres", "ledger-app"], composeEnv);
+    upOk = up.code === 0;
+    if (!upOk) {
+      console.error(`  FAIL compose up failed:\n${up.out.slice(-2000)}`);
+      return 2;
+    }
+
+    console.log("  phase: identity + health verification");
+    // A first boot's initdb runs a temporary server that can satisfy the
+    // container healthcheck just before the real server restarts; retry the
+    // identity probe through that window instead of failing the run on it.
+    let pgIdentity = { code: 1, out: "" };
+    for (let attempt = 0; attempt < 30; attempt++) {
+      pgIdentity = composeArgs(project, [
+        "exec", "-T", "postgres",
+        "psql", "-U", pgUser, "-d", `billing62_${runId}`, "-tAc",
+        "'select version()'",
+      ]);
+      if (pgIdentity.code === 0 && pgIdentity.out.includes("PostgreSQL 17")) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    console.log(`    postgres: ${pgIdentity.out.trim().slice(0, 100)}`);
+    if (pgIdentity.code !== 0 || !pgIdentity.out.includes("PostgreSQL 17")) {
+      console.error("  FAIL the database is not the pinned PostgreSQL 17 (identity check)");
+      return 2;
+    }
+    // the JS probe is passed single-quoted so the host shell never touches it
+
+    console.log("  phase: driver --phase upgrade (v1 -> v2 upgrade path with real v1 history)");
+    const upgrade = execDriver("upgrade");
+    console.log(indent(upgrade.out));
+    if (upgrade.code !== 0) failuresFromDriver++;
+
+    // Lago for AC7: dedicated short-lived bring-up, one-shot migration, then
+    // the health probe from the ledger driver network.
+    const lagoUp = composeArgs(project, ["up", "-d", "--wait", "lago-db", "lago-redis", "lago-api"], composeEnv);
+    if (lagoUp.code !== 0) {
+      console.error(`  FAIL Lago bring-up failed:\n${lagoUp.out.slice(-1500)}`);
+      return 2;
+    }
+    const lagoMigrate = sh(
+      `${COMPOSE} -f tests/billing/compose.yml --profile migrate -p ${project} run --rm lago-migrate`,
+      { env: { ...process.env, ...composeEnv } },
+    );
+    console.log(`    lago-migrate exit=${lagoMigrate.code}`);
+    if (lagoMigrate.code !== 0) {
+      console.error(`  FAIL lago-migrate failed:\n${lagoMigrate.out.slice(-1500)}`);
+      return 2;
+    }
+    const lagoHealth = composeArgs(project, [
+      "exec", "-T", appContainer,
+      "bun", "-e",
+      `'const r = await fetch("http://lago-api:3000/health", {signal: AbortSignal.timeout(120000)}); console.log("lago health", r.status, (await r.text()).slice(0,120));'`,
+    ]);
+    if (lagoHealth.code !== 0 || !lagoHealth.out.includes("lago health 2")) {
+      console.error(`  FAIL Lago health check did not pass: ${lagoHealth.out.slice(-500)}`);
+      return 2;
+    }
+    console.log(`    ${lagoHealth.out.trim().slice(0, 160)}`);
+
+    console.log("  phase: driver --phase main (AC1-AC6b)");
+    const main = execDriver("main");
+    console.log(indent(main.out));
+    if (main.code !== 0) failuresFromDriver++;
+
+    console.log("  phase: stop Lago (api/clock/worker) for the outage boundary");
+    composeArgs(project, ["stop", "lago-api", "lago-clock", "lago-worker"], composeEnv);
+
+    console.log("  phase: driver --phase lago-outage (AC7)");
+    const outage = execDriver("lago-outage");
+    console.log(indent(outage.out));
+    if (outage.code !== 0) failuresFromDriver++;
+
+    console.log("  phase: cleanup (only this run's project)");
+    const leftover = composeArgs(project, ["ps", "-a"], composeEnv);
+    console.log(`    containers before down: ${leftover.out.trim().split("\n").length}`);
+
+    const ok_ = failuresFromDriver === 0;
+    console.log(
+      `\nfull-stack run complete: ${ok_ ? "PASS" : "FAIL"} (${failuresFromDriver} failing phase(s))`,
+    );
+    return ok_ ? 0 : 1;
+  } finally {
+    rmSync(v1HostDir, { recursive: true, force: true }); // the snapshot is per-run scaffolding, never left behind
+    if (upOk) {
+      // Cleanup touches ONLY the guard-verified project; volumes are removed
+      // only AFTER every assertion (including recovery) has been captured.
+      composeArgs(project, ["down", "-v", "--remove-orphans"], composeEnv);
+      const remains = sh(
+        `docker volume ls --format '{{.Name}}' | grep '^billing62_${runId}' | wc -l`,
+      );
+      console.log(
+        remains.out.trim() === "0"
+          ? "  PASS cleanup left no billing62 volumes for this run"
+          : `  WARN volumes still present after down -v:\n${remains.out}`,
+      );
+    } else {
+      // Nothing was asserted on a failed boot, so the failed attempt's state
+      // is torn down as well — a stale volume would poison the next attempt's
+      // one-time credentials at the database init step.
+      composeArgs(project, ["down", "-v", "--remove-orphans"], composeEnv);
+      console.error("  failed boot torn down (nothing had been asserted)");
+    }
+  }
+}
+
+function indent(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => `    ${l}`)
+    .join("\n");
 }
 
 // ---------------------------------------------------------------------------

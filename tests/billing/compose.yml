@@ -50,8 +50,35 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 3s
-      retries: 30
+      timeout: 5s
+      # The amd64 images run emulated on arm64 hosts and a busy docker host
+      # can leave single probes hanging long past init; tolerate a long
+      # flapping window instead of declaring a healthy server down.
+      start_period: 90s
+      retries: 60
+
+  # ------------------------------------------------ #64 isolated ledger driver
+  # The repo is bind-mounted READ-ONLY: the acceptance driver and the ledger
+  # service under test run here, on the internal network only. Credentials are
+  # injected by the runner as one-time environment variables — never baked
+  # into this file.
+  ledger-app:
+    image: oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598
+    container_name: billing62_${BILLING62_RUN_ID}-ledger-app
+    working_dir: /work
+    environment:
+      BILLING62_RUN_ID: ${BILLING62_RUN_ID}
+      BILLING_LEDGER_OWNER_URL: postgres://${BILLING62_PG_USER}:${BILLING62_PG_PASSWORD}@postgres:5432/billing62_${BILLING62_RUN_ID}
+      BILLING_LEDGER_APP_URL: postgres://billing_ledger_app:${BILLING_LEDGER_APP_PASSWORD:?one-time app password}@postgres:5432/billing62_${BILLING62_RUN_ID}
+      BILLING_LEDGER_APP_PASSWORD: ${BILLING_LEDGER_APP_PASSWORD}
+      BILLING_LEDGER_CURSOR_SECRET: ${BILLING_LEDGER_CURSOR_SECRET:?one-time cursor secret}
+      BILLING62_LAGO_URL: http://lago-api:3000
+    networks: [billing62-internal]
+    volumes:
+      - ../..:/work:ro
+    command: ["sleep", "infinity"]
+    depends_on:
+      postgres: { condition: service_healthy }
 
   # ------------------------------------------------------------- Lago CE stack
   lago-db:
@@ -67,8 +94,12 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 3s
-      retries: 30
+      timeout: 5s
+      # The amd64 images run emulated on arm64 hosts and a busy docker host
+      # can leave single probes hanging long past init; tolerate a long
+      # flapping window instead of declaring a healthy server down.
+      start_period: 90s
+      retries: 60
 
   lago-redis:
     image: redis:7-alpine@sha256:e4ee3e03ce8f75471f40937a7c6b2b0e500390b6812fcdf5cb32c01295ded446 # redis:7-alpine, linux/amd64
@@ -85,14 +116,24 @@ services:
   lago-migrate:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-migrate
-    command: ["./scripts/docker/migrate.sh"]
+    command: ["./scripts/migrate.sh"]
+    restart: "no"
+    # one-shot service: excluded from plain `up -d --wait` (the reconciler
+    # keeps re-running an exited service and recreating its dependents in a
+    # loop); the runner invokes it explicitly via `compose run --rm`.
+    profiles: [migrate]
     environment: &lago-env
-      LAGO_DATABASE_URL: postgres://${BILLING62_LAGO_USER}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
-      LAGO_DATABASE_URL_PASSWORD: ${BILLING62_LAGO_PASSWORD}
+      # v1.57 database.yml reads the plain DATABASE_URL (user+password in it).
+      DATABASE_URL: postgres://${BILLING62_LAGO_USER}:${BILLING62_LAGO_PASSWORD}@lago-db:5432/${BILLING62_LAGO_DB_NAME}
       LAGO_REDIS_URL: redis://lago-redis:6379
-      LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY:?one-time key}
+      # Lago v1.57 reads the key as Base64.decode64(ENV["LAGO_RSA_PRIVATE_KEY"])
+      # (config/initializers/rsa_keys.rb), and a multiline PEM does not survive
+      # compose interpolation anyway — so the one-time key travels exactly as
+      # the base64 string Lago expects.
+      LAGO_RSA_PRIVATE_KEY: ${BILLING62_LAGO_RSA_KEY_B64:?one-time key}
       RAILS_ENV: production
       RAILS_LOG_TO_STDOUT: "true"
+      SECRET_KEY_BASE: ${BILLING62_LAGO_SECRET_KEY_BASE:?one-time key}
       LAGO_ENCRYPTION_PRIMARY_KEY: ${BILLING62_LAGO_ENC_PRIMARY:?one-time key}
       LAGO_ENCRYPTION_DETERMINISTIC_KEY: ${BILLING62_LAGO_ENC_DETERMINISTIC:?one-time key}
       LAGO_ENCRYPTION_KEY_DERIVATION_SALT: ${BILLING62_LAGO_ENC_SALT:?one-time key}
@@ -104,33 +145,37 @@ services:
   lago-api:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-api
-    command: ["./scripts/docker/api.sh"]
+    command: ["./scripts/start.api.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     expose:
       - "3000"
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      # the v1.57 api image ships curl, not wget
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 60
 
   lago-clock:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-clock
-    command: ["./scripts/docker/clock.sh"]
+    command: ["./scripts/start.clock.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }
 
   lago-worker:
     image: getlago/api:v1.57.0@sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
     container_name: billing62_${BILLING62_RUN_ID}-lago-worker
-    command: ["./scripts/docker/worker.sh"]
+    command: ["./scripts/start.worker.sh"]
     environment: *lago-env
     networks: [billing62-internal]
     depends_on:
-      lago-migrate: { condition: service_completed_successfully }
+      lago-db: { condition: service_healthy }
+      lago-redis: { condition: service_healthy }

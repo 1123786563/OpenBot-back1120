@@ -87,7 +87,12 @@ export class MigrationsOutOfReachError extends Error {
  * precisely the ones whose folders differ. Advisory locks are scoped to the database, so two
  * databases on one server never wait on each other.
  */
-const MIGRATION_LOCK = "openbot:apply-migrations";
+/**
+ * Exported so every post-migration convergence step (e.g. the billing
+ * ledger's hardening pass) can queue on the SAME database-scoped lock instead
+ * of interleaving with an in-flight migration run.
+ */
+export const MIGRATION_LOCK = "openbot:apply-migrations";
 
 /**
  * Check, then migrate, with nothing able to commit in between.
