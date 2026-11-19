@@ -1,0 +1,19 @@
+{
+  "expect": "accept",
+  "schema": "WechatPaymentNotification",
+  "instance": {
+    "id": "EV-20261119000001",
+    "event_type": "TRANSACTION.SUCCESS",
+    "create_time": "2026-11-19T08:41:00+08:00",
+    "resource_type": "encrypt-resource",
+    "summary": "支付成功",
+    "resource": {
+      "algorithm": "AEAD_AES_256_GCM",
+      "ciphertext": "9Q3s4Z0KkQf1a2b3c4d5e6f7g8h9i0jK==",
+      "associated_data": "transaction",
+      "nonce": "nonce12bytes",
+      "original_type": "transaction"
+    }
+  },
+  "note": "WeChat v3 line protocol envelope; signature material rides Wechatpay-* headers, not the body"
+}

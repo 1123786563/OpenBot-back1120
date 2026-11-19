@@ -652,6 +652,13 @@
       "when": 1795001661150,
       "tag": "0092_thankful_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1795055832919,
+      "tag": "0093_redundant_mad_thinker",
+      "breakpoints": true
     }
   ]
 }
