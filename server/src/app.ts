@@ -138,6 +138,10 @@ import { createPasswordRoutes, createSignInRoutes } from "./passwords/routes";
 import type { SignInService } from "./passwords/service";
 import type { AlipayNotifyInbox } from "./payments/alipay/inbox";
 import { createAlipayNotifyRoutes } from "./payments/alipay/routes";
+import {
+  createWechatCallbackRoutes,
+  type WechatCallbackDeps,
+} from "./payments/wechat/callback";
 import type { OnboardingStore } from "./people/onboarding";
 import { createProfileRoutes, type ProfileStore } from "./people/profile";
 import { MAX_PAGE, type PeopleStore } from "./people/store";
@@ -624,6 +628,21 @@ export function createApp(
    * Absent — single-user mode has no sign-out to revoke against — streams run ungated.
    */
   sessionGate?: SessionGate,
+  /**
+   * The WeChat Pay notification receiving boundary (#69), built by the caller
+   * when the deployment enabled the channel.
+   *
+   * Appended last, like everything above it: these are positional, so
+   * inserting one anywhere else silently shifts every existing call site's
+   * arguments by one.
+   *
+   * Absent leaves POST /payment-callbacks/wechat unmounted rather than mounted
+   * and refusing every notification: a deployment that never enabled WeChat
+   * Pay has no door for its notifications, not a locked one. The route
+   * authenticates by the WeChat protocol (signature + decrypt over the raw
+   * bytes), never by a user session.
+   */
+  wechatPayments?: WechatCallbackDeps,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("/api/*", interfaceErrors);
@@ -636,6 +655,12 @@ export function createApp(
 
   app.get("/health", (context) => context.json({ status: "ok" }));
   app.route("/", createReleaseStatusRoutes());
+  // WeChat Pay channel-protocol entry: outside /api/* on purpose — it has no
+  // session, no cookies and no origin guard, only the signature + decrypt
+  // discipline of the notification itself (payments/wechat/callback.ts).
+  if (wechatPayments) {
+    app.route("/", createWechatCallbackRoutes(wechatPayments));
+  }
   // The public key Bots' browsers sign their requests with, where Cloudflare and any other verifier
   // look for it. Public by design, and absent when Web Bot Auth is off. See web-bot-auth.ts.
   const webBotAuth = config.webBotAuth;

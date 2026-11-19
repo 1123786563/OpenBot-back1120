@@ -11,7 +11,7 @@
 components:
   schemas:
     CallbackChannel:
-      $ref: "./scalars.yaml#/components/schemas/ChannelName"
+      $ref: "./scalars.yaml#/components/schemas/OtherChannelName"
     ChannelAcknowledgment:
       type: object
       description: >-
@@ -76,3 +76,110 @@ components:
             Wechatpay-Timestamp: "1700000460"
             Wechatpay-Nonce: "n0nce"
             Wechatpay-Serial: "5157F09EFDC096DE"
+
+    WechatPaymentNotification:
+      type: object
+      description: >-
+        WeChat Pay API v3 notification line protocol, received VERBATIM as the
+        raw body of POST /payment-callbacks/wechat (never re-serialized before
+        signature verification). Deliberately separate from the channel-agnostic
+        CallbackEnvelope: the Wechatpay-* HTTP headers carry the signature
+        material, and `resource` carries the AES-256-GCM encrypted payload that
+        only the APIv3 key can authenticate-decrypt. The `id` is the stable
+        event identity used for durable dedupe (channel + mchid + id); a
+        re-signed replay of the same id is the same event.
+      required: [id, event_type, resource_type, resource]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: Stable notification/event id (dedupe identity).
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._-]+$"
+        event_type:
+          type: string
+          description: Event type, e.g. TRANSACTION.SUCCESS or REFUND.SUCCESS.
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._]+$"
+        create_time:
+          type: string
+          description: RFC 3339 instant the event was created (channel clock).
+          minLength: 20
+          maxLength: 32
+        resource_type:
+          type: string
+          description: Always encrypt-resource for encrypted v3 notifications.
+          enum: [encrypt-resource]
+        summary:
+          type: string
+          description: Human-readable summary reported by the channel; never a business fact.
+          maxLength: 64
+        resource:
+          type: object
+          description: Encrypted payload; decrypted only AFTER signature verification passes.
+          required: [algorithm, ciphertext, nonce]
+          additionalProperties: false
+          properties:
+            algorithm:
+              type: string
+              description: Encryption algorithm; only AEAD_AES_256_GCM is accepted.
+              enum: [AEAD_AES_256_GCM]
+            ciphertext:
+              type: string
+              description: Base64 ciphertext; the final 16 bytes are the GCM tag.
+              minLength: 1
+              maxLength: 262144
+              pattern: "^[A-Za-z0-9+/]+={0,2}$"
+            associated_data:
+              type: string
+              description: Associated data for the authenticated decryption.
+              maxLength: 64
+            nonce:
+              type: string
+              description: Exactly 12 ASCII characters.
+              minLength: 12
+              maxLength: 12
+              pattern: "^[0-9A-Za-z]{12}$"
+            original_type:
+              type: string
+              description: Underlying resource type (e.g. transaction, refund).
+              maxLength: 32
+      examples:
+        - id: "EV-0001"
+          event_type: "TRANSACTION.SUCCESS"
+          create_time: "2023-11-14T21:41:00+08:00"
+          resource_type: "encrypt-resource"
+          summary: "支付成功"
+          resource:
+            algorithm: "AEAD_AES_256_GCM"
+            ciphertext: "9Q3s4Z0KkQ=="
+            associated_data: "transaction"
+            nonce: "nonce12bytes"
+            original_type: "transaction"
+    WechatChannelAcknowledgment:
+      type: object
+      description: >-
+        WeChat-specific acknowledgment for POST /payment-callbacks/wechat. A
+        first-time receipt or a verified persist answers
+        {"code":"SUCCESS"}; a legitimate duplicate (same event id, same
+        content hash) answers an EMPTY 200 body. Signature, decrypt or
+        persistence failures answer the channel failure format
+        ({"code":"FAIL", redacted message}) with 4xx/5xx — never business
+        problem+json, and never with the payload echoed back.
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [SUCCESS, FAIL]
+        message:
+          type: string
+          minLength: 0
+          maxLength: 256
+      examples:
+        - code: SUCCESS
+          message: "成功"
+        - code: FAIL
+          message: "notification rejected: bad_signature"

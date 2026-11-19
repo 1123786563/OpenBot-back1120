@@ -194,6 +194,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payment-callbacks/wechat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inbound WeChat Pay API v3 notification (raw line protocol)
+         * @description Authenticated by the WECHAT PROTOCOL ONLY — RSA-SHA256 signature over the exact raw bytes (never re-serialized) verified with the platform material the Wechatpay-Serial header names, a ±300 second timestamp window, and AES-256-GCM authentication decryption of resource with the APIv3 key — never by a user session, cookie, or bearer token; x-channel-auth: protocol. A signature or decrypt failure NEVER yields a verified event and answers the channel failure format. The event is durably persisted (dedupe key channel + mchid + notification id, content-hash guarded) BEFORE the success ack; a first receipt answers {"code":"SUCCESS"}; a legitimate duplicate answers an EMPTY 200 body; the same id with different content is refused (409) and alarmed. Business semantics (order/amount/merchant match, fulfillment) run asynchronously after receipt. A redirect back to the app is never evidence of payment. Real WeChat merchant closure is verified separately (#72).
+         */
+        post: operations["handleWechatPaymentCallback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payment-callbacks/{channel}": {
         parameters: {
             query?: never;
@@ -1451,6 +1471,76 @@ export interface components {
             next_cursor: components["schemas"]["CursorTokenNull"];
         };
         /**
+         * @description WeChat Pay API v3 notification line protocol, received VERBATIM as the raw body of POST /payment-callbacks/wechat (never re-serialized before signature verification). Deliberately separate from the channel-agnostic CallbackEnvelope: the Wechatpay-* HTTP headers carry the signature material, and `resource` carries the AES-256-GCM encrypted payload that only the APIv3 key can authenticate-decrypt. The `id` is the stable event identity used for durable dedupe (channel + mchid + id); a re-signed replay of the same id is the same event.
+         * @example {
+         *       "id": "EV-0001",
+         *       "event_type": "TRANSACTION.SUCCESS",
+         *       "create_time": "2023-11-14T21:41:00+08:00",
+         *       "resource_type": "encrypt-resource",
+         *       "summary": "支付成功",
+         *       "resource": {
+         *         "algorithm": "AEAD_AES_256_GCM",
+         *         "ciphertext": "9Q3s4Z0KkQ==",
+         *         "associated_data": "transaction",
+         *         "nonce": "nonce12bytes",
+         *         "original_type": "transaction"
+         *       }
+         *     }
+         */
+        WechatPaymentNotification: {
+            /** @description Stable notification/event id (dedupe identity). */
+            id: string;
+            /** @description Event type, e.g. TRANSACTION.SUCCESS or REFUND.SUCCESS. */
+            event_type: string;
+            /** @description RFC 3339 instant the event was created (channel clock). */
+            create_time?: string;
+            /**
+             * @description Always encrypt-resource for encrypted v3 notifications.
+             * @enum {string}
+             */
+            resource_type: "encrypt-resource";
+            /** @description Human-readable summary reported by the channel; never a business fact. */
+            summary?: string;
+            /** @description Encrypted payload; decrypted only AFTER signature verification passes. */
+            resource: {
+                /**
+                 * @description Encryption algorithm; only AEAD_AES_256_GCM is accepted.
+                 * @enum {string}
+                 */
+                algorithm: "AEAD_AES_256_GCM";
+                /** @description Base64 ciphertext; the final 16 bytes are the GCM tag. */
+                ciphertext: string;
+                /** @description Associated data for the authenticated decryption. */
+                associated_data?: string;
+                /** @description Exactly 12 ASCII characters. */
+                nonce: string;
+                /** @description Underlying resource type (e.g. transaction, refund). */
+                original_type?: string;
+            };
+        };
+        /**
+         * @description WeChat-specific acknowledgment for POST /payment-callbacks/wechat. A first-time receipt or a verified persist answers {"code":"SUCCESS"}; a legitimate duplicate (same event id, same content hash) answers an EMPTY 200 body. Signature, decrypt or persistence failures answer the channel failure format ({"code":"FAIL", redacted message}) with 4xx/5xx — never business problem+json, and never with the payload echoed back.
+         * @example {
+         *       "code": "SUCCESS",
+         *       "message": "成功"
+         *     }
+         * @example {
+         *       "code": "FAIL",
+         *       "message": "notification rejected: bad_signature"
+         *     }
+         */
+        WechatChannelAcknowledgment: {
+            /** @enum {string} */
+            code: "SUCCESS" | "FAIL";
+            message: string;
+        };
+        /**
+         * @description Channels that keep the generic /payment-callbacks/{channel} envelope path. WeChat is excluded: its raw line protocol has its own concrete path and schemas, deliberately separate from the generic CallbackEnvelope.
+         * @example alipay
+         * @enum {string}
+         */
+        OtherChannelName: "alipay";
+        /**
          * @description Channel-agnostic envelope of the raw inbound callback. The raw protocol payload is kept verbatim (base64 of the exact bytes) plus protocol metadata needed for verification (signature headers, certificate serial, encryption material identifiers). Ownership is verified server-side by decrypt/verify + merchant/application + order + amount+currency match; URL parameters and user sessions are never trusted, and a user redirect back to the app never proves payment.
          * @example {
          *       "channel": "wechat",
@@ -2146,7 +2236,7 @@ export interface components {
         ReservationId: components["schemas"]["Uuid"];
         RefundId: components["schemas"]["Uuid"];
         CatalogVersionId: components["schemas"]["Uuid"];
-        CallbackChannel: components["schemas"]["ChannelName"];
+        CallbackChannel: components["schemas"]["OtherChannelName"];
         Limit: components["schemas"]["LimitQuery"];
         Cursor: components["schemas"]["CursorQuery"];
         FromUs: components["schemas"]["TimestampUs"];
@@ -2558,6 +2648,75 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    handleWechatPaymentCallback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WechatPaymentNotification"];
+            };
+        };
+        responses: {
+            /** @description WeChat acknowledgment: {"code":"SUCCESS"} after durable persistence, or an EMPTY body for a legitimate duplicate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
+            /** @description Malformed notification (structure, headers, decryption) — channel failure format. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
+            /** @description Signature, timestamp-window or unknown-material failure — channel failure format. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
+            /** @description Same event id redelivered with different content — refused and alarmed, never overwritten. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
+            /** @description Gateway overload; WeChat will retry per protocol. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
+            /** @description Receiving boundary not deployed or storage unavailable; WeChat will retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatChannelAcknowledgment"];
+                };
+            };
         };
     };
     handlePaymentCallback: {

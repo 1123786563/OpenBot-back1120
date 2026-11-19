@@ -202,6 +202,20 @@ components:
       description: Supported payment channel.
       enum: [wechat, alipay]
       examples: ["wechat"]
+    WechatChannelName:
+      type: string
+      description: The WeChat channel, whose callback line protocol is published as a concrete path.
+      enum: [wechat]
+      examples: ["wechat"]
+    OtherChannelName:
+      type: string
+      description: >-
+        Channels that keep the generic /payment-callbacks/{channel} envelope
+        path. WeChat is excluded: its raw line protocol has its own concrete
+        path and schemas, deliberately separate from the generic
+        CallbackEnvelope.
+      enum: [alipay]
+      examples: ["alipay"]
     TimestampUsNullable:
       type: ["string", "null"]
       oneOf:

@@ -46,6 +46,7 @@ export default defineConfig({
     "./src/db/schema/identity.ts",
     "./src/db/schema/recorder.ts",
     "./src/db/schema/billing-catalog.ts",
+    "./src/db/schema/billing.ts",
   ],
   out: "./drizzle",
   dbCredentials: {

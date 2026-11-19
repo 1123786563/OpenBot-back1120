@@ -521,6 +521,83 @@ paths:
       x-error-codes: [invalid_cursor, unauthenticated, forbidden, rate_limited, ledger_unavailable]
 
   # ------------------------------------------------------- channel callback
+  # WeChat's notification LINE PROTOCOL is a concrete path, deliberately
+  # separate from the generic envelope path below: the raw body is WeChat's own
+  # JSON (WechatPaymentNotification), the signature material rides the
+  # Wechatpay-* HTTP headers, and the acknowledgment is the WeChat protocol's
+  # own format. The generic path keeps serving every other channel's envelope.
+  /payment-callbacks/wechat:
+    post:
+      operationId: handleWechatPaymentCallback
+      tags: [payment-channel]
+      summary: Inbound WeChat Pay API v3 notification (raw line protocol)
+      description: >-
+        Authenticated by the WECHAT PROTOCOL ONLY — RSA-SHA256 signature over
+        the exact raw bytes (never re-serialized) verified with the platform
+        material the Wechatpay-Serial header names, a ±300 second timestamp
+        window, and AES-256-GCM authentication decryption of resource with the
+        APIv3 key — never by a user session, cookie, or bearer token;
+        x-channel-auth: protocol. A signature or decrypt failure NEVER yields a
+        verified event and answers the channel failure format. The event is
+        durably persisted (dedupe key channel + mchid + notification id,
+        content-hash guarded) BEFORE the success ack; a first receipt answers
+        {"code":"SUCCESS"}; a legitimate duplicate answers an EMPTY 200
+        body; the same id with different content is refused (409) and alarmed.
+        Business semantics (order/amount/merchant match, fulfillment) run
+        asynchronously after receipt. A redirect back to the app is never
+        evidence of payment. Real WeChat merchant closure is verified
+        separately (#72).
+      security:
+        - ChannelProtocolAuth: []
+      x-channel-auth: protocol
+      x-no-session-auth: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/channel.yaml#/components/schemas/WechatPaymentNotification"
+      responses:
+        "200":
+          description: >-
+            WeChat acknowledgment: {"code":"SUCCESS"} after durable
+            persistence, or an EMPTY body for a legitimate duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+        "400":
+          description: Malformed notification (structure, headers, decryption) — channel failure format.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+        "401":
+          description: Signature, timestamp-window or unknown-material failure — channel failure format.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+        "409":
+          description: Same event id redelivered with different content — refused and alarmed, never overwritten.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+        "429":
+          description: Gateway overload; WeChat will retry per protocol.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+        "503":
+          description: Receiving boundary not deployed or storage unavailable; WeChat will retry.
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/channel.yaml#/components/schemas/WechatChannelAcknowledgment"
+      x-error-codes: [rate_limited, dependency_unavailable]
+
   /payment-callbacks/{channel}:
     post:
       operationId: handlePaymentCallback
@@ -1578,7 +1655,7 @@ components:
       in: path
       required: true
       schema:
-        $ref: "./schemas/scalars.yaml#/components/schemas/ChannelName"
+        $ref: "./schemas/scalars.yaml#/components/schemas/OtherChannelName"
     Limit:
       name: limit
       in: query

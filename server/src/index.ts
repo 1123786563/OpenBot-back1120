@@ -249,6 +249,8 @@ import { createModelCatalogue } from "./model-catalogue";
 import { createSignInNotifier, createSignInResumer } from "./passwords/resume";
 import { createSignInService } from "./passwords/service";
 import { createPasswordStore } from "./passwords/store";
+import { loadWechatPayWiring } from "./payments/wechat/config";
+import { WechatNotificationInbox } from "./payments/wechat/inbox";
 import { createOnboardingStore } from "./people/onboarding";
 import { createProfileStore } from "./people/profile";
 import { createPeopleStore } from "./people/store";
@@ -3051,6 +3053,15 @@ void reportIntelligenceEntitlement({
   entitlements: () => selfHostBannerIntelligence.getRuntimeEntitlements(),
 });
 
+const wechatPayments = (() => {
+  const wiring = loadWechatPayWiring(process.env);
+  if (!wiring) return undefined;
+  return {
+    adapter: wiring.adapter,
+    inbox: new WechatNotificationInbox(database),
+  };
+})();
+
 const identityGithubCallback =
   config.githubApp && config.publicUrl
     ? githubCallbackRoutes({
@@ -3446,6 +3457,12 @@ const app = createApp(
     verifyCredential: () => ({ ok: false }),
   }),
   sessionGate,
+  // WeChat Pay (#69): built only when the deployment enabled the channel with
+  // complete, valid configuration; otherwise the callback route is not mounted
+  // at all (off by default). The inbox shares this deployment's own database,
+  // so the durable receiving boundary commits on the same PostgreSQL as
+  // everything else.
+  wechatPayments,
 );
 
 startHttpServer({

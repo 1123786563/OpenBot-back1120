@@ -20,6 +20,7 @@
     "billing:contract:check": "bun run billing:contract:lint && bun run billing:contract:generate && git diff --exit-code -- generated/billing-client && test -z \"$(git status --porcelain -- generated/billing-client)\" && bun server/src/billing-contract/validate-fixtures.ts",
     "billing:test:guard": "bun tests/billing/runner.ts --guard-only",
     "billing:test:integration": "bun tests/billing/runner.ts",
+    "billing:test:wechat": "bun tests/billing/wechat-runner.ts",
     "dev": "bun run generate:app-config && bun run --filter app --filter server --parallel dev",
     "generate:app-config": "bun --env-file=.env scripts/generate-app-config.ts",
     "format": "bunx biome format --write .",

@@ -701,6 +701,13 @@
       "when": 1795070533272,
       "tag": "0099_shared_account_org_key",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1795073355614,
+      "tag": "0100_wechat_notification_inbox",
+      "breakpoints": true
     }
   ]
 }
