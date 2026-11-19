@@ -1,0 +1,18 @@
+{
+  "expect": "reject",
+  "via": "schema",
+  "code": "resource_not_found",
+  "schema": "CreateCreditGrantRequest",
+  "instance": {
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "source_event_id": "evt_comp_bad_001",
+    "source_type": "compensation",
+    "source_period_id": null,
+    "granted_microcredits": "5000",
+    "valid_from_us": "1700000400000000",
+    "expires_at_us": "1702605600000000",
+    "original_event_id": null,
+    "actor_subject_id": "subj_compensation_svc"
+  },
+  "note": "compensation grants must link the original deduction event"
+}

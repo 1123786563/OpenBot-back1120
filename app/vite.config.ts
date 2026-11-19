@@ -223,6 +223,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      /*
+       * The one Node builtin the app source imports — `identity.ts` binds mutation callbacks to
+       * their identity with `AsyncLocalStorage` — does not exist in a browser, and Vite's own
+       * externalization shim throws on the import instead of answering it. This alias answers it
+       * at build time with a deliberate "no async context here" (app/src/shims/node-async-hooks.ts),
+       * which `identity.ts` reads as its signal to run its fallback binding. Under Bun — the
+       * tests, and anything else with the engine feature — the real class resolves and the exact
+       * binding runs.
+       */
+      "node:async_hooks": path.resolve(__dirname, "./src/shims/node-async-hooks.ts"),
     },
   },
   server: serving,

@@ -294,6 +294,8 @@ async function inspectOwned(names: ComputerNames): Promise<{
   token?: string;
   shortId?: string;
   packageCapabilities: boolean;
+  /** The log driver this container was born with, when the daemon reports one. See `logIsCurrent`. */
+  logConfig?: LogConfig;
   /** The id of each network it is attached to, by name. See `onLiveNetwork`. */
   networks: Record<string, string>;
 } | null> {
@@ -313,6 +315,9 @@ async function inspectOwned(names: ComputerNames): Promise<{
       // for the rest of its life. See `holdsCurrentToken`.
       token: tokenIn(info.Config?.Env),
       packageCapabilities: hasPackageCapabilities(info.HostConfig),
+      ...(info.HostConfig?.LogConfig?.Type
+        ? { logConfig: info.HostConfig.LogConfig }
+        : {}),
       networks: Object.fromEntries(
         Object.entries(info.NetworkSettings?.Networks ?? {}).map(
           ([name, endpoint]) => [name, endpoint?.NetworkID ?? ""],
@@ -443,6 +448,72 @@ function holdsCurrentToken(
   return existingToken === wanted;
 }
 
+/**
+ * Whether the computer that exists forwards its logs the way this deployment now asks.
+ *
+ * A log driver is fixed when the container is created, exactly like its image and its package
+ * capabilities. `LogConfig` above made newly created computers forward to the collector, but a
+ * computer that already existed kept the driver it was born with: after a deployment turned log
+ * forwarding on, every computer that had been ensured once went on writing nothing to the
+ * collector, invisibly, for as long as nobody recreated it. Its new logs were simply never shipped,
+ * which is the one failure this ticket cannot ship — the console would show a working computer
+ * while the platform administrator's only view of it stayed empty.
+ *
+ * So the effective configuration is compared, whole: the driver type and every option, address
+ * included. Turning forwarding on replaces the computer; so does moving the collector's address.
+ * Leaving it off keeps whatever the container has, because a deployment that never asked for
+ * forwarding must not start recreating its computers over a driver it never set — the desktop and
+ * the CLI pass no address, and their computers were never meant to ship logs anywhere.
+ *
+ * Decommissioning is the one exception to that, and it is asked for explicitly
+ * (`COMPUTER_LOG_FORWARD_RETIRED`, only honoured when no address is set): a computer whose driver
+ * is still fluentd after the forwarding address is gone would go on pushing every line at a
+ * listener nobody reads, and accepting any old driver silently would leave the operator a config
+ * that says "off" while the containers say otherwise. Asked for, the fluentd computers are replaced
+ * with the default driver, volumes intact, like any other driver change.
+ *
+ * Like the image and token checks, this is checked at ensure time rather than by a sweeper, so the
+ * swap happens when the computer is next asked for, in a maintenance window that an operator picks
+ * by when they restart the supervisor and touch each Bot.
+ */
+function logIsCurrent(
+  existing: LogConfig | undefined,
+  wanted: LogConfig | undefined,
+  retireDriver = false,
+): boolean {
+  if (!wanted) {
+    return !(retireDriver && existing?.Type === "fluentd");
+  }
+  if (!existing) return false;
+  return (
+    existing.Type === wanted.Type && sameEntries(existing.Config, wanted.Config)
+  );
+}
+
+/**
+ * Whether two log-driver option sets say the same thing, regardless of key order.
+ *
+ * `JSON.stringify` was tried here and was wrong in a way that only showed up across processes: the
+ * supervisor builds the options in one order, while the daemon echoes them back in its own — on
+ * Docker 29.x `fluentd-request-ack` comes back sitting between `max-retries` and `buffer-limit`,
+ * wherever the caller put it. Two maps with identical entries serialized differently, so every
+ * `ensure` after the cutover saw the running computer as stale and rebuilt it — destroying the
+ * browser session the cutover was supposed to preserve, on every call, forever.
+ *
+ * A log config is a map, not a document, so it is compared the way maps are: same keys, same
+ * values, order nowhere in it.
+ */
+function sameEntries(
+  existing: Record<string, string> | undefined,
+  wanted: Record<string, string> | undefined,
+): boolean {
+  const have = existing ?? {};
+  const want = wanted ?? {};
+  const keys = Object.keys(want);
+  if (Object.keys(have).length !== keys.length) return false;
+  return keys.every((key) => key in have && have[key] === want[key]);
+}
+
 /** Long enough for a cold start with a large image, short enough that a caller is not left hanging. */
 const DEFAULT_READY_TIMEOUT_MS = 60_000;
 
@@ -524,7 +595,59 @@ export type EnsureOptions = {
    * failure.
    */
   spireSocketVolume?: string;
+  /**
+   * The log driver for the created container, from server-side configuration. Unset leaves Docker's
+   * default driver, which is how deployments without log forwarding (and the desktop and CLI, which
+   * do not pass an address) keep the behaviour they had.
+   */
+  logConfig?: LogConfig;
+  /**
+   * Decommission log forwarding: replace computers that still carry a fluentd driver with Docker's
+   * default one, volumes intact. Only meaningful with no `logConfig` — a deployment that asked for
+   * forwarding is not decommissioning it — and never set on its own initiative: it answers
+   * `COMPUTER_LOG_FORWARD_RETIRED`, a step an operator takes deliberately (see
+   * docs/observability-openobserve.md).
+   */
+  retireLogDriver?: boolean;
 };
+
+/**
+ * The log driver a container this supervisor creates is given, when the deployment asked for one.
+ *
+ * Built once from server-side configuration (`COMPUTER_LOG_FORWARD_ADDRESS`), never from caller
+ * input, and never passed into a computer's `Env`: a Bot can read its own `/proc/1/environ`, and a
+ * log address is the deployment's plumbing, not the Bot's.
+ */
+export type LogConfig = {
+  Type: string;
+  Config: Record<string, string>;
+};
+
+/**
+ * Fluentd forwarding for containers created here, with the same non-blocking buffer, retry and
+ * timeout settings the Compose overlay gives the fixed services. The tag is a fixed source label:
+ * a Bot's id, its environment or anything a request carried never rides into the log pipeline.
+ */
+export function fluentdLogConfig(
+  address: string,
+  tag: "openbot.computer" | "openbot.carry-over",
+): LogConfig {
+  return {
+    Type: "fluentd",
+    Config: {
+      "fluentd-address": address,
+      "fluentd-async": "true",
+      "fluentd-request-ack": "true",
+      "fluentd-buffer-limit": "4096",
+      "fluentd-max-retries": "12",
+      "fluentd-retry-wait": "1s",
+      "fluentd-write-timeout": "3s",
+      mode: "non-blocking",
+      "max-buffer-size": "1m",
+      tag,
+    },
+  };
+}
 
 /**
  * Confinement applied to every computer.
@@ -574,6 +697,7 @@ function hostConfig(names: ComputerNames, options: EnsureOptions) {
     PidsLimit: options.pidsLimit ?? 512,
     // Chromium's sandbox wants shared memory and will crash on the 64MB default.
     ShmSize: 1_073_741_824,
+    ...(options.logConfig ? { LogConfig: options.logConfig } : {}),
   };
 }
 
@@ -593,8 +717,9 @@ export async function ensure(
 
     /*
      * An upgrade reaches a computer that already exists, by replacing it. This includes the
-     * package permissions: changing HostConfig in the supervisor does not update a container
-     * created with CapDrop ALL and no additions, even when its image has not changed.
+     * package permissions and the log driver (see `logIsCurrent`): changing HostConfig in the
+     * supervisor does not update a container created with CapDrop ALL and no additions, even when
+     * its image has not changed.
      *
      * Safe to do: the profile and the workspace are named volumes and are not removed here, so the
      * Bot keeps its logins and its files and comes back on the new image. That is the difference
@@ -613,6 +738,11 @@ export async function ensure(
       (!(await runsCurrentImage(existing.image, options.image)) ||
         !holdsCurrentToken(existing.token, options.environment) ||
         !existing.packageCapabilities ||
+        !logIsCurrent(
+          existing.logConfig,
+          options.logConfig,
+          options.retireLogDriver,
+        ) ||
         (existing.status !== "running" &&
           !(await onLiveNetwork(existing.networks, options.network))))
     ) {
@@ -891,6 +1021,7 @@ async function copyVolume(input: {
   dest: string;
   image: string;
   runtime?: string;
+  logConfig?: LogConfig;
 }): Promise<Exclude<CarryOverOutcome, "absent">> {
   let helper: Docker.Container;
   try {
@@ -914,6 +1045,7 @@ async function copyVolume(input: {
         CapDrop: ["ALL"],
         CapAdd: ["CHOWN", "DAC_OVERRIDE", "FOWNER"],
         ...(input.runtime ? { Runtime: input.runtime } : {}),
+        ...(input.logConfig ? { LogConfig: input.logConfig } : {}),
       },
     });
   } catch (error) {
@@ -959,7 +1091,7 @@ async function copyVolume(input: {
 export async function carryOverProfile(
   person: ComputerNames,
   botId: string,
-  options: { image: string; runtime?: string },
+  options: { image: string; runtime?: string; logConfig?: LogConfig },
 ): Promise<CarryOverOutcome> {
   if (person.kind !== "person") return "absent";
   const legacy = legacyNamesFor(botId);

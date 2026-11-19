@@ -9,6 +9,9 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { createSign } from "node:crypto";
+import { createApp } from "../../../src/app";
+import { loadConfig } from "../../../src/config";
+import { testEnvironment } from "../../support/environment";
 import { WechatApiClient } from "../../../src/payments/wechat/client.js";
 import { WechatPayAdapter } from "../../../src/payments/wechat/adapter.js";
 import { WechatTrustStore, type WechatPlatformMaterial } from "../../../src/payments/wechat/trust-store.js";
@@ -81,6 +84,28 @@ function post(
 }
 
 const NOW_SEC = FIXED_NOW_US / 1_000_000n;
+
+describe("application wiring", () => {
+  test("WeChat is opt-in in its own slot after Alipay, the catalog and the session gate", async () => {
+    const { deps } = makeApp({
+      trustMaterials: [{ id: platform.serial, publicKeyPem: platform.publicPem, notBeforeSec: null, notAfterSec: null }],
+    });
+    const args: Parameters<typeof createApp> = [loadConfig(testEnvironment())];
+    const { envelope } = buildSuccessNotification({
+      mchid: "1900000001",
+      out_trade_no: "order-1",
+      amount: { total: 9900, currency: "CNY" },
+    });
+    const body = JSON.stringify(envelope);
+    const peer = createControlledPeer({ platform, apiv3Key: TEST_APIV3_KEY });
+    const headers = peer.signNotification(body, { timestampSec: NOW_SEC.toString() });
+    expect((await post(createApp(...args), body, headers)).status).toBe(404);
+    args[43] = deps;
+    const response = await post(createApp(...args), body, headers);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ code: "SUCCESS", message: "成功" });
+  });
+});
 
 describe("valid notifications", () => {
   test("an honestly signed, honestly encrypted event is received with an empty 200? no — SUCCESS JSON", async () => {

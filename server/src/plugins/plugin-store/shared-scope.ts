@@ -34,11 +34,18 @@ export async function personalOrgOf(
 }
 
 /**
- * Whether the deployment-held account behind `(provider, app)` belongs to this workspace.
+ * Whether the deployment-held account this workspace may act on exists for `(provider, app)`.
  *
- * False for a row of another workspace AND for a row with no workspace at all: both are answers a
- * workspace actor may not act on, and neither may fall back to "the deployment's". Person-held
- * rows never reach this question — they are scoped by `user_id` at every reader already.
+ * The workspace is IN THE QUERY, not compared after it: an app can now hold one Shared account
+ * per workspace, so "the deployment row" is not one row, and picking any row and comparing its
+ * workspace afterwards could answer the question about a row the actor may never see — or, worse,
+ * let a second read without the workspace land on a row that was re-bound between the two reads.
+ * One statement, one predicate: a row of this workspace, or no row.
+ *
+ * False for a workspace with no row of its own — including when ANOTHER workspace holds one:
+ * that another space connected the app is a fact of a space the caller is not in, and the answer
+ * they get is the same "not in scope" either way. Person-held rows never reach this question —
+ * they are scoped by `user_id` at every reader already.
  */
 export async function sharedAccountInScope(
   database: Database,
@@ -47,15 +54,16 @@ export async function sharedAccountInScope(
   actorWorkspaceId: string,
 ): Promise<boolean> {
   const [row] = await database
-    .select({ organizationId: brokeredConnections.organizationId })
+    .select({ id: brokeredConnections.vendorUserId })
     .from(brokeredConnections)
     .where(
       and(
         eq(brokeredConnections.provider, provider),
         eq(brokeredConnections.app, app),
         eq(brokeredConnections.holder, "deployment"),
+        eq(brokeredConnections.organizationId, actorWorkspaceId),
       ),
     )
     .limit(1);
-  return row?.organizationId === actorWorkspaceId;
+  return row !== undefined;
 }

@@ -38,6 +38,22 @@ export interface RunStreamEvent {
 }
 
 /**
+ * The enum a failed run's diagnostic line carries, and nothing else about the failure.
+ *
+ * The model's own words, a stack, or anything the conversation carried must not reach the log
+ * pipeline, so the refusal is named by class alone: the provider refused the request, the
+ * provider could not be reached, or the run failed some other way. The framework's provider
+ * errors carry a numeric HTTP status; anything else is the fallback.
+ */
+function errorCodeOf(
+  error: unknown,
+): "model-refused" | "model-unavailable" | "turn-failed" {
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status !== "number") return "turn-failed";
+  return status >= 500 ? "model-unavailable" : "model-refused";
+}
+
+/**
  * Translate one run's framework events into AG-UI events, each sent through `send`.
  *
  * The caller opens the run with RUN_STARTED and closes the stream; this fills the middle and ends it
@@ -229,6 +245,17 @@ export async function streamRun(
       runId: input.runId,
     } as BaseEvent);
   } catch (error) {
+    // One line on stderr for the platform administrator's log view, before the run error reaches
+    // the surface: the fixed event name, the run it belongs to and an enum code. The model's own
+    // words, a stack and anything the conversation carried stay out — the collector forwards only
+    // what the registry names (see scripts/observability/log-registry.py).
+    console.error(
+      JSON.stringify({
+        type: "langgraph-turn-failed",
+        runId: input.runId,
+        errorCode: errorCodeOf(error),
+      }),
+    );
     // A text message left open would strand the surface mid-message, so it is closed before the
     // error is reported. agent-bot has the same hazard and the same ordering.
     if (textOpen) {

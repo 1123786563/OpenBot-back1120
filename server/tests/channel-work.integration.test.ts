@@ -178,7 +178,7 @@ async function listen(people: AgentActor[]) {
   );
   const hub = createChannelEventHub();
   const detachers = people.map((person) =>
-    hub.register(person.id, (payload) => {
+    hub.register(person.id, undefined, (payload) => {
       heard.get(person.id)?.push(JSON.parse(payload) as ChannelActivityEvent);
     }),
   );
@@ -383,7 +383,7 @@ describe("announcing it", () => {
     const { owner, channel } = await setup();
     const heard: ChannelActivityEvent[] = [];
     const hub = createChannelEventHub();
-    const detach = hub.register(owner.id, (payload) => {
+    const detach = hub.register(owner.id, undefined, (payload) => {
       heard.push(JSON.parse(payload) as ChannelActivityEvent);
     });
     const listener = await startChannelActivityListener(databaseUrl, hub);

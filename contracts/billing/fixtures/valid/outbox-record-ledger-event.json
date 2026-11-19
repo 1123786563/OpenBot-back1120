@@ -1,0 +1,22 @@
+{
+  "expect": "accept",
+  "schema": "OutboxRecord",
+  "instance": {
+    "id": "f5a6b7c8-d9e0-4f1a-8b2c-3d4e5f6a7b9a",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "created_at_us": "1700000301000000",
+    "updated_at_us": "1700000302000000",
+    "revision": "1",
+    "aggregate_type": "ledger_event",
+    "aggregate_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5e",
+    "event_type": "credit.granted",
+    "dedupe_key": "entitlement-service:evt_sub_2026M12_grant",
+    "watermark_seq": "7",
+    "attempt_count": "0",
+    "published_at_us": null,
+    "status": "pending"
+  },
+  "note": "local ledger fact outbox (#64): a ledger_event is an accounting fact for #73, never a usage_event"
+}

@@ -71,7 +71,9 @@ describe("brokered_connections", () => {
           vendorUserId: `d2-${suite}`,
         }),
       ),
-    ).toMatch(/brokered_connections_deployment_idx/);
+    ).toMatch(
+        /brokered_connections_deployment_unbound_idx/,
+      );
   });
 
   test("one person holds at most one account per app, and two people may each hold one", async () => {

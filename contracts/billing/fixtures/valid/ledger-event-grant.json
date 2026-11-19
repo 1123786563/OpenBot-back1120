@@ -1,0 +1,43 @@
+{
+  "expect": "accept",
+  "schema": "LedgerEvent",
+  "instance": {
+    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5e",
+    "schema_version": "billing.v1",
+    "organization_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "event_type": "credit.granted",
+    "account_seq": "7",
+    "source_namespace": "entitlement-service",
+    "source_event_id": "evt_sub_2026M12_grant",
+    "original_event_id": null,
+    "adjustment_id": null,
+    "actor_subject_id": "subj_entitlement_svc",
+    "reason": null,
+    "original_period_id": "period_2026-12",
+    "occurred_at_us": "1764547200000000",
+    "committed_at_us": "1764547200000001",
+    "lines": [
+      {
+        "lot_id": "3b4c5d6e-7f80-4a9b-8c1d-2e3f4a5b6c7d",
+        "delta_granted_microcredits": "1000000",
+        "delta_available_microcredits": "1000000",
+        "delta_reserved_microcredits": "0",
+        "delta_refund_frozen_microcredits": "0",
+        "delta_consumed_microcredits": "0",
+        "delta_expired_microcredits": "0",
+        "delta_revoked_microcredits": "0",
+        "balances_after": {
+          "granted_microcredits": "1000000",
+          "available_microcredits": "1000000",
+          "reserved_microcredits": "0",
+          "refund_frozen_microcredits": "0",
+          "consumed_microcredits": "0",
+          "expired_microcredits": "0",
+          "revoked_microcredits": "0"
+        }
+      }
+    ]
+  },
+  "note": "grant ledger event head with one conserving lot line (deltas sum to zero)"
+}

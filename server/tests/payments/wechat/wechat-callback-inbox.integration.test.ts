@@ -3,7 +3,7 @@
  *
  * Requires TEST_DATABASE_URL to point at a DEDICATED disposable PostgreSQL
  * (never the live openbot database; the support helper refuses that shape).
- * The 0093 migration is applied directly to the dedicated database and its
+ * The 0100 migration is applied directly to the dedicated database and its
  * objects are dropped again afterwards. Concurrent same-event delivery,
  * re-signed redelivery, committed-before-ACK ordering and the
  * same-id/different-content conflict are exercised against REAL transaction
@@ -18,7 +18,7 @@ import { TEST_POOL, testDatabaseUrl } from "../../support/database.js";
 const databaseUrl = testDatabaseUrl(); // throws with guidance when unset
 const db = createDatabase(databaseUrl, TEST_POOL);
 
-const MIGRATION_FILE = new URL("../../../drizzle/0093_redundant_mad_thinker.sql", import.meta.url);
+const MIGRATION_FILE = new URL("../../../drizzle/0100_wechat_notification_inbox.sql", import.meta.url);
 
 let migrationError: string | null = null;
 
@@ -53,7 +53,7 @@ describe("WeChat notification inbox on real PostgreSQL", () => {
     signatureSerial: "SERIAL-1",
   });
 
-  test("the 0093 migration applied cleanly", () => {
+  test("the 0100 migration applied cleanly", () => {
     expect(migrationError).toBeNull();
   });
 

@@ -91,6 +91,10 @@ import { createRoleRepository } from "./auth/guards";
 import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import { createOrganizationAuth } from "./auth/organization";
 import { organizationUserStore } from "./auth/organization-store";
+import {
+  createBillingCatalogRoutes,
+  createBillingCatalogService,
+} from "./billing-catalog";
 import { openbotAddress } from "./browser/address";
 import { botBrowserNetwork } from "./browser/bot-browser";
 import { personBrowserEgressPolicy } from "./browser/egress";
@@ -111,6 +115,7 @@ import {
   createChannelEventHub,
   startChannelActivityListener,
 } from "./channels/events";
+import { createGatewaySocketRegistry } from "./intelligence-gateway-proxy";
 import {
   createGroupConversations,
   createGroupStore,
@@ -126,6 +131,7 @@ import {
 } from "./channels/summary";
 import { createThreadIdentity } from "./channels/thread-identity";
 import { createChannelTitler } from "./channels/titler";
+import { createSessionGate } from "./auth/session-gate";
 import { headlessComponentCatalog } from "./components/headless";
 import { createSandboxedStore } from "./components/sandboxed";
 import { createComponentStore } from "./components/store";
@@ -515,7 +521,28 @@ const channelStore: ChannelStore = {
     if (activity.agentId === null) personSpoke?.(actor.id, channelId);
   },
 };
-const channelEvents = createChannelEventHub();
+/**
+ * Whether a session may still be sent anything, asked before every stream write and every
+ * socket frame.
+ *
+ * Built before the hub that uses it, and after the database, because its shared answer is the
+ * sessions table itself: sign-out deletes the row, and every replica that asks before sending
+ * reads the same truth, whichever replica handled the POST.
+ */
+const sessionGate = createSessionGate(database);
+/*
+ * The proxied Intelligence gateway sockets, kept where a revocation can find them. The sign-out
+ * path closes the session's channel sockets through `revokeSession` below; the same call now ends
+ * that session's conversation sockets — the frames they carry are a conversation's live turns, and
+ * a session that has signed out may hear none of them. The gate asked before every frame stays the
+ * authority; this is the prompt close, on this replica and, through the announcement, on every
+ * other.
+ */
+const gatewaySockets = createGatewaySocketRegistry();
+const channelEvents = createChannelEventHub(sessionGate, {
+  onSessionRevoked: (userId, sessionId) =>
+    gatewaySockets.revokeSession(userId, sessionId),
+});
 /**
  * Which components each Bot may answer with.
  *
@@ -3405,13 +3432,31 @@ const app = createApp(
   identityStore,
   identityGithubCallback,
   profileStore,
-  // Sign-out ends the identity's live subscriptions, not only the session row: this instance's
-  // sockets close at once, and the same fact rides the activity topic to every other replica.
-  // Last, matching `createApp`'s own last positional parameter.
-  async (userId) => {
-    channelEvents.revokeUser(userId);
-    await announceSessionRevoked(database, [userId]);
+  // Sign-out ends the SESSION's live subscriptions, not only the session row: this instance's
+  // socket for that session closes at once, and the same fact rides the activity topic to every
+  // other replica. The person's other sessions — their other devices — are untouched, because
+  // the sign-out ended one session, not the person. The gate records the end locally before the
+  // announcement can matter, so not even this replica's own next stream chunk re-reads a session
+  // that is gone.
+  async (userId, sessionId) => {
+    if (sessionId) sessionGate.revoke(sessionId);
+    channelEvents.revokeSession(userId, sessionId);
+    await announceSessionRevoked(database, [{ userId, sessionId }]);
   },
+  undefined, // Alipay notification inbox is not configured in this assembly.
+  // The billing catalog's internal read surface (#65), mounted in the default
+  // assembly. Until the trusted service-credential issuer lands (#67/#76) the
+  // verifier below accepts NO credential: every request is 401 problem+json
+  // and no session or browser path can reach /internal — the routes exist and
+  // answer, but only a future credential issuer can ever open them.
+  createBillingCatalogRoutes({
+    service: createBillingCatalogService({
+      database,
+      clock: { nowUs: () => BigInt(Date.now() * 1000) },
+    }),
+    verifyCredential: () => ({ ok: false }),
+  }),
+  sessionGate,
   // WeChat Pay (#69): built only when the deployment enabled the channel with
   // complete, valid configuration; otherwise the callback route is not mounted
   // at all (off by default). The inbox shares this deployment's own database,
@@ -3426,6 +3471,8 @@ startHttpServer({
   resolveRequestActor,
   agentProfileStore,
   computerGateway,
+  sessionGate,
+  gatewaySockets,
   app,
 });
 

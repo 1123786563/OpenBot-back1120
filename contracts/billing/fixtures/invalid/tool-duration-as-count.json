@@ -1,0 +1,22 @@
+{
+  "expect": "reject",
+  "via": "schema",
+  "code": "out_of_range",
+  "schema": "StepQuote",
+  "instance": {
+    "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "rounding": "half_up",
+    "lines": [
+      {
+        "resource": "tool_call_duration_ms",
+        "quantity": "1500.5",
+        "measurement_unit": "millisecond",
+        "unit_size": "1",
+        "numerator": "1",
+        "denominator": "1000"
+      }
+    ],
+    "total_microcredits": "2",
+    "total_display": "0.000002"
+  }
+}

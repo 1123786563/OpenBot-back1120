@@ -1,0 +1,14 @@
+{
+  "expect": "reject",
+  "via": "schema",
+  "code": "out_of_range",
+  "schema": "PurchaseEligibility",
+  "instance": {
+    "allowed": false,
+    "reason": "double_charge",
+    "next_action": "create_order",
+    "target_period": null,
+    "state_revision": "7",
+    "existing_commitment": null
+  }
+}

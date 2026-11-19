@@ -294,7 +294,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/v1/billing/adjustments": {
+    "/internal/v1/billing/accounts": {
         parameters: {
             query?: never;
             header?: never;
@@ -304,10 +304,114 @@ export interface paths {
         get?: never;
         put?: never;
         /**
+         * Register the single personal billing account for a stable subject (trusted identity service)
+         * @description Trusted internal account-registration entry used by the identity adapter (#67) and, in the isolated environment, by a registration-only credential. The stable subject and Personal Workspace are supplied by the TRUSTED SERVICE, never self-reported by a browser user; a database unique constraint guarantees exactly one active personal account per subject and per Personal Workspace even under concurrent registration. A closed account never reopens under a new id. This endpoint grants NO credits — granting requires the separate billing:grant capability and createCreditGrant. Idempotent under (organization_id, billing_account_id, registerBillingAccount, account-root, key); the billing_account_id is derived server-side from the subject, so the same registration replayed under a new key still answers the original account.
+         */
+        post: operations["registerBillingAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/accounts/{billing_account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exact balance projection of one billing account (trusted service read)
+         * @description Internal read alias of getBillingAccount for trusted services: same BillingAccount response object and revision semantics. The service credential is checked against its authorized organization and account scope; an account outside that scope answers 404 without revealing existence. Never browser-reachable.
+         */
+        get: operations["getInternalBillingAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/credit-lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated credit lots of one billing account (trusted service read)
+         * @description Internal read alias of listCreditLots for trusted services, scoped to the billing_account_id query parameter and the credential's organization. Same CreditLot response objects, ordering (created_at_us, id) and cursor semantics.
+         */
+        get: operations["listInternalCreditLots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated adjustments of one billing account (trusted service read)
+         * @description Internal read alias of listAdjustments for trusted services, scoped to the billing_account_id query parameter and the credential's organization. Same Adjustment response objects and cursor semantics.
+         */
+        get: operations["listInternalAdjustments"];
+        put?: never;
+        /**
          * Append an immutable ledger correction (authorized operations/compensation service)
-         * @description Requires the billing:adjust capability and an audited actor_subject_id. Business uniqueness (billing_account_id, original_event_id, adjustment_type) holds independently of the idempotency key. Positive compensation deltas create/extend a CompensationLot; compensation sourced from an expired subscription is valid 30 days from grant. Adjustments stay in the ORIGINAL period. Idempotent under (organization_id, billing_account_id, createAdjustment, original_event_id+adjustment_type, key).
+         * @description Requires the billing:adjust capability and an audited actor_subject_id. Business uniqueness (billing_account_id, original_event_id, adjustment_type) holds independently of the idempotency key. Sign semantics are LEDGER BALANCE semantics: a POSITIVE delta increases consumable entitlement (it restores entitlement from the original deduction's lot allocations, or creates/extends a CompensationLot when the original source is an expired subscription — valid 30 days from grant); a NEGATIVE delta withdraws entitlement by moving revocable available credits of the ORIGINAL event's lots to revoked. A negative delta never chases reserved/consumed/refund-frozen credits and never drives a balance negative — when the revocable available is insufficient the adjustment is refused with 409 state_conflict and nothing is written. A zero delta is valid only for a late_usage_attribution that appends period ownership without a second consumption. Adjustments stay in the ORIGINAL period; packs have no period, so original_period_id is nullable. Idempotent under (organization_id, billing_account_id, createAdjustment, original_event_id+adjustment_type, key).
          */
         post: operations["createAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/accounts/{billing_account_id}/ledger-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paginated immutable ledger events with their lot lines (trusted service read)
+         * @description Trusted query contract for the append-only ledger evidence: every grant, adjustment and expiry event with its per-lot component changes and balances after the change, the originating business key, the original period and any adjustment linkage. Scoped to the path account and the credential's organization; cross-scope ids answer 404 without revealing existence. Ordered by the per-account sequence (account_seq), which is assigned inside the account lock — NOT a database global sequence.
+         */
+        get: operations["listLedgerEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/credit-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant one credit lot from a trusted business event (authorized entitlement service)
+         * @description The ONLY entry that adds credits. Requires the billing:grant capability; the source namespace and actor are derived from the authenticated service credential, never from the request. The stable business key (source_namespace, source_event_id) binds to the account, amount, period and validity once: the same key with the same content under ANY new Idempotency-Key replays the first result, and the same key with a different account/amount/period/validity is refused — a re-grant through a changed request or a second account can never happen. The credit lot, the grant ledger event, the pending outbox record and the successful idempotency row all commit in ONE transaction; no external network call runs inside it. subscription grants carry their period and a finite expiry from the trusted period result (#65); packs are long-lived (expires_at_us null, period null); compensation grants link their original deduction event — shares whose original source is still valid are restored in place with that source's original validity, and only shares whose source subscription has expired become a compensation lot expiring 30 days after grant (server-computed; the request may only echo it). Recovery is tracked per original deduction line across ALL entries, so grants and adjustments together can never restore more than the original deduction. Idempotent under (organization_id, billing_account_id, createCreditGrant, source_event_id, key).
+         */
+        post: operations["createCreditGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -328,6 +432,126 @@ export interface paths {
          * @description Requires the billing:review-refund capability; reviewed_by records the human reviewer. Approval atomically freezes the corresponding entitlements; rejection closes without freeze. If the channel result is unknown the refund stays processing/unknown — approval does not claim success; after 24h unresolved the case is escalated to manual handling and is never auto-unfrozen. expected_revision provides optimistic concurrency on the refund object. Idempotent under (organization_id, billing_account_id, reviewRefund, refund_id, key).
          */
         post: operations["reviewRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/product-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote one product over the release the trusted clock selects
+         * @description Resolves the catalog release for the server-resolved scope at the server's trusted clock (no client-provided now is ever accepted), returns sellability with a closed reason, the full immutable version snapshot when sellable, the eligibility outcome over the trusted subscription projection, and a period preview only when the target period is already determined. An expected_price_version_id that is not the pinned version answers 409 price_version_conflict. A missing or incomplete production configuration answers sellable=false with a closed reason — never a zero price or a demo value. A production request never selects a test release. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/step-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quote the exact microcredit cost of one step against a pinned price version
+         * @description Computes S = sum(q_i * N_i / (D_i * U_i)) over the given merged resource vector as ONE exact rational and rounds exactly once (HALF_UP to whole microcredits). Accepts any PUBLISHED version by id — retired versions stay quotable forever so pinned steps replay after restarts, repricing and retirement, while drafts and never-released configurations answer 404 like a missing row. New steps take their version from resolveCurrentBillingPrice and record it as the reserved fixed reference; replay/settlement must pass that reference as expected_price_version_id — a divergence is 409 price_version_conflict, never a silent reprice. This operation is the ESTIMATE/REPLAY path (any published version by id, caller-nominated); SETTLEMENT of a reserved step must use quoteBillingStepSettlement, which resolves the pinned version from the step's trusted reservation instead of trusting request fields. Quantities travel as contract decimal strings; a quantity outside the closed lexeme/range or a resource with no price in the version is rejected. Historical replay may use this operation; purchasing against a retired version is decided by the order service, never by this quote. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingStep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/step-settlement-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle one reserved step against the version its TRUSTED reservation pins
+         * @description The settlement path: the priced version is resolved from the step's reservation through the server's TRUSTED reservation reader — never from a caller-supplied version id, and never from the currently-active release. step_reservation_ref identifies the reservation/step record that resolveCurrentBillingPrice created at pricing time; the reader resolves its pinned fixed reference server-side, so a settlement can never be repriced by sending another version id. Any client-asserted price_version_id or expected_price_version_id that diverges from the trusted pinned version is 409 price_version_conflict (asserting the pinned value is allowed but never required — the trusted reference alone decides). The same exact arithmetic as quoteBillingStep applies: one exact rational summed over the merged resource vector, ONE HALF_UP rounding to whole microcredits. An unknown reservation answers 404 like a missing row; a reservation whose account is outside the credential's trusted authorization is 403 forbidden. x-readonly: no write side effects.
+         */
+        post: operations["quoteBillingStepSettlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/period-queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Locate or build a Beijing-time monthly period from an activation anchor
+         * @description Given the trusted original activation anchor (original_purchased_at_us — the server-confirmed activation instant, never an order or payment time) and either an explicit target_period_index or an occurrence_us to locate, returns the half-open [B(n), B(n+1)) period with integer UTC microsecond boundaries, ISO renderings, and Asia/Shanghai local wall times. Month ends clamp to the target month's length and the original day number resumes; an event at exactly end_us belongs to the next period. Wall times that do not exist or occur twice in the timezone are rejected, never silently shifted. x-readonly: no write side effects.
+         */
+        post: operations["queryBillingPeriod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/current-prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve the CURRENT published unit prices and default Run cap for new steps
+         * @description The trusted path a settlement adapter uses for NEW steps: the release is selected by the SERVER's trusted clock over the server-resolved scope (organization from the credential, the requested billing account, the deployment environment) — never by a caller-chosen version id. Returns the pinned price version (the value to record as the step's reserved fixed reference), the default root Run cap, and the full price list so the caller can see the exact basis. Draft, never-released, foreign-environment and foreign-account configurations can never be resolved here; a missing or incomplete release answers sellable=false with a closed reason, never a zero price. x-readonly: no write side effects.
+         */
+        post: operations["resolveCurrentBillingPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/billing/catalog-versions/{catalog_version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Full immutable catalog release snapshot for history replay
+         * @description Returns the complete referenced version bundle of one release, scoped to the caller's organization (cross-organization ids answer 404 without revealing existence) and to the caller's trusted deployment environment: a test-environment release is readable only with the environment=test request of an explicitly test-authorized credential — the same authorization quoteBillingProduct requires — so a caller without that trusted mark can never read test amounts, credits or unit prices out of the history path. Historical reads answer retired releases — history never disappears — but a historical read can never be used to purchase against a retired price; new sales always select through quoteBillingProduct.
+         */
+        get: operations["getBillingCatalogVersion"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -368,6 +592,11 @@ export interface components {
              * @enum {string}
              */
             payment_scenario: "h5" | "native" | "jsapi";
+            /**
+             * @description Alipay only, and only with payment_scenario h5: which website product the server opens — pc = alipay.trade.page.pay (FAST_INSTANT_TRADE_PAY, desktop cashier), wap = alipay.trade.wap.pay (QUICK_WAP_WAY, mobile cashier). Omitted defaults to wap. Chosen by an explicit user entry point, never by User-Agent sniffing; the server, not the client, decides the actual channel method.
+             * @enum {string}
+             */
+            alipay_website_mode?: "pc" | "wap";
             /** @description Redirect target after payment; MUST match the server-side whitelist. Returning to the app never proves payment. */
             return_url: string;
         };
@@ -471,14 +700,18 @@ export interface components {
             request_id: string;
         };
         CreateAdjustmentRequest: {
+            /** @description Target account; the original event MUST belong to it (cross-account reference refused by the database). */
+            billing_account_id: components["schemas"]["Uuid"];
             original_event_id: string;
             /** @enum {string} */
             adjustment_type: "charge_correction" | "compensation" | "late_usage_attribution" | "expiry_correction" | "revocation";
             source_event_id: string;
+            /** @description Ledger balance semantics — positive increases consumable entitlement, negative withdraws revocable available credits, zero only for late_usage_attribution. */
             signed_delta_microcredits: components["schemas"]["SignedAdjustmentDelta"];
             reason: string;
             actor_subject_id: components["schemas"]["SubjectId"];
-            original_period_id: string;
+            /** @description The ORIGINAL period of the referenced event; null when the original source has no period (pack). Never invented. */
+            original_period_id: string | null;
             effective_at_us: components["schemas"]["TimestampUs"];
         };
         AdjustmentMutationResult: {
@@ -500,6 +733,106 @@ export interface components {
             /** @description Entitlement freeze applied atomically at approval; empty on rejection. */
             frozen_allocations: components["schemas"]["FrozenAllocation"][];
             request_id: string;
+        };
+        /**
+         * @description The caller chooses WHAT to quote and, optionally, which price version it expects — never a price, a payer, or the clock. The organization scope comes from the trusted service credential; billing_account_id narrows the scope when quoting an account-specific catalog.
+         * @example {
+         *       "product_id": "pack_1m_credits",
+         *       "action": "initial_purchase",
+         *       "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70"
+         *     }
+         */
+        QuoteBillingProductRequest: {
+            product_id: string;
+            /**
+             * @description The purchase action eligibility is evaluated for.
+             * @enum {string}
+             */
+            action: "initial_purchase" | "renewal" | "change_tier";
+            billing_account_id?: null | components["schemas"]["Uuid"];
+            /** @description When present and not the pinned version, the quote answers 409 price_version_conflict. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The deployment environment to quote against; production by default. The test environment exists ONLY for explicitly test-authorized service credentials (acceptance fixtures are quoted there with test_only=true) — a request for it without that trusted authorization is 403 forbidden, and a production sale never selects a test release. */
+            environment?: components["schemas"]["BillingEnvironment"];
+        };
+        /**
+         * @description The FINAL merged resource vector of one step. The trusted adapter owes the merge semantics: non-overlapping token classes, deduplicated stream fragments (same event id -> one contribution), and durations accumulated per resource and converted ONCE to whole milliseconds. Quantities are contract decimal strings; a stream without stable event identity cannot be settled at all.
+         * @example {
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "resources": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993"
+         *         }
+         *       ]
+         *     }
+         */
+        QuoteBillingStepRequest: {
+            /** @description The version to price against — the reservation's pinned version, or any PUBLISHED historical version for replay (never-released drafts answer 404). */
+            price_version_id: components["schemas"]["Uuid"];
+            /** @description The RESERVED fixed reference recorded on the step/reservation at pricing time. When present it must equal price_version_id; a divergence is 409 price_version_conflict, so settlement can never silently reprice a pinned step under another configuration. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The caller's trusted deployment environment; production by default. Versions of the other environment are invisible (404). */
+            environment?: components["schemas"]["BillingEnvironment"];
+            resources: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+            }[];
+        };
+        /**
+         * @description WHAT to resolve — never a price or a clock. The organization scope comes from the trusted service credential; billing_account_id narrows the scope when resolving an account-specific catalog; environment selects production (default) or a test-authorized test catalog.
+         * @example {
+         *       "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+         *       "product_id": "pack_1m_credits"
+         *     }
+         */
+        ResolveCurrentPriceRequest: {
+            billing_account_id?: null | components["schemas"]["Uuid"];
+            /** @description Resolve the pinned price of THIS product's release item. Absent, every item of the release must pin the same price version, and that shared version is resolved; a divergent release fails closed. */
+            product_id?: string;
+            /** @description The deployment environment to resolve; production by default, test only for test-authorized credentials. */
+            environment?: components["schemas"]["BillingEnvironment"];
+        };
+        /**
+         * @description Settle one RESERVED step. The priced version comes from the trusted reservation reader keyed by step_reservation_ref; the request carries NO authoritative version. The optional assertion fields may confirm the pinned version, but a divergence from the trusted reference is 409 price_version_conflict and can never redirect the settlement to another configuration. The resource vector is the step's FINAL merged vector under the same merge semantics as QuoteBillingStepRequest.
+         * @example {
+         *       "step_reservation_ref": "step_01hf3k8m2q.reservation",
+         *       "resources": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993"
+         *         }
+         *       ]
+         *     }
+         */
+        QuoteBillingStepSettlementRequest: {
+            /** @description The trusted reservation/step identity recorded when the step was priced (resolveCurrentBillingPrice's pinned version was saved on it). Resolved server-side; an unknown reference answers 404. */
+            step_reservation_ref: string;
+            /** @description Optional client assertion. When present it must equal the reservation's trusted pinned version; any other value is 409 price_version_conflict — a caller can never steer the settlement. */
+            price_version_id?: components["schemas"]["Uuid"];
+            /** @description Optional client assertion (the reference the caller recorded). Must equal the trusted pinned version when present; a divergence is 409 price_version_conflict. */
+            expected_price_version_id?: components["schemas"]["Uuid"];
+            /** @description The caller's trusted deployment environment; production by default. Reservations of the other environment are invisible (404). */
+            environment?: components["schemas"]["BillingEnvironment"];
+            resources: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+            }[];
+        };
+        /**
+         * @description Exactly one selector — an explicit period index or an occurrence time to locate.
+         * @example {
+         *       "original_purchased_at_us": "1706679015123456",
+         *       "target_period_index": "0"
+         *     }
+         */
+        QueryBillingPeriodRequest: {
+            /** @description The trusted original activation anchor (server-confirmed activation). */
+            original_purchased_at_us: components["schemas"]["TimestampUs"];
+            /** @description Mutually exclusive with occurrence_us. */
+            target_period_index?: components["schemas"]["UnsignedInt64"];
+            /** @description Locate the half-open period containing this instant; mutually exclusive with target_period_index. */
+            occurrence_us?: components["schemas"]["TimestampUs"];
         };
         /**
          * @description Server-generated, immutable, never-reused identifier (UUID lowercase hexadecimal). External channel identifiers are stored separately and are never used as personal identity or as these primary keys.
@@ -702,7 +1035,7 @@ export interface components {
             /** @description Absolute expiry instant; null for long-lived packs. Packs are long-lived; subscription grants expire with the period. */
             expires_at_us: components["schemas"]["TimestampUsNullable"];
             /**
-             * @description scheduled -> active at valid_from_us. active -> exhausted when available+reserved+refund_frozen reach 0. active -> expired at expires_at_us (remaining available+reserved released to expired). active/frozen -> revoked on revocation (terminal). frozen is a partial marker and returns to the pre-freeze state when the freeze is lifted.
+             * @description scheduled -> active at valid_from_us (before that the available part is NOT counted in the account's spendable balance). active -> exhausted when available+reserved+refund_frozen reach 0. active -> expired at expires_at_us, where ONLY the remaining available moves to expired; reserved and refund_frozen are PRESERVED in flight for the later settlement/refund step (#66/#71) and are never dropped or revived by expiry — a release arriving after expiry moves its amount to expired, never back to available. active/frozen -> revoked on revocation (terminal). frozen is a partial marker and returns to the pre-freeze state when the freeze is lifted. status is an auxiliary projection: spendability is always computed from valid_from_us/expires_at_us AND the components together.
              * @enum {string}
              */
             status: "scheduled" | "active" | "frozen" | "exhausted" | "expired" | "revoked";
@@ -1043,11 +1376,11 @@ export interface components {
             revision: components["schemas"]["Revision"];
         };
         /**
-         * @description Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change.
+         * @description Metered resource kinds priced by a PriceVersion. The list is closed; new resources require a contract change. tool_call_duration_ms carries whole milliseconds — a duration arriving in finer units is converted ONCE per resource by the trusted adapter before pricing, never per fragment.
          * @example model_input_tokens
          * @enum {string}
          */
-        ResourceKind: "model_input_tokens" | "model_output_tokens" | "model_cache_read_tokens" | "model_cache_write_tokens" | "model_web_search_requests" | "model_request_count";
+        ResourceKind: "model_input_tokens" | "model_output_tokens" | "model_cache_read_tokens" | "model_cache_write_tokens" | "model_web_search_requests" | "model_request_count" | "tool_call_count" | "tool_call_duration_ms";
         /**
          * @description One metered resource line inside a settlement. Quantities are exact integers; the per-step charge is computed from ALL resources first with arbitrary precision and then rounded HALF_UP to whole microcredits — never per token or per fragment.
          * @example {
@@ -1107,7 +1440,7 @@ export interface components {
         SignedAdjustmentDelta: string;
         /** @description Uuid or null (no referenced object yet). */
         UuidNullable: string & (null | components["schemas"]["Uuid"]);
-        /** @description Immutable appended correction to the ledger. Business uniqueness scope = (billing_account_id, original_event_id, adjustment_type): the same scope cannot be duplicated even with a different HTTP idempotency key. Any legitimate follow-up correction must carry its own distinct source event id and explicit linkage. Negative deltas credit the account by creating/adding to a CompensationLot when compensation_lot_id is set; compensation created from an expired-subscription source is valid for 30 days after grant.actor_subject_id records the audited human or service operator. */
+        /** @description Immutable appended correction to the ledger. Business uniqueness scope = (billing_account_id, original_event_id, adjustment_type): the same scope cannot be duplicated even with a different HTTP idempotency key. Any legitimate follow-up correction must carry its own distinct source event id and explicit linkage. Sign semantics are ledger balance semantics: a POSITIVE delta increases consumable entitlement — it restores the original deduction's consumed allocations back to available in the original lots, or creates a CompensationLot when the original source is an expired subscription (valid for 30 days after grant) — recorded in compensation_lot_id. A NEGATIVE delta withdraws revocable available credits of the original event's lots into revoked and never drives anything negative or chases reserved/consumed/frozen credits. actor_subject_id records the audited human or service operator. */
         Adjustment: components["schemas"]["CommonFields"] & {
             /** @description Ledger event being corrected. */
             original_event_id: string;
@@ -1122,8 +1455,8 @@ export interface components {
             reason: string;
             /** @description Audited operator (authorized operations / compensation service), not the payer. */
             actor_subject_id: components["schemas"]["SubjectId"];
-            /** @description Adjustment stays attributed to the ORIGINAL period; old snapshots only gain appended confirmation adjustments. */
-            original_period_id: string;
+            /** @description Adjustment stays attributed to the ORIGINAL period of the referenced event; null when that source has no period (pack); never invented. */
+            original_period_id: string | null;
             effective_at_us: components["schemas"]["TimestampUs"];
             /** @description Compensation lot created/extended by a positive delta; null when the adjustment does not create one. */
             compensation_lot_id: components["schemas"]["UuidNullable"];
@@ -1132,7 +1465,7 @@ export interface components {
              * @enum {string}
              */
             status: "posted";
-        };
+        } & unknown;
         AdjustmentPage: {
             items: components["schemas"]["Adjustment"][];
             next_cursor: components["schemas"]["CursorTokenNull"];
@@ -1245,6 +1578,570 @@ export interface components {
             code: "SUCCESS" | "FAIL";
             message: string;
         };
+        /** @description Trusted registration input from the identity service; a browser can never reach this. The subject and Personal Workspace are stable identity facts — never an email or a client payer claim. */
+        RegisterBillingAccountRequest: {
+            organization_id: components["schemas"]["Uuid"];
+            owner_subject_id: components["schemas"]["SubjectId"];
+            /** @description Personal Workspace relation the account is derived from; unique across accounts. */
+            personal_workspace_id: string;
+        };
+        /** @description Registered (or replayed) account; one stable subject always answers the same account id. */
+        RegisterBillingAccountResult: {
+            billing_account: components["schemas"]["BillingAccount"];
+            request_id: string;
+        };
+        /** @description One credit lot's component change caused by one ledger event, with the lot's component balances AFTER the change. Signed per-component deltas always conserve the lot: the sum of the deltas of granted, available, reserved, refund_frozen, consumed, expired and revoked is zero, and granted itself only changes on the grant event that created the lot — source type, source event, original period and original granted amount are never rewritten afterwards. */
+        LedgerLine: {
+            lot_id: components["schemas"]["Uuid"];
+            delta_granted_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_available_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_reserved_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_refund_frozen_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_consumed_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_expired_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            delta_revoked_microcredits: components["schemas"]["SignedAdjustmentDelta"];
+            /** @description The lot's seven conservation components after this change. */
+            balances_after: {
+                granted_microcredits: components["schemas"]["Microcredits"];
+                available_microcredits: components["schemas"]["Microcredits"];
+                reserved_microcredits: components["schemas"]["Microcredits"];
+                refund_frozen_microcredits: components["schemas"]["Microcredits"];
+                consumed_microcredits: components["schemas"]["Microcredits"];
+                expired_microcredits: components["schemas"]["Microcredits"];
+                revoked_microcredits: components["schemas"]["Microcredits"];
+            };
+        };
+        /** @description Immutable event head of the append-only ledger: one grant, adjustment or expiry fact with its per-lot lines. account_seq is the per-account sequence assigned inside the account lock (never a global database sequence). Event content — including its business key, original event reference, actor, reason, original period and lines — is never rewritten; corrections are appended as new events linked by adjustment_id/original_event_id. Every committed event has exactly one pending outbox record whose aggregate_id equals this id. */
+        LedgerEvent: {
+            id: components["schemas"]["Uuid"];
+            schema_version: components["schemas"]["SchemaVersion"];
+            organization_id: components["schemas"]["Uuid"];
+            billing_account_id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            event_type: "credit.granted" | "credit.adjusted" | "credit.expired";
+            /** @description Per-account committed sequence; the recovery watermark for outbox delivery. */
+            account_seq: components["schemas"]["UnsignedInt64"];
+            /** @description Trusted source namespace of the grant's business key; null for internal expiry events. */
+            source_namespace: string | null;
+            /** @description Business key inside the namespace; null for adjustment/expiry events (their keys live on the adjustment). */
+            source_event_id: string | null;
+            /** @description Ledger event id an adjustment corrects; null otherwise. */
+            original_event_id: string | null;
+            /** @description Adjustment row that produced this event; null for grant/expiry events. */
+            adjustment_id: components["schemas"]["UuidNullable"];
+            /** @description Audited actor (service identity's operator for grants/adjustments; system actor for expiry). */
+            actor_subject_id: components["schemas"]["SubjectIdNullable"];
+            /** @description Adjustment reason or expiry cause; null on grants. */
+            reason: string | null;
+            /** @description Original period this event stays attributed to; null for period-less packs. */
+            original_period_id: string | null;
+            /** @description Business time of the fact (e.g. the expiry instant), preserved verbatim. */
+            occurred_at_us: components["schemas"]["TimestampUs"];
+            /** @description Server commit time. */
+            committed_at_us: components["schemas"]["TimestampUs"];
+            lines: components["schemas"]["LedgerLine"][];
+        };
+        LedgerEventPage: {
+            items: components["schemas"]["LedgerEvent"][];
+            next_cursor: components["schemas"]["CursorTokenNull"];
+        };
+        /** @description Trusted grant input. The source namespace and actor come from the authenticated service credential; the request can never choose them. Period and expiry follow the source type: subscription requires a period id and a finite expiry after valid_from (from the trusted period result); pack forbids both; compensation requires the original deduction event reference. */
+        CreateCreditGrantRequest: {
+            /** @description Target account; the credential must be authorized for its organization. */
+            billing_account_id: components["schemas"]["Uuid"];
+            /** @description Stable business key of THIS grant inside the credential's source namespace; dedupe anchor across idempotency keys. */
+            source_event_id: string;
+            /** @enum {string} */
+            source_type: "subscription" | "pack" | "compensation";
+            /** @description Original billing period; REQUIRED and non-null for subscription, null for pack/compensation. */
+            source_period_id?: string | null;
+            granted_microcredits: components["schemas"]["PositiveMicrocredits"];
+            /** @description When the lot becomes spendable; earlier instants answer the scheduled status until reached. */
+            valid_from_us: components["schemas"]["TimestampUs"];
+            /** @description Absolute expiry; REQUIRED finite and after valid_from_us for subscription; null for pack; compensation sends null or the server-computed arrival+30d echo. */
+            expires_at_us: components["schemas"]["TimestampUsNullable"];
+            /** @description Original deduction event a compensation restores; REQUIRED for source_type=compensation, null otherwise. */
+            original_event_id: string | null;
+            /** @description Audited operator on whose behalf the trusted service acts. */
+            actor_subject_id: components["schemas"]["SubjectId"];
+        } & (unknown & unknown & unknown);
+        /** @description Created (or replayed) grant; the lot id, ledger event id and account revision are stable under replay. */
+        CreditGrantMutationResult: {
+            /** @description The issued compensation lot when the recovery includes an expired-source share; otherwise the original credit lot after the in-place restoration (the largest restored share when one deduction spanned several live lots). */
+            credit_lot: components["schemas"]["CreditLot"];
+            ledger_event_id: components["schemas"]["Uuid"];
+            billing_account: components["schemas"]["BillingAccount"];
+            request_id: string;
+        };
+        /**
+         * @description Configuration environment. A production request NEVER selects a test release; test_only configurations exist only for acceptance runs.
+         * @example production
+         * @enum {string}
+         */
+        BillingEnvironment: "production" | "test";
+        /**
+         * @description Closed reasons a product quote answers sellable=false. Absence of a complete production release NEVER degrades to a zero price or a demo value.
+         * @example no_published_release
+         * @enum {string}
+         */
+        SellabilityReason: "no_published_release" | "account_release_unavailable" | "ambiguous_release_configuration" | "release_incomplete" | "product_not_in_release" | "quota_version_missing";
+        /**
+         * @description Asia/Shanghai wall-time fields. microsecond is kept separately from the millisecond-resolution conversion so no sub-second precision is ever lost.
+         * @example {
+         *       "year": 2024,
+         *       "month": 1,
+         *       "day": 31,
+         *       "hour": 9,
+         *       "minute": 30,
+         *       "second": 15,
+         *       "microsecond": 123456
+         *     }
+         */
+        LocalWallTime: {
+            /** Format: int32 */
+            year: number;
+            /** Format: int32 */
+            month: number;
+            /** Format: int32 */
+            day: number;
+            /** Format: int32 */
+            hour: number;
+            /** Format: int32 */
+            minute: number;
+            /** Format: int32 */
+            second: number;
+            /** Format: int32 */
+            microsecond: number;
+        };
+        /**
+         * @description One half-open period [B(n), B(n+1)) derived from the ORIGINAL activation anchor: month ends clamp (Jan 31 -> Feb 29/28) and the original day number RESUMES afterwards. Boundaries are integer UTC microseconds; an event at exactly end_us belongs to the NEXT period and the boundary is never rewritten by subtracting time.
+         * @example {
+         *       "index": "0",
+         *       "start_us": "1706679015123456",
+         *       "end_us": "1709170215123456",
+         *       "start_iso": "2024-01-31T01:30:15.123456Z",
+         *       "end_iso": "2024-02-29T01:30:15.123456Z",
+         *       "start_local": {
+         *         "year": 2024,
+         *         "month": 1,
+         *         "day": 31,
+         *         "hour": 9,
+         *         "minute": 30,
+         *         "second": 15,
+         *         "microsecond": 123456
+         *       },
+         *       "end_local": {
+         *         "year": 2024,
+         *         "month": 2,
+         *         "day": 29,
+         *         "hour": 9,
+         *         "minute": 30,
+         *         "second": 15,
+         *         "microsecond": 123456
+         *       }
+         *     }
+         */
+        MonthPeriodDescriptor: {
+            index: components["schemas"]["UnsignedInt64"];
+            start_us: components["schemas"]["TimestampUs"];
+            end_us: components["schemas"]["TimestampUs"];
+            start_iso: string;
+            end_iso: string;
+            start_local: components["schemas"]["LocalWallTime"];
+            end_local: components["schemas"]["LocalWallTime"];
+        };
+        /**
+         * @description Closed outcome reasons of the purchase-eligibility table (R5/R6).
+         * @example eligible
+         * @enum {string}
+         */
+        EligibilityReason: "eligible" | "already_prepaid" | "refund_required" | "refund_pending" | "refund_outcome_unknown" | "state_conflict";
+        /**
+         * @description Closed next-step the caller should take after an eligibility outcome.
+         * @example create_order
+         * @enum {string}
+         */
+        EligibilityNextAction: "create_order" | "refund_existing_prepurchase_first" | "wait_for_refund_outcome" | "keep_existing_commitment" | "recheck_state";
+        /**
+         * @description Observable result of the eligibility table over a TRUSTED state snapshot (subscription + prepaid commitment + refund facts), carrying the snapshot revision the order service must recheck inside the purchase transaction. A quote never occupies eligibility; concurrent purchase safety is enforced by the order service's transaction, not by this read.
+         * @example {
+         *       "allowed": true,
+         *       "reason": "eligible",
+         *       "next_action": "create_order",
+         *       "target_period": {
+         *         "index": "1",
+         *         "start_us": "1709170215123456",
+         *         "end_us": "1711848615123456"
+         *       },
+         *       "state_revision": "7",
+         *       "existing_commitment": null
+         *     }
+         */
+        PurchaseEligibility: {
+            allowed: boolean;
+            reason: components["schemas"]["EligibilityReason"];
+            next_action: components["schemas"]["EligibilityNextAction"];
+            target_period: null | {
+                index: components["schemas"]["UnsignedInt64"];
+                start_us: components["schemas"]["TimestampUs"];
+                end_us: components["schemas"]["TimestampUs"];
+            };
+            state_revision: components["schemas"]["UnsignedInt64"];
+            existing_commitment: null | {
+                product_id: string;
+                target_period_start_us: components["schemas"]["TimestampUs"];
+            };
+        };
+        /**
+         * @description Read-only product quote: sellability over the release selected by the SERVER's trusted clock, the full immutable snapshot when sellable, the eligibility outcome, and a period preview ONLY when the target period is already determined (renewal on an active subscription). Quotes are observations: they create nothing and occupy no purchase slot.
+         * @example {
+         *       "sellable": true,
+         *       "test_only": false,
+         *       "quoted_at_us": "1700003600000000",
+         *       "snapshot": {
+         *         "release_id": "aa000000-0000-4000-8000-000000000004",
+         *         "release_content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *         "scope_is_account_specific": false,
+         *         "product_version_id": "aa000000-0000-4000-8000-000000000001",
+         *         "product_id": "pack_1m_credits",
+         *         "product_type": "credit_pack",
+         *         "display_name": "1M credits pack",
+         *         "amount_fen": "9900",
+         *         "currency": "CNY",
+         *         "granted_microcredits": "1000000",
+         *         "period_months": null,
+         *         "long_lived": true,
+         *         "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *         "quota_version_id": null,
+         *         "basic_quota_version_id": "aa000000-0000-4000-8000-000000000005",
+         *         "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *         "run_cap_microcredits": "5000000"
+         *       },
+         *       "period_preview": null,
+         *       "eligibility": {
+         *         "allowed": true,
+         *         "reason": "eligible",
+         *         "next_action": "create_order",
+         *         "target_period": null,
+         *         "state_revision": "3",
+         *         "existing_commitment": null
+         *       }
+         *     }
+         */
+        ProductQuote: {
+            sellable: boolean;
+            /** @description Present exactly when sellable=false. */
+            not_sellable_reason?: components["schemas"]["SellabilityReason"];
+            /** @description True when the selected configuration is explicitly test-only; a test quote is never a production sale. */
+            test_only: boolean;
+            quoted_at_us: components["schemas"]["TimestampUs"];
+            /** @description Present exactly when sellable=true — the full immutable version bundle backing this quote. */
+            snapshot?: {
+                release_id: components["schemas"]["Uuid"];
+                release_content_digest: string;
+                scope_is_account_specific: boolean;
+                product_version_id: components["schemas"]["Uuid"];
+                product_id: string;
+                /** @enum {string} */
+                product_type: "monthly_plan" | "credit_pack";
+                display_name: string;
+                amount_fen: components["schemas"]["Fen"];
+                currency: components["schemas"]["CurrencyCode"];
+                granted_microcredits: components["schemas"]["MicrocreditsNullable"];
+                period_months: components["schemas"]["UnsignedInt64Nullable"];
+                /** @description True for credit packs (no monthly validity); false for monthly plans. */
+                long_lived: boolean;
+                price_version_id: components["schemas"]["Uuid"];
+                quota_version_id: components["schemas"]["UuidNullable"];
+                /** @description The release's BASIC-tier quota version — the base resource ceilings sold with this product. */
+                basic_quota_version_id: components["schemas"]["Uuid"];
+                run_cap_version_id: components["schemas"]["Uuid"];
+                run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
+            };
+            /** @description Determined target period (renewal/prepurchase); null when activation will define a new anchor. */
+            period_preview?: null | components["schemas"]["MonthPeriodDescriptor"];
+            eligibility?: components["schemas"]["PurchaseEligibility"];
+        };
+        /**
+         * @description Closed set of measurement units a price is expressed per. The contract's unit_size says how many of THIS unit one price covers.
+         * @example token
+         * @enum {string}
+         */
+        MeasurementUnit: "token" | "request" | "call" | "millisecond";
+        /**
+         * @description Read-only exact cost of one execution step against a PINNED price version. All resources are summed as ONE exact rational and rounded exactly once (HALF_UP to whole microcredits) — never per token, per line or per stream fragment. The full pricing basis is echoed so the total can be recomputed offline. Only versions a release has pinned at least once are quotable — draft, never-released and foreign-environment configurations answer 404 like a missing row; an expected_price_version_id that diverges from the quoted version is 409 price_version_conflict (a step is always recomputed against its own reserved fixed reference).
+         * @example {
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "rounding": "half_up",
+         *       "lines": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ],
+         *       "total_microcredits": "9007199254740993",
+         *       "total_display": "9007199254740993.000000"
+         *     }
+         */
+        StepQuote: {
+            /** @description The version the cost was computed from; pinned at reservation, never the currently-active list. */
+            price_version_id: components["schemas"]["Uuid"];
+            /** @constant */
+            rounding: "half_up";
+            lines: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+            total_microcredits: components["schemas"]["Microcredits"];
+            /** @description The total rendered with the contract's exact six-decimal credit display. */
+            total_display: string;
+        };
+        /**
+         * @description Read-only exact settlement cost of one RESERVED step, priced against the version the step's TRUSTED reservation pins — resolved server-side from the reservation reader, never from a request field. Arithmetic and rounding are identical to StepQuote: one exact rational summed over the merged resource vector, ONE HALF_UP rounding to whole microcredits, with the full pricing basis echoed for offline recomputation. price_version_id is therefore the TRUSTED pinned version the settlement actually used; a settlement can never silently run under another configuration.
+         * @example {
+         *       "step_reservation_ref": "step_01hf3k8m2q.reservation",
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "rounding": "half_up",
+         *       "lines": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "quantity": "9007199254740993",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ],
+         *       "total_microcredits": "9007199254740993",
+         *       "total_display": "9007199254740993.000000"
+         *     }
+         */
+        StepSettlementQuote: {
+            /** @description Echo of the settled step's trusted reservation reference. */
+            step_reservation_ref: string;
+            /** @description The reservation's pinned version the cost was computed from (trusted, not caller-nominated). */
+            price_version_id: components["schemas"]["Uuid"];
+            /** @constant */
+            rounding: "half_up";
+            lines: {
+                resource: components["schemas"]["ResourceKind"];
+                quantity: components["schemas"]["UnsignedInt64"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+            total_microcredits: components["schemas"]["Microcredits"];
+            /** @description The total rendered with the contract's exact six-decimal credit display. */
+            total_display: string;
+        };
+        /**
+         * @description Deterministic Beijing-time period answer: the original activation anchor (UTC instant AND local wall time), and the located or requested [B(n), B(n+1)) period with integer-microsecond UTC boundaries, ISO renderings and local wall times.
+         * @example {
+         *       "timezone": "Asia/Shanghai",
+         *       "anchor": {
+         *         "utc_us": "1706679015123456",
+         *         "utc_iso": "2024-01-31T01:30:15.123456Z",
+         *         "local": {
+         *           "year": 2024,
+         *           "month": 1,
+         *           "day": 31,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         }
+         *       },
+         *       "period": {
+         *         "index": "0",
+         *         "start_us": "1706679015123456",
+         *         "end_us": "1709170215123456",
+         *         "start_iso": "2024-01-31T01:30:15.123456Z",
+         *         "end_iso": "2024-02-29T01:30:15.123456Z",
+         *         "start_local": {
+         *           "year": 2024,
+         *           "month": 1,
+         *           "day": 31,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         },
+         *         "end_local": {
+         *           "year": 2024,
+         *           "month": 2,
+         *           "day": 29,
+         *           "hour": 9,
+         *           "minute": 30,
+         *           "second": 15,
+         *           "microsecond": 123456
+         *         }
+         *       }
+         *     }
+         */
+        PeriodAnswer: {
+            /** @constant */
+            timezone: "Asia/Shanghai";
+            anchor: {
+                utc_us: components["schemas"]["TimestampUs"];
+                utc_iso: string;
+                local: components["schemas"]["LocalWallTime"];
+            };
+            period: components["schemas"]["MonthPeriodDescriptor"];
+        };
+        /**
+         * @description The CURRENT published pricing basis for NEW steps, resolved by the SERVER's trusted clock, account authorization and deployment environment — never a caller-chosen version id. Returns the release the clock selects with its pinned price version and default Run cap; the caller uses price_version_id both for the step vector and as the reserved fixed reference recorded on the step. Draft, never-released, foreign-environment and foreign-account configurations can never be resolved here; an absent or incomplete release answers sellable=false with a closed reason, never a zero price. Read-only observation.
+         * @example {
+         *       "sellable": true,
+         *       "test_only": false,
+         *       "quoted_at_us": "1700003600000000",
+         *       "release_id": "aa000000-0000-4000-8000-000000000004",
+         *       "release_content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *       "scope_is_account_specific": false,
+         *       "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *       "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *       "run_cap_microcredits": "5000000",
+         *       "prices": [
+         *         {
+         *           "resource": "model_input_tokens",
+         *           "measurement_unit": "token",
+         *           "unit_size": "1",
+         *           "numerator": "1",
+         *           "denominator": "1000000"
+         *         }
+         *       ]
+         *     }
+         */
+        CurrentPriceResolution: {
+            sellable: boolean;
+            /** @description Present exactly when sellable=false. */
+            not_sellable_reason?: components["schemas"]["SellabilityReason"];
+            /** @description True when the resolved release is explicitly test-only. */
+            test_only: boolean;
+            quoted_at_us: components["schemas"]["TimestampUs"];
+            /** @description Present exactly when sellable=true. */
+            release_id?: components["schemas"]["Uuid"];
+            /** @description Present exactly when sellable=true. */
+            release_content_digest?: string;
+            /** @description Present exactly when sellable=true. */
+            scope_is_account_specific?: boolean;
+            /** @description The pinned price version NEW steps must quote (and reserve). */
+            price_version_id?: components["schemas"]["Uuid"];
+            run_cap_version_id?: components["schemas"]["Uuid"];
+            run_cap_microcredits?: components["schemas"]["PositiveMicrocredits"];
+            prices: {
+                resource: components["schemas"]["ResourceKind"];
+                measurement_unit: components["schemas"]["MeasurementUnit"];
+                unit_size: components["schemas"]["UnsignedInt64"];
+                numerator: components["schemas"]["UnsignedInt64"];
+                denominator: components["schemas"]["UnsignedInt64"];
+            }[];
+        };
+        /**
+         * @description The full content of one quota version — tier plus every closed-key ceiling, so a sold entitlement can be reconstructed from the snapshot alone.
+         * @example {
+         *       "quota_version_id": "aa000000-0000-4000-8000-000000000005",
+         *       "tier": "basic",
+         *       "quotas": [
+         *         {
+         *           "resource_key": "concurrent_runs",
+         *           "limit": "2",
+         *           "unit": "count"
+         *         },
+         *         {
+         *           "resource_key": "automatic_task_seats",
+         *           "limit": "10",
+         *           "unit": "count"
+         *         }
+         *       ]
+         *     }
+         */
+        QuotaContent: {
+            quota_version_id: components["schemas"]["Uuid"];
+            /** @enum {string} */
+            tier: "basic" | "subscription";
+            quotas: {
+                /** @enum {string} */
+                resource_key: "concurrent_runs" | "automatic_task_seats";
+                limit: components["schemas"]["UnsignedInt64"];
+                /** @constant */
+                unit: "count";
+            }[];
+        };
+        /**
+         * @description Full immutable catalog release snapshot for history replay. Historical reads may answer retired versions but can NEVER be used to purchase against a retired price. The snapshot carries the release's basic quota and every item's full commerce content (price, granted credits and quota), so a historical quote can be recomputed AND its sold entitlement reconstructed from this response alone.
+         * @example {
+         *       "release_id": "aa000000-0000-4000-8000-000000000004",
+         *       "content_digest": "5f1bfe13c9be43bab4a1e12bfa5a4e19c1be90b3ba5a1e1d0b2c3d4e5f607182",
+         *       "status": "active",
+         *       "environment": "production",
+         *       "effective_from_us": "1700000000000000",
+         *       "effective_to_us": null,
+         *       "items": [
+         *         {
+         *           "product_version_id": "aa000000-0000-4000-8000-000000000001",
+         *           "product_id": "pack_1m_credits",
+         *           "product_type": "credit_pack",
+         *           "price_version_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+         *           "quota_version_id": null,
+         *           "run_cap_version_id": "aa000000-0000-4000-8000-000000000003",
+         *           "run_cap_microcredits": "5000000",
+         *           "prices": [
+         *             {
+         *               "resource": "model_input_tokens",
+         *               "measurement_unit": "token",
+         *               "unit_size": "1000",
+         *               "numerator": "37",
+         *               "denominator": "1000000"
+         *             }
+         *           ]
+         *         }
+         *       ]
+         *     }
+         */
+        CatalogVersionSnapshot: {
+            release_id: components["schemas"]["Uuid"];
+            content_digest: string;
+            /** @enum {string} */
+            status: "draft" | "active" | "retired";
+            environment: components["schemas"]["BillingEnvironment"];
+            effective_from_us: components["schemas"]["TimestampUs"];
+            effective_to_us: components["schemas"]["TimestampUsNullable"];
+            /** @description The release's BASIC-tier quota content (the base resource ceilings of the scope); null only for releases created before the basic-quota binding existed. */
+            basic_quota: null | components["schemas"]["QuotaContent"];
+            items: {
+                product_version_id: components["schemas"]["Uuid"];
+                product_id: string;
+                /** @enum {string} */
+                product_type: "monthly_plan" | "credit_pack";
+                display_name: string;
+                amount_fen: components["schemas"]["Fen"];
+                currency: components["schemas"]["CurrencyCode"];
+                granted_microcredits: components["schemas"]["MicrocreditsNullable"];
+                period_months: components["schemas"]["UnsignedInt64Nullable"];
+                price_version_id: components["schemas"]["Uuid"];
+                quota_version_id: components["schemas"]["UuidNullable"];
+                /** @description The SUBSCRIPTION-tier quota content this monthly plan sold; null for credit packs. */
+                quota: null | components["schemas"]["QuotaContent"];
+                run_cap_version_id: components["schemas"]["Uuid"];
+                run_cap_microcredits: components["schemas"]["PositiveMicrocredits"];
+                prices: {
+                    resource: components["schemas"]["ResourceKind"];
+                    measurement_unit: components["schemas"]["MeasurementUnit"];
+                    unit_size: components["schemas"]["UnsignedInt64"];
+                    numerator: components["schemas"]["UnsignedInt64"];
+                    denominator: components["schemas"]["UnsignedInt64"];
+                }[];
+            }[];
+        };
     };
     responses: {
         /** @description Malformed request: missing Idempotency-Key on a business write (missing_idempotency_key) or invalid/cross-scope cursor (invalid_cursor). */
@@ -1332,9 +2229,13 @@ export interface components {
     };
     parameters: {
         OrganizationId: components["schemas"]["Uuid"];
+        BillingAccountId: components["schemas"]["Uuid"];
+        /** @description Target billing account; the service credential must be authorized for its organization. */
+        BillingAccountIdQuery: components["schemas"]["Uuid"];
         OrderId: components["schemas"]["Uuid"];
         ReservationId: components["schemas"]["Uuid"];
         RefundId: components["schemas"]["Uuid"];
+        CatalogVersionId: components["schemas"]["Uuid"];
         CallbackChannel: components["schemas"]["OtherChannelName"];
         Limit: components["schemas"]["LimitQuery"];
         Cursor: components["schemas"]["CursorQuery"];
@@ -1830,6 +2731,9 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CallbackEnvelope"];
+                "application/x-www-form-urlencoded": {
+                    [key: string]: string;
+                };
             };
         };
         responses: {
@@ -1840,6 +2744,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChannelAcknowledgment"];
+                    "text/plain": "success" | "failure";
                 };
             };
             /** @description Gateway overload; channel will retry per protocol. */
@@ -1849,6 +2754,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChannelAcknowledgment"];
+                    "text/plain": "failure";
                 };
             };
         };
@@ -1962,6 +2868,131 @@ export interface operations {
             503: components["responses"]["LedgerUnavailable"];
         };
     };
+    registerBillingAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description REQUIRED on every business write (POST). 1..128 ASCII printable characters. Scope (organization_id, billing_account_id, operation, logical_resource_id, key) with operation pinned by the operationId. GET requests do not require a key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterBillingAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Account registered (or replayed); the same subject always answers the same account id. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterBillingAccountResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    getInternalBillingAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                billing_account_id: components["parameters"]["BillingAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The billing account with exact balances. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingAccount"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listInternalCreditLots: {
+        parameters: {
+            query: {
+                /** @description Target billing account; the service credential must be authorized for its organization. */
+                billing_account_id: components["parameters"]["BillingAccountIdQuery"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of credit lots ordered by (created_at_us, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditLotPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listInternalAdjustments: {
+        parameters: {
+            query: {
+                /** @description Target billing account; the service credential must be authorized for its organization. */
+                billing_account_id: components["parameters"]["BillingAccountIdQuery"];
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of immutable adjustments ordered by (created_at_us, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdjustmentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
     createAdjustment: {
         parameters: {
             query?: never;
@@ -1985,6 +3016,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdjustmentMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    listLedgerEvents: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+                from_us?: components["parameters"]["FromUs"];
+                to_us?: components["parameters"]["ToUs"];
+            };
+            header?: never;
+            path: {
+                billing_account_id: components["parameters"]["BillingAccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of ledger events ordered by (account_seq, id). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    createCreditGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description REQUIRED on every business write (POST). 1..128 ASCII printable characters. Scope (organization_id, billing_account_id, operation, logical_resource_id, key) with operation pinned by the operationId. GET requests do not require a key. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCreditGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Credit lot granted (or first-execution replay returned) with the grant ledger event id. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditGrantMutationResult"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -2031,6 +3130,188 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["UnprocessableEntity"];
             429: components["responses"]["RateLimited"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    quoteBillingProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingProductRequest"];
+            };
+        };
+        responses: {
+            /** @description The product quote (business closure is sellable=false with a reason, not an HTTP error). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    quoteBillingStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingStepRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact step cost and its full pricing basis. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    quoteBillingStepSettlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteBillingStepSettlementRequest"];
+            };
+        };
+        responses: {
+            /** @description The exact settlement cost of the reserved step and its trusted pricing basis. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepSettlementQuote"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    queryBillingPeriod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryBillingPeriodRequest"];
+            };
+        };
+        responses: {
+            /** @description The timezone, the anchor and the located/requested period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    resolveCurrentBillingPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveCurrentPriceRequest"];
+            };
+        };
+        responses: {
+            /** @description The current pricing basis (business closure is sellable=false with a reason, not an HTTP error). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentPriceResolution"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+            503: components["responses"]["LedgerUnavailable"];
+        };
+    };
+    getBillingCatalogVersion: {
+        parameters: {
+            query?: {
+                /** @description The deployment environment whose release is read; production by default. Requesting the test environment requires the credential's trusted test-catalog authorization (403 forbidden without it), and a release of the other environment answers 404 like a missing row. */
+                environment?: components["schemas"]["BillingEnvironment"];
+            };
+            header?: never;
+            path: {
+                catalog_version_id: components["parameters"]["CatalogVersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The immutable release snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogVersionSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
             503: components["responses"]["LedgerUnavailable"];
         };
     };

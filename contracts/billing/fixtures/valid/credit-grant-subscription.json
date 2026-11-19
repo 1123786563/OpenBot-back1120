@@ -1,0 +1,16 @@
+{
+  "expect": "accept",
+  "schema": "CreateCreditGrantRequest",
+  "instance": {
+    "billing_account_id": "0f0e8b1a-7c42-4d5e-9a1b-2f3c4d5e6f70",
+    "source_event_id": "evt_sub_2026M12_grant",
+    "source_type": "subscription",
+    "source_period_id": "period_2026-12",
+    "granted_microcredits": "1000000",
+    "valid_from_us": "1764547200000000",
+    "expires_at_us": "1767225600000000",
+    "original_event_id": null,
+    "actor_subject_id": "subj_entitlement_svc"
+  },
+  "note": "subscription grant: period REQUIRED, finite expiry after valid_from (trusted #65 period result)"
+}

@@ -71,3 +71,5 @@ extension/**/*.pem
 # The observability stack's credentials (OpenObserve root account, the collector's ingest token).
 # Only env.openobserve.example is committed. See docs/observability-openobserve.md.
 docker/observability/env.openobserve
+deploy/t04/vendor/vendor-state.json
+deploy/t04/vendor/unanswered.log

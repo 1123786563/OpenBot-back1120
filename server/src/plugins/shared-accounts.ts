@@ -20,7 +20,22 @@ export type Holder = (typeof HOLDERS)[number];
 /** Who a broker is asked to act for. The broker sends `vendorUserId` and never chooses the holder. */
 export type AccountRef =
   | { holder: "person"; userId: string; vendorUserId: string }
-  | { holder: "deployment"; vendorUserId: string };
+  | {
+      holder: "deployment";
+      vendorUserId: string;
+      /**
+       * The workspace this ref is scoped to act within, when its actor has one.
+       *
+       * A deployment-held account is one row PER WORKSPACE now, and the workspace is what picks
+       * the row: every read and write that resolves a row from a ref must filter on it, or two
+       * rows naming the same vendor identity — one per space — become interchangeable, and one
+       * space's call could resolve another's row. Present and non-null for a workspace actor
+       * (Casdoor mode); null or absent for a single-user or legacy identity, the one shape the
+       * workspace dimension does not apply to, which keeps the unscoped lookup those
+       * deployments already ran.
+       */
+      organizationId?: string | null;
+    };
 
 /**
  * A PERSON'S ACCOUNT, AND WHY ITS TWO IDS ARE ALMOST ALWAYS ONE VALUE.
@@ -94,6 +109,8 @@ export function asAccountRef(stored: {
   holder: string;
   userId: string | null;
   vendorUserId: string;
+  /** The row's own workspace binding, when the reader selected it. Absent is the unscoped read. */
+  organizationId?: string | null;
 }): AccountRef | null {
   if (stored.holder === "person") {
     return stored.userId
@@ -105,8 +122,17 @@ export function asAccountRef(stored: {
       : null;
   }
   if (stored.holder === "deployment") {
-    return stored.userId
-      ? null
+    if (stored.userId) return null;
+    // The workspace rides only when there is one. A row (and an actor) without a workspace is
+    // the legacy shape, and the ref must stay byte-identical to it: strict comparisons in the
+    // trail and the tests treat an extra `organizationId: null` as a different account, and
+    // "absent" is what every unscoped reader has always meant by legacy.
+    return stored.organizationId
+      ? {
+          holder: "deployment",
+          vendorUserId: stored.vendorUserId,
+          organizationId: stored.organizationId,
+        }
       : { holder: "deployment", vendorUserId: stored.vendorUserId };
   }
   return null;
@@ -177,6 +203,50 @@ export function mintDeploymentVendorUserId(
     );
   }
   return `${DEPLOYMENT_VENDOR_PREFIX}${named}:${random()}`;
+}
+
+/**
+ * The identity ONE WORKSPACE's shared account is held under at the vendor.
+ *
+ * TWO SPACES, TWO IDENTITIES — this is what stops a shared account's vendor actions from running
+ * under one another's name. An app's `shared_vendor_user_id` is minted once per switch to Shared
+ * and is the identity of the UNBOUND (single-user, legacy) deployment account; keyed on it alone,
+ * two workspaces' rows could name one identity, and the vendor — which files connections and
+ * actions under the id it is sent — could not tell one space's account from the other's: one
+ * space's call would land in the other's vendor-side account, and disconnecting one space's row
+ * would withdraw the grant the other was using.
+ *
+ * DETERMINISTIC, BECAUSE IT IS DERIVED TWICE IN TWO PLACES THAT MUST AGREE: the authorize route
+ * mints the consent at the vendor under it, and the completion writes the very ref it was handed
+ * into the workspace's `brokered_connections` row — whose `vendor_user_id` PERSISTS it. A random
+ * mint would have to be persisted before the flow starts and recovered at the callback, where a
+ * lost read would file one space's consent under the other's identity. Recomputation is safe
+ * exactly because nothing is random: the same deployment, workspace and app always spell the same
+ * identity, so an administrator re-consenting their own space re-derives the identity their row
+ * already names, and another space's consent spells a different one.
+ *
+ * LEGACY ROWS FAIL CLOSED, WHICH IS THE POINT. A workspace-bound row written before this
+ * derivation existed carries the app-level identity, which no longer matches what this derives —
+ * so every scoped read of it finds nothing and the space is refused until its administrator
+ * connects it again, which rewrites the row under its own identity. The old identity's vendor-side
+ * grant is withdrawn by that re-consent's supersede; nothing inherited, nothing claimed.
+ *
+ * THE APP IS IN THE DERIVATION, so one space's shared Gmail and shared Slack stay distinct at the
+ * vendor for the same reason {@link mintDeploymentVendorUserId} keeps them distinct: shared apps
+ * do not pool identities across apps any more than across spaces.
+ */
+export function deploymentOrgVendorUserId(
+  deploymentId: string,
+  organizationId: string,
+  appId: string,
+): string {
+  const named = deploymentId.trim();
+  if (!named) {
+    throw new Error(
+      "A deployment with no id cannot hold a shared account; set DEPLOYMENT_ID.",
+    );
+  }
+  return `${DEPLOYMENT_VENDOR_PREFIX}${named}:org:${organizationId}:${appId}`;
 }
 
 /**

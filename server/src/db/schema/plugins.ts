@@ -568,9 +568,30 @@ export const brokeredConnections = pgTable(
     uniqueIndex("brokered_connections_person_idx")
       .on(table.provider, table.app, table.userId)
       .where(sql`${table.holder} = 'person'`),
-    uniqueIndex("brokered_connections_deployment_idx")
+    /*
+     * THE DEPLOYMENT KEY INCLUDES THE WORKSPACE, BECAUSE A SHARED ACCOUNT IS A FACT ABOUT ONE.
+     *
+     * Two personal spaces may each hold their own Shared account for the same app: the key that
+     * once read (provider, app) alone made the second organization's consent overwrite the first's
+     * row — and every check that read "the" deployment row could land on whichever space had
+     * consented last. With the workspace in the key, an organization's row is its own, and a
+     * check, a read or a disconnect scoped to one workspace cannot touch another's.
+     *
+     * TWO INDEXES, NOT ONE WITH A NULLABLE COLUMN, because a Postgres unique index treats NULLs
+     * as distinct: a single three-column index would let unbound (pre-binding, single-user) rows
+     * pile up without ever conflicting. The unbound rows keep their own index on (provider, app),
+     * which holds them to one exactly as the old key did.
+     */
+    uniqueIndex("brokered_connections_deployment_org_idx")
+      .on(table.provider, table.app, table.organizationId)
+      .where(
+        sql`${table.holder} = 'deployment' AND ${table.organizationId} IS NOT NULL`,
+      ),
+    uniqueIndex("brokered_connections_deployment_unbound_idx")
       .on(table.provider, table.app)
-      .where(sql`${table.holder} = 'deployment'`),
+      .where(
+        sql`${table.holder} = 'deployment' AND ${table.organizationId} IS NULL`,
+      ),
     index("brokered_connections_user_idx").on(table.userId),
     index("brokered_connections_organization_idx").on(table.organizationId),
   ],

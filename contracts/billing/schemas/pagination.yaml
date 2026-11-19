@@ -49,6 +49,17 @@ components:
             $ref: "./objects.yaml#/components/schemas/CreditLot"
         next_cursor:
           $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
+    LedgerEventPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "./objects.yaml#/components/schemas/LedgerEvent"
+        next_cursor:
+          $ref: "./scalars.yaml#/components/schemas/CursorTokenNull"
     OrderPage:
       type: object
       required: [items, next_cursor]

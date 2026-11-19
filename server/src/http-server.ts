@@ -11,12 +11,15 @@ import { computerSocketPath } from "./computer/stream-path";
 import type { DeploymentConfig } from "./config";
 import {
   closeGatewaySocket,
+  type GatewayRevocation,
   type GatewaySocketData,
+  type GatewaySocketRegistry,
   gatewayClientSocketUrl,
   gatewaySocketMessage,
   isIntelligenceClientSocketPath,
   openGatewaySocket,
 } from "./intelligence-gateway-proxy";
+import type { SessionGate } from "./auth/session-gate";
 import {
   CROSS_SITE_REFUSAL,
   crossSiteRequest,
@@ -192,22 +195,39 @@ export function startHttpServer(deps: {
     role: OpenBotRole;
     /** The actor's personal workspace, when the deployment has workspaces at all. */
     workspaceId?: string;
+    /**
+     * The session the actor was resolved from, when the deployment has sessions to revoke. A
+     * proxied Intelligence gateway socket is bound to it for its whole life (see
+     * `GatewaySocketData`), so a sign-out mid-conversation ends the socket instead of leaving it
+     * subscribed.
+     */
+    sessionId?: string;
   }>;
   agentProfileStore: AgentProfileStore;
   computerGateway: ComputerGateway | undefined;
+  /** The session gate, when the deployment has sessions; every gated frame is asked of it. */
+  sessionGate?: SessionGate;
+  /** The registry a revocation announcement closes proxied gateway sockets through. */
+  gatewaySockets?: GatewaySocketRegistry;
   app: {
     fetch: (
       request: Request,
       env: FrontDoorBindings,
     ) => Response | Promise<Response>;
   };
-}): { stop(closeActiveConnections?: boolean): Promise<void> } {
+}): {
+  /** The port the server bound — the one asked for, or the one the OS handed over. */
+  port: number;
+  stop(closeActiveConnections?: boolean): Promise<void>;
+} {
   const {
     port,
     config,
     resolveRequestActor,
     agentProfileStore,
     computerGateway,
+    sessionGate,
+    gatewaySockets,
     app,
   } = deps;
 
@@ -250,8 +270,17 @@ export function startHttpServer(deps: {
   const asChannelSocket = (ws: { data: SocketData }) =>
     ws as unknown as ChannelSocket;
 
+  /*
+   * What keeps a proxied Intelligence gateway socket behind the session that opened it: every frame
+   * it carries, either direction, is asked of the gate before it moves, and a revocation announced
+   * on any replica closes it here through the registry. Absent when the deployment has no sessions
+   * to revoke — single-user mode — where the socket carries the same frames it always did.
+   */
+  const gatewayRevocation: GatewayRevocation | undefined =
+    sessionGate ? { gate: sessionGate, registry: gatewaySockets } : undefined;
+
   // Answered so a test can stop the server it started; the deployment keeps it for its whole life.
-  return serve<SocketData>({
+  const server = serve<SocketData>({
     ...(config.listenHostname ? { hostname: config.listenHostname } : {}),
     port,
     async fetch(request, server) {
@@ -310,6 +339,10 @@ export function startHttpServer(deps: {
             url,
           ),
           pending: [],
+          // The socket is bound to the session that opened it, so a sign-out can find it and end
+          // it — before the next frame, here or on any replica.
+          sessionId: actor.sessionId,
+          userId: actor.id,
         };
         if (server.upgrade(request, { data })) {
           return undefined as unknown as Response;
@@ -408,7 +441,10 @@ export function startHttpServer(deps: {
     websocket: {
       open(ws) {
         if (isGatewaySocket(ws.data)) {
-          openGatewaySocket(ws as typeof ws & { data: GatewaySocketData });
+          openGatewaySocket(
+            ws as typeof ws & { data: GatewaySocketData },
+            gatewayRevocation,
+          );
           return;
         }
         if (!isProxiedStream(ws.data)) {
@@ -454,6 +490,7 @@ export function startHttpServer(deps: {
           gatewaySocketMessage(
             ws as typeof ws & { data: GatewaySocketData },
             raw,
+            gatewayRevocation,
           );
           return;
         }
@@ -506,4 +543,10 @@ export function startHttpServer(deps: {
       },
     },
   });
+  return {
+    port: server.port ?? port,
+    stop(closeActiveConnections?: boolean): Promise<void> {
+      return server.stop(closeActiveConnections);
+    },
+  };
 }
