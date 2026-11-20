@@ -137,12 +137,38 @@ export function createAlipayStatementFetcher(
           "too_large",
         );
       }
-      const buffer = new Uint8Array(await response.arrayBuffer());
-      if (buffer.byteLength > MAX_ARCHIVE_BYTES) {
+      // Read the body INCREMENTALLY: a server that streams past the limit
+      // (or a declared length that lies) is cut off mid-stream, not read
+      // into memory whole and measured afterwards.
+      const reader = response.body?.getReader();
+      if (!reader) {
         throw new AlipayStatementError(
-          "bill archive exceeds the size limit",
-          "too_large",
+          "bill download carried no body to read",
+          "download_failed",
         );
+      }
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          received += value.byteLength;
+          if (received > MAX_ARCHIVE_BYTES) {
+            void reader.cancel().catch(() => {});
+            throw new AlipayStatementError(
+              "bill archive exceeds the size limit",
+              "too_large",
+            );
+          }
+          chunks.push(value);
+        }
+      }
+      const buffer = new Uint8Array(received);
+      let at = 0;
+      for (const chunk of chunks) {
+        buffer.set(chunk, at);
+        at += chunk.byteLength;
       }
       return { status: response.status, bytes: buffer };
     },
@@ -216,10 +242,14 @@ export interface ParsedStatement {
  * Parse one downloaded bill archive into verified rows. Everything is
  * validated before anything is returned: an archive that cannot be fully
  * parsed raises {@link AlipayStatementError} instead of a partial result.
+ * `identity` is the trusted merchant binding from the channel configuration
+ * — never read from the bill — and rides the digest so results of different
+ * merchants on the same date cannot be confused.
  */
 export function parseAlipayStatement(
   archiveBytes: Uint8Array,
   billDate: string,
+  identity: StatementIdentity,
 ): ParsedStatement {
   const digest = createHash("sha256").update(archiveBytes).digest("hex");
   const entries = readZipEntries(archiveBytes);
@@ -238,8 +268,20 @@ export function parseAlipayStatement(
   }
   return {
     rows,
-    digest: { bill_date: billDate, sha256: digest, row_count: rows.length },
+    digest: {
+      bill_date: billDate,
+      sha256: digest,
+      row_count: rows.length,
+      app_id: identity.app_id,
+      seller_id: identity.seller_id,
+    },
   };
+}
+
+/** The trusted merchant identity a bill is requested and parsed under. */
+export interface StatementIdentity {
+  app_id: string;
+  seller_id: string;
 }
 
 /**
@@ -457,7 +499,13 @@ function parseCsv(text: string): string[][] {
 /**
  * Minimal ZIP central-directory reader. Stored and deflate entries only —
  * the gateway produces no other kind, and anything else should fail loudly
- * rather than decode into something nobody verified.
+ * rather than decode into something nobody verified. EVERY entry is
+ * integrity-checked before it can become bill data: the declared
+ * uncompressed size must match the actual inflated length, and the CRC-32
+ * recorded in the central directory must match the content actually
+ * present. A flipped byte in a stored CSV or a truncated deflate stream
+ * therefore fails the whole archive instead of handing reconciliation a
+ * plausible-looking amount nobody wrote.
  */
 function readZipEntries(bytes: Uint8Array): [string, Uint8Array][] {
   const eocd = findEndOfCentralDirectory(bytes);
@@ -480,7 +528,9 @@ function readZipEntries(bytes: Uint8Array): [string, Uint8Array][] {
       );
     }
     const method = view.getUint16(10, true);
+    const declaredCrc = view.getUint32(16, true);
     const compressedSize = view.getUint32(20, true);
+    const declaredUncompressedSize = view.getUint32(24, true);
     const nameLength = view.getUint16(28, true);
     const extraLength = view.getUint16(30, true);
     const commentLength = view.getUint16(32, true);
@@ -500,6 +550,16 @@ function readZipEntries(bytes: Uint8Array): [string, Uint8Array][] {
         "corrupt_archive",
       );
     }
+    // The declared uncompressed size is checked BEFORE any decompression
+    // runs, so an archive cannot promise a small file and inflate a large
+    // one (the inflate below enforces the same bound independently, in
+    // case the declared sizes lie).
+    if (declaredUncompressedSize > MAX_CSV_BYTES) {
+      throw new AlipayStatementError(
+        `bill archive entry ${name} declares ${declaredUncompressedSize} uncompressed bytes, over the limit`,
+        "too_large",
+      );
+    }
     const local = new DataView(bytes.buffer, bytes.byteOffset + localOffset);
     if (local.getUint32(0, true) !== 0x04034b50) {
       throw new AlipayStatementError(
@@ -511,12 +571,20 @@ function readZipEntries(bytes: Uint8Array): [string, Uint8Array][] {
     const localExtraLength = local.getUint16(28, true);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+    if (compressed.byteLength < compressedSize) {
+      throw new AlipayStatementError(
+        `bill archive entry ${name} is truncated`,
+        "corrupt_archive",
+      );
+    }
     let content: Uint8Array;
     if (method === 0) {
       content = compressed;
     } else if (method === 8) {
       try {
-        content = inflateRawSync(compressed);
+        content = inflateRawSync(compressed, {
+          maxOutputLength: MAX_CSV_BYTES,
+        });
       } catch {
         throw new AlipayStatementError(
           `bill archive entry ${name} failed to decompress`,
@@ -529,11 +597,44 @@ function readZipEntries(bytes: Uint8Array): [string, Uint8Array][] {
         "unsupported_format",
       );
     }
+    if (content.byteLength !== declaredUncompressedSize) {
+      throw new AlipayStatementError(
+        `bill archive entry ${name} inflates to ${content.byteLength} bytes, its directory declares ${declaredUncompressedSize}`,
+        "corrupt_archive",
+      );
+    }
+    if (crc32(content) !== declaredCrc) {
+      throw new AlipayStatementError(
+        `bill archive entry ${name} fails its CRC-32 check`,
+        "corrupt_archive",
+      );
+    }
     entries.push([name, content]);
     offset += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
 }
+
+/** ZIP CRC-32 (IEEE, reflected, final xor) over the uncompressed content. */
+function crc32(bytes: Uint8Array): number {
+  let crc = -1;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ bytes[i]) & 0xff];
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let c = 0; c < 256; c++) {
+    let v = c;
+    for (let k = 0; k < 8; k++) {
+      v = v & 1 ? 0xedb88320 ^ (v >>> 1) : v >>> 1;
+    }
+    table[c] = v;
+  }
+  return table;
+})();
 
 function findEndOfCentralDirectory(
   bytes: Uint8Array,

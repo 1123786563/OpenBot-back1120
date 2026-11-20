@@ -211,11 +211,16 @@ export class ControlledAlipayGateway {
 }
 
 /**
- * A minimal ZIP writer (stored entries only) for bill fixtures: enough to
- * exercise the real central-directory reader, no compression dependency.
+ * A minimal ZIP writer (stored and deflate entries) for bill fixtures:
+ * enough to exercise the real central-directory reader end to end.
  */
 export function buildTestZip(
-  entries: { name: string; content: Uint8Array }[],
+  entries: {
+    name: string;
+    content: Uint8Array;
+    /** Deflate the entry (method 8); the default is stored (method 0). */
+    deflate?: boolean;
+  }[],
 ): Uint8Array {
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -225,31 +230,35 @@ export function buildTestZip(
   for (const entry of entries) {
     const nameBytes = encoder.encode(entry.name);
     const crc = crc32(entry.content);
+    // Stored entries carry the content itself; deflate entries carry the
+    // raw-deflate stream and declare BOTH sizes (compressed/uncompressed).
+    const data = entry.deflate ? Bun.deflateSync(entry.content) : entry.content;
+    const method = entry.deflate ? 8 : 0;
     const local = new Uint8Array(30 + nameBytes.length);
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true);
-    // version 20, no flags, stored, DOS time/date 0
-    lv.setUint16(8, 0, true); // method stored
+    // version 20, no flags, DOS time/date 0
+    lv.setUint16(8, method, true);
     lv.setUint32(14, crc, true);
-    lv.setUint32(18, entry.content.length, true); // compressed
+    lv.setUint32(18, data.length, true); // compressed
     lv.setUint32(22, entry.content.length, true); // uncompressed
     lv.setUint16(26, nameBytes.length, true);
     local.set(nameBytes, 30);
-    chunks.push(local, entry.content);
+    chunks.push(local, data);
 
     const c = new Uint8Array(46 + nameBytes.length);
     const cv = new DataView(c.buffer);
     cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(10, 0, true); // stored
+    cv.setUint16(10, method, true);
     cv.setUint32(16, crc, true);
-    cv.setUint32(20, entry.content.length, true);
+    cv.setUint32(20, data.length, true);
     cv.setUint32(24, entry.content.length, true);
     cv.setUint16(28, nameBytes.length, true);
     cv.setUint32(42, offset, true);
     c.set(nameBytes, 46);
     central.push(c);
 
-    offset += local.length + entry.content.length;
+    offset += local.length + data.length;
   }
 
   const centralSize = central.reduce((n, c) => n + c.length, 0);

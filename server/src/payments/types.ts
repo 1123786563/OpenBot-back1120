@@ -114,4 +114,12 @@ export interface StatementDigest {
   /** sha256 of the downloaded bytes; lets a human re-verify the source. */
   sha256: string;
   row_count: number;
+  /**
+   * The merchant application and partner identity the bill was requested
+   * UNDER — taken from the trusted channel configuration, never from the
+   * bill itself, so two merchants' same-date results stay independently
+   * attributable.
+   */
+  app_id: string;
+  seller_id: string;
 }

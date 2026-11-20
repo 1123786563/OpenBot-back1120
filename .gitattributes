@@ -1,3 +1,5 @@
 # Auto detect text files and perform LF normalization, and check them out with LF on every OS.
 # Biome formats to LF and the s6 files are copied into a Linux image, so a CRLF checkout breaks both.
 * text=auto eol=lf
+# Official bill fixtures must keep their exact bytes (CRLF is part of the format).
+server/tests/payments/alipay/fixtures/official/*.csv -text

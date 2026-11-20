@@ -19,6 +19,9 @@ import {
 const material: TestRsaMaterial = generateTestRsaMaterial();
 const config = testAlipayConfig(material, "http://127.0.0.1/gateway.do");
 
+/** The trusted merchant identity every parse must carry in its digest. */
+const IDENTITY = { app_id: config.appId, seller_id: config.sellerId };
+
 /** A trade-bill CSV fixture in the official shape (header comment, columns, rows). */
 const BILL_CSV = [
   "#支付宝交易明细列表",
@@ -78,10 +81,15 @@ describe("statement download boundary", () => {
     });
     const bytes = await fetcher.fetch(`${base}/bill.zip`);
     expect(bytes.status).toBe(200);
-    const parsed = parseAlipayStatement(bytes.bytes, "2026-11-19");
+    const parsed = parseAlipayStatement(bytes.bytes, "2026-11-19", IDENTITY);
     expect(parsed.digest.row_count).toBe(2);
     expect(parsed.digest.bill_date).toBe("2026-11-19");
     expect(parsed.digest.sha256).toMatch(/^[0-9a-f]{64}$/);
+    // The digest carries the TRUSTED merchant identity (from configuration,
+    // not from the bill), so same-date results of different merchants stay
+    // independently attributable.
+    expect(parsed.digest.app_id).toBe(config.appId);
+    expect(parsed.digest.seller_id).toBe(config.sellerId);
   });
 
   test("a host off the whitelist is refused before any request", async () => {
@@ -124,9 +132,9 @@ describe("statement download boundary", () => {
       statementDownloadHosts: [`127.0.0.1:${server.port}`],
     });
     const bytes = await fetcher.fetch(`${base}/truncated`);
-    expect(() => parseAlipayStatement(bytes.bytes, "2026-11-19")).toThrow(
-      /central directory/,
-    );
+    expect(() =>
+      parseAlipayStatement(bytes.bytes, "2026-11-19", IDENTITY),
+    ).toThrow(/central directory/);
   });
 });
 
@@ -135,7 +143,11 @@ describe("statement parsing (A6)", () => {
     buildTestZip([{ name, content: new TextEncoder().encode(csv) }]);
 
   test("pay and refund rows carry verifiable identity and source lines", () => {
-    const parsed = parseAlipayStatement(zipOf(BILL_CSV), "2026-11-19");
+    const parsed = parseAlipayStatement(
+      zipOf(BILL_CSV),
+      "2026-11-19",
+      IDENTITY,
+    );
     expect(parsed.rows.length).toBe(2);
     const [pay, refund] = parsed.rows;
     expect(pay.direction).toBe("pay");
@@ -159,7 +171,7 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支,金额(元),退款批次号",
       '2026111922001400001,"order,with-commas",2026-11-19 21:00:05,收入,10.10,',
     ].join("\n");
-    const parsed = parseAlipayStatement(zipOf(csv), "2026-11-19");
+    const parsed = parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY);
     expect(parsed.rows[0].merchant_reference).toBe("order,with-commas");
   });
 
@@ -167,7 +179,9 @@ describe("statement parsing (A6)", () => {
     const zip = buildTestZip([
       { name: "readme.txt", content: new TextEncoder().encode("hello") },
     ]);
-    expect(() => parseAlipayStatement(zip, "2026-11-19")).toThrow(/no CSV/);
+    expect(() => parseAlipayStatement(zip, "2026-11-19", IDENTITY)).toThrow(
+      /no CSV/,
+    );
   });
 
   test("a missing required column fails the WHOLE bill, not just a row", () => {
@@ -175,9 +189,9 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支",
       "2026111922001400001,order-1,2026-11-19 21:00:05,收入",
     ].join("\n");
-    expect(() => parseAlipayStatement(zipOf(csv), "2026-11-19")).toThrow(
-      /required column/,
-    );
+    expect(() =>
+      parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY),
+    ).toThrow(/required column/);
   });
 
   test("a non-exact amount fails the bill — no rounding, no forgiveness", () => {
@@ -185,9 +199,9 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支,金额(元),退款批次号",
       "2026111922001400001,order-1,2026-11-19 21:00:05,收入,10.101,",
     ].join("\n");
-    expect(() => parseAlipayStatement(zipOf(csv), "2026-11-19")).toThrow(
-      /non-exact amount/,
-    );
+    expect(() =>
+      parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY),
+    ).toThrow(/non-exact amount/);
   });
 
   test("an unknown direction fails the bill", () => {
@@ -195,9 +209,9 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支,金额(元),退款批次号",
       "2026111922001400001,order-1,2026-11-19 21:00:05,其他,10.10,",
     ].join("\n");
-    expect(() => parseAlipayStatement(zipOf(csv), "2026-11-19")).toThrow(
-      /unknown direction/,
-    );
+    expect(() =>
+      parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY),
+    ).toThrow(/unknown direction/);
   });
 
   test("an unreadable time fails the bill", () => {
@@ -205,9 +219,9 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支,金额(元),退款批次号",
       "2026111922001400001,order-1,2026-02-30 21:00:05,收入,10.10,",
     ].join("\n");
-    expect(() => parseAlipayStatement(zipOf(csv), "2026-11-19")).toThrow(
-      /unreadable time/,
-    );
+    expect(() =>
+      parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY),
+    ).toThrow(/unreadable time/);
   });
 
   test("a ragged row fails the bill with its line number", () => {
@@ -215,9 +229,9 @@ describe("statement parsing (A6)", () => {
       "支付宝交易号,商户订单号,业务发生时间,收/支,金额(元),退款批次号",
       "2026111922001400001,order-1,2026-11-19 21:00:05,收入",
     ].join("\n");
-    expect(() => parseAlipayStatement(zipOf(csv), "2026-11-19")).toThrow(
-      /cells/,
-    );
+    expect(() =>
+      parseAlipayStatement(zipOf(csv), "2026-11-19", IDENTITY),
+    ).toThrow(/cells/);
   });
 
   test("a non-UTF-8, non-GBK file is refused, not decoded into noise", () => {
@@ -225,7 +239,9 @@ describe("statement parsing (A6)", () => {
     const zip = buildTestZip([
       { name: "bill.csv", content: new Uint8Array([0xff, 0xfe, 0x00, 0x81]) },
     ]);
-    expect(() => parseAlipayStatement(zip, "2026-11-19")).toThrow(/GBK|UTF-8/);
+    expect(() => parseAlipayStatement(zip, "2026-11-19", IDENTITY)).toThrow(
+      /GBK|UTF-8/,
+    );
   });
 
   test("an entry name with a path is refused as traversal, never unpacked", () => {
@@ -233,13 +249,115 @@ describe("statement parsing (A6)", () => {
     const hostile = buildTestZip([
       { name: "../escape.csv", content: new TextEncoder().encode(BILL_CSV) },
     ]);
-    expect(() => parseAlipayStatement(hostile, "2026-11-19")).toThrow(/path/);
+    expect(() => parseAlipayStatement(hostile, "2026-11-19", IDENTITY)).toThrow(
+      /path/,
+    );
   });
 
   test("digest binds rows to the exact archive bytes", () => {
-    const a = parseAlipayStatement(zipOf(BILL_CSV), "2026-11-19");
-    const b = parseAlipayStatement(zipOf(`${BILL_CSV}\r\n`), "2026-11-19");
+    const a = parseAlipayStatement(zipOf(BILL_CSV), "2026-11-19", IDENTITY);
+    const b = parseAlipayStatement(
+      zipOf(`${BILL_CSV}\r\n`),
+      "2026-11-19",
+      IDENTITY,
+    );
     expect(a.digest.sha256).not.toBe(b.digest.sha256);
     expect(a.digest.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  test("a flipped content byte fails the entry's CRC-32, not reconciliation", () => {
+    // Corrupt one byte INSIDE the stored CSV data: the directory still
+    // records the original CRC, so the content no longer matches what the
+    // archive vouches for — a plausible amount nobody wrote must not parse.
+    const zip = zipOf(BILL_CSV);
+    const marker = new TextEncoder().encode("10.10");
+    const at = findSubarray(zip, marker);
+    expect(at).toBeGreaterThan(0);
+    const corrupted = new Uint8Array(zip);
+    corrupted[at] = corrupted[at]! ^ 0x01; // flip one bit of the amount
+    expect(() =>
+      parseAlipayStatement(corrupted, "2026-11-19", IDENTITY),
+    ).toThrow(/CRC-32/);
+  });
+
+  test("a directory that lies about the uncompressed size fails the archive", () => {
+    const zip = zipOf(BILL_CSV);
+    // Patch the central-directory header's 32-bit uncompressed-size field
+    // (offset 24 inside the PK\x01\x02 record) to disagree with the entry.
+    const corrupted = new Uint8Array(zip);
+    const central = lastCentralDirectoryOffset(corrupted);
+    expect(central).toBeGreaterThan(0);
+    new DataView(corrupted.buffer).setUint32(central + 24, 99999, true);
+    expect(() =>
+      parseAlipayStatement(corrupted, "2026-11-19", IDENTITY),
+    ).toThrow(/declares/);
+  });
+
+  test("a corrupted deflate stream fails the archive, never a partial file", () => {
+    // A real deflate entry with one flipped byte in the compressed stream:
+    // the inflate itself or the CRC check must fail the WHOLE archive.
+    const zip = buildTestZip([
+      {
+        name: "bill.csv",
+        content: new TextEncoder().encode(BILL_CSV),
+        deflate: true,
+      },
+    ]);
+    const corrupted = new Uint8Array(zip);
+    // The compressed data sits between the local header and the central
+    // directory; flipping a byte there cannot yield the signed-off content.
+    const centralAt = lastCentralDirectoryOffset(corrupted);
+    const dataAt = 30 + "bill.csv".length;
+    corrupted[dataAt + Math.floor((centralAt - dataAt) / 2)] ^= 0xff;
+    expect(() =>
+      parseAlipayStatement(corrupted, "2026-11-19", IDENTITY),
+    ).toThrow(/decompress|declares|CRC-32/);
+  });
+
+  test("an entry inflating past the size limit fails before parsing", () => {
+    // Declared 200 MB uncompressed (over the 128 MB parse bound): refused
+    // on the directory's word alone, before any decompression runs.
+    const zip = buildTestZip([
+      {
+        name: "bill.csv",
+        content: new TextEncoder().encode(BILL_CSV),
+        deflate: true,
+      },
+    ]);
+    const patched = new Uint8Array(zip);
+    new DataView(patched.buffer).setUint32(
+      lastCentralDirectoryOffset(patched) + 24,
+      200 * 1024 * 1024,
+      true,
+    );
+    expect(() => parseAlipayStatement(patched, "2026-11-19", IDENTITY)).toThrow(
+      /over the limit/,
+    );
+  });
 });
+
+/** Offset of the last central-directory file header (PK\x01\x02) in a zip. */
+function lastCentralDirectoryOffset(zip: Uint8Array): number {
+  for (let i = zip.length - 4; i >= 0; i--) {
+    if (
+      zip[i] === 0x50 &&
+      zip[i + 1] === 0x4b &&
+      zip[i + 2] === 0x01 &&
+      zip[i + 3] === 0x02
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** First offset of `needle` inside `haystack`, or -1. */
+function findSubarray(haystack: Uint8Array, needle: Uint8Array): number {
+  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}

@@ -4,6 +4,7 @@ import {
   alipayBeijingTimeToUs,
   beijingBillDateOf,
   optionalAlipayBeijingTimeToUs,
+  usToAlipayBeijingTime,
 } from "../../../src/payments/alipay/time";
 
 describe("alipay Beijing time conversion", () => {
@@ -63,5 +64,36 @@ describe("alipay Beijing time conversion", () => {
     expect(
       beijingBillDateOf(String(Date.UTC(2026, 10, 19, 15, 59, 59) * 1000)),
     ).toBe("2026-11-19");
+  });
+
+  test("microsecond instants become the gateway's Beijing deadline string", () => {
+    // 2026-11-19T15:59:59Z is 2026-11-19 23:59:59 Beijing — the format the
+    // official `time_expire` field takes.
+    expect(
+      usToAlipayBeijingTime(String(Date.UTC(2026, 10, 19, 15, 59, 59) * 1000)),
+    ).toBe("2026-11-19 23:59:59");
+    // Midnight Beijing is the NEXT Beijing calendar day.
+    expect(
+      usToAlipayBeijingTime(String(Date.UTC(2026, 10, 18, 16, 0, 0) * 1000)),
+    ).toBe("2026-11-19 00:00:00");
+    // Sub-second parts are FLOORED: the deadline never moves later than
+    // the instant it stands for.
+    expect(
+      usToAlipayBeijingTime(
+        String(Date.UTC(2026, 10, 19, 15, 59, 59) * 1000 + 999_999),
+      ),
+    ).toBe("2026-11-19 23:59:59");
+  });
+
+  test("the deadline string round-trips back to the same instant", () => {
+    const instants = [
+      String(Date.UTC(2026, 11, 31, 15, 59, 59) * 1000),
+      String(Date.UTC(2027, 0, 1, 0, 0, 0) * 1000),
+    ];
+    for (const instant of instants) {
+      expect(alipayBeijingTimeToUs(usToAlipayBeijingTime(instant))).toBe(
+        instant,
+      );
+    }
   });
 });

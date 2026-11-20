@@ -85,3 +85,22 @@ export function beijingBillDateOf(instantUs: string): string {
   const d = String(shifted.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+/**
+ * The Beijing wall-clock string ("YYYY-MM-DD HH:mm:ss") of a UTC microsecond
+ * instant, at the gateway's second precision. Sub-second parts are floored,
+ * so the deadline never moves LATER than the instant it stands for. This is
+ * the inverse of {@link alipayBeijingTimeToUs} and is how the order's expiry
+ * becomes the cashier's `time_expire`.
+ */
+export function usToAlipayBeijingTime(instantUs: string): string {
+  const us = parseTimestampUs(instantUs);
+  const shifted = new Date(
+    Number(us / 1000n) + BEIJING_OFFSET_MINUTES * 60_000,
+  );
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${shifted.getUTCFullYear()}-${p(shifted.getUTCMonth() + 1)}-${p(shifted.getUTCDate())}` +
+    ` ${p(shifted.getUTCHours())}:${p(shifted.getUTCMinutes())}:${p(shifted.getUTCSeconds())}`
+  );
+}
